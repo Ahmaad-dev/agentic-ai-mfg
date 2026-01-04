@@ -1,0 +1,31 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.7.8 Chrome/128.0.6613.36 Electron/32.0.1 Safari/537.36" version="24.7.8">
+  <diagram name="Seite-1" id="pvlO4zn7QSqAz3eOkhsH">
+    <mxGraphModel dx="2261" dy="956" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="HvAtrqL9XKjfxy79SeLR-1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="-52.99999999999977" y="190" width="880" height="637.82" as="geometry" />
+        </mxCell>
+        <mxCell id="HvAtrqL9XKjfxy79SeLR-2" value="subscr-s-ccadm-dev" style="image;aspect=fixed;html=1;points=[];align=left;fontSize=12;image=img/lib/azure2/general/Subscriptions.svg;labelPosition=right;verticalLabelPosition=middle;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="-53" y="130" width="30.99" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="HvAtrqL9XKjfxy79SeLR-4" value="rg-agentic-ai-mfg" style="image;aspect=fixed;html=1;points=[];align=left;fontSize=12;image=img/lib/azure2/general/Resource_Groups.svg;labelPosition=right;verticalLabelPosition=middle;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="-22.010000000000005" y="210" width="42.5" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="HvAtrqL9XKjfxy79SeLR-9" value="" style="fontStyle=0;verticalAlign=top;align=center;spacingTop=-2;fillColor=none;rounded=0;whiteSpace=wrap;html=1;strokeColor=#919191;strokeWidth=2;dashed=1;container=1;collapsible=0;expand=0;recursiveResize=0;" vertex="1" parent="1">
+          <mxGeometry x="10" y="250" width="710" height="510" as="geometry" />
+        </mxCell>
+        <mxCell id="HvAtrqL9XKjfxy79SeLR-11" value="" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#6c8ebf;fillColor=#dae8fc;opacity=15;labelBackgroundColor=none;textOpacity=50;" vertex="1" parent="HvAtrqL9XKjfxy79SeLR-9">
+          <mxGeometry x="70" y="70" width="570" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="HvAtrqL9XKjfxy79SeLR-10" value="&lt;div&gt;agentic-ai-mfg&lt;/div&gt;" style="image;aspect=fixed;html=1;points=[];align=left;fontSize=12;image=img/lib/azure2/ai_machine_learning/AI_Studio.svg;labelPosition=right;verticalLabelPosition=middle;verticalAlign=middle;" vertex="1" parent="HvAtrqL9XKjfxy79SeLR-9">
+          <mxGeometry x="50" y="30" width="47.06" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="HvAtrqL9XKjfxy79SeLR-13" value="&lt;div&gt;agentic-ai-mfg-project&lt;/div&gt;" style="image;aspect=fixed;html=1;points=[];align=left;fontSize=12;image=img/lib/azure2/ai_machine_learning/AI_Studio.svg;labelPosition=right;verticalLabelPosition=middle;verticalAlign=middle;" vertex="1" parent="HvAtrqL9XKjfxy79SeLR-9">
+          <mxGeometry x="90" y="220" width="37.65" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
