@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.7.8 Chrome/128.0.6613.36 Electron/32.0.1 Safari/537.36" version="24.7.8">
   <diagram name="Seite-1" id="pvlO4zn7QSqAz3eOkhsH">
-    <mxGraphModel dx="4412" dy="2390" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1646" dy="546" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -24,9 +24,6 @@
         </mxCell>
         <mxCell id="HvAtrqL9XKjfxy79SeLR-13" value="&lt;div&gt;agentic-ai-mfg-project&lt;/div&gt;" style="image;aspect=fixed;html=1;points=[];align=left;fontSize=12;image=img/lib/azure2/ai_machine_learning/AI_Studio.svg;labelPosition=right;verticalLabelPosition=middle;verticalAlign=middle;" vertex="1" parent="HvAtrqL9XKjfxy79SeLR-9">
           <mxGeometry x="90" y="220" width="37.65" height="40" as="geometry" />
-        </mxCell>
-        <mxCell id="HvAtrqL9XKjfxy79SeLR-14" value="&lt;p data-pm-slice=&quot;0 0 []&quot;&gt;so, ich will jetzt eine demo machen, indem ich sowie bisher in der konsole mit einem agenten chatte und zusätzlich möchte ich dass die informationen aus meiner datenbank kommen. also aus meinem Index. Dort möcwte ich ein index anlegen und mit einem pdf dokument befüllen und dann möchte ich einen RAG haben und infos die daraus kommen&lt;/p&gt;" style="text;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="-80" y="960" width="560" height="110" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
