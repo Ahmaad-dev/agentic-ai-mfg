@@ -485,3 +485,105 @@ Logic Apps hingegen richten sich eher an professionelle Entwickler und IT-Admini
 Für deine Bedürfnisse, insbesondere wenn du an einfacher Automatisierung interessiert bist und nicht viel Erfahrung hast, ist **Power Automate** die passendere Lösung. Du kannst damit schnell und effektiv deine Arbeitsabläufe automatisieren. Wenn du mal bereit bist, mehr ins Detail zu gehen und komplexere Szenarien zu bearbeiten, kannst du immer noch auf Logic Apps umsteigen.
 
 Wenn du Unterstützung bei deinem ersten Flow in Power Automate benötigst, lass es mich wissen!
+2026-01-05 22:01:09,002 - INFO - user_question: was ist für mich besser logic apps oder power automate laut deiner dokumentation in deiner wissensdatenbank
+2026-01-05 22:01:09,003 - INFO - RAG-Intent erkannt - Wissensbasis wird durchsucht...
+2026-01-05 22:01:09,568 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-05 22:01:09,592 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34317'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': 'a9024885-ea79-11f0-9169-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-05 22:01:10,115 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': 'a9024885-ea79-11f0-9169-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Mon, 05 Jan 2026 21:01:10 GMT'
+2026-01-05 22:01:10,118 - INFO - Relevanz-Score: 0.781 (7 Ergebnisse über 0.5)
+2026-01-05 22:01:10,118 - INFO - RAG aktiviert - Gefundene Quellen: ['AI_OpenAI.pdf', 'Verarbeitung.pdf', 'Vergleich_PowerAutomate_LogicApps.pdf']
+2026-01-05 22:01:13,094 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-05 22:01:13,101 - INFO - assistant_answer: Die Entscheidung zwischen Power Automate und Azure Logic Apps hängt stark davon ab, welche Anforderungen du hast und wer die Hauptnutzer deiner Automatisierungen sein werden.
+
+**Power Automate** ist ideal, wenn du:
+- **einfache Automatisierungen** schnell umsetzen möchtest.
+- ein **Business-User** oder **Citizen Developer** bist und nicht viel Programmierkenntnisse hast.
+- eine benutzerfreundliche Oberfläche bevorzugst.
+- **nutzungsbasierte Lizenzierung** bevorzugst, die pro Nutzer oder pro Flow abgerechnet wird.
+
+**Azure Logic Apps** hingegen ist die bessere Wahl, wenn du:
+- **komplexe und skalierbare Workflows** benötigst, die tief in Azure integriert sind.
+- Teil eines **professionellen Entwicklerteams** bist und mehr Kontrolle über die technische Umsetzung haben möchtest.
+- auf **detailliertes Logging und Monitoring** Wert legst.
+- die Nutzung von **Custom Code** und Integration mit anderen Azure-Diensten, wie Azure Functions, benötigst.
+- eine **verbrauchsbasierte Lizenzierung** oder fixe Tarife bevorzugst.
+
+Zusammengefasst: Wenn du schnell und ohne viel technisches Wissen automatisieren möchtest, ist Power Automate die richtige Wahl. Für komplexe, Unternehmens-spezifische Lösungen mit größeren Anforderungen an Skalierbarkeit und Integrationsfähigkeit ist Azure Logic Apps besser geeignet.
+2026-01-05 22:03:52,476 - INFO - user_question: was ist für mich besser power automate oder die logic apps laut deiner dokumentation? 
+2026-01-05 22:03:52,476 - INFO - RAG-Intent erkannt - Wissensbasis wird durchsucht...
+2026-01-05 22:03:52,977 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-05 22:03:52,991 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34389'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': '0a66e67b-ea7a-11f0-9e45-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-05 22:03:53,485 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': '0a66e67b-ea7a-11f0-9e45-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Mon, 05 Jan 2026 21:03:53 GMT'
+2026-01-05 22:03:53,487 - INFO - Relevanz-Score: 0.816 (9 Ergebnisse über 0.5)
+2026-01-05 22:03:53,487 - INFO - RAG aktiviert - Gefundene Quellen: ['AI_OpenAI.pdf (Seite 1)', 'AI_OpenAI.pdf (Seite 2)', 'AI_OpenAI.pdf (Seite 3)', 'Verarbeitung.pdf (Seite 1)', 'Vergleich_PowerAutomate_LogicApps.pdf (Seite 1)', 'Vergleich_PowerAutomate_LogicApps.pdf (Seite 2)']
+2026-01-05 22:03:56,956 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-05 22:03:56,965 - INFO - assistant_answer: Die Wahl zwischen Power Automate und Azure Logic Apps hängt stark von deinen Anforderungen und deinem Nutzungskontext ab. Hier sind einige Überlegungen, die dir bei der Entscheidung helfen können:
+
+1. **Zielgruppe**:
+   - **Power Automate** ist ideal, wenn du ein Fachanwender oder Citizen Developer bist, der einfache Automatisierungen schnell und mit minimalem technischem Wissen umsetzen möchte.
+   - **Azure Logic Apps** richtet sich an professionelle Entwicklerteams und IT-Administratoren, die komplexere und skalierbare Workflows benötigen.
+
+2. **Komplexität der Workflows**:
+   - Wenn deine Anforderungen einfach sind und du hauptsächlich standardisierte Prozesse umsetzen möchtest, ist Power Automate die bessere Wahl.
+   - Für komplexere Szenarien, die tiefere Integration in Azure-Dienste benötigen oder individuelle Anpassungen erfordern, sind Logic Apps besser geeignet.
+
+3. **Lizenzierung**:
+   - Power Automate nutzt ein nutzerbasiertes Preismodell (pro User oder pro Flow), während Logic Apps verbrauchsabhängig abgerechnet wird (Pay as you go).
+   - Überlege, welches Preismodell besser zu deinem Nutzungsverhalten passt.
+
+4. **Technische Integration und Anpassbarkeit**:
+   - Power Automate bietet eingeschränkte Möglichkeiten zur Integration von benutzerdefiniertem Code, ideal für einfachere Flows.
+   - Logic Apps erlauben es, Azure Functions und Inline-Code zu integrieren sowie über umfassendere Schnittstellen mit anderen Azure-Diensten zu interagieren.
+
+5. **Fehlerbehandlung und Monitoring**:
+   - Logic Apps bietet deutlich detaillierteres Logging und Monitoring, was für kritische Unternehmensanwendungen von Vorteil ist.
+
+Zusammenfassend: Wenn du schnelle, einfache Automatisierungen suchst, die für den täglichen Gebrauch gedacht sind, ist Power Automate wahrscheinlich besser für dich. Wenn du jedoch komplexe Workflows und tiefere Integrationen benötigst, wären Azure Logic Apps die bessere Wahl.
+2026-01-05 22:18:18,683 - INFO - user_question: done
+2026-01-05 22:18:18,683 - INFO - Chat-Modus (kein RAG-Intent erkannt)
+2026-01-05 22:18:19,410 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-05 22:18:19,411 - INFO - assistant_answer: Super! Wenn du noch weitere Fragen hast oder Hilfe bei einem bestimmten Thema benötigst, lass es mich wissen. Ich stehe dir gerne zur Verfügung!
+2026-01-05 22:18:23,930 - INFO - user_question: #quit
+2026-01-05 22:18:23,930 - INFO - Chat-Modus (kein RAG-Intent erkannt)
+2026-01-05 22:18:24,424 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-05 22:18:24,425 - INFO - assistant_answer: Alles klar! Wenn du in der Zukunft wieder Fragen hast oder Hilfe brauchst, zögere nicht, mich zu kontaktieren. Hab einen tollen Tag!

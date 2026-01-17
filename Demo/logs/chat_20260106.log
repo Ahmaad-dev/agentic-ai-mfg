@@ -1,0 +1,57 @@
+2026-01-06 15:21:09,748 - INFO - user_question: hi funktionierst du? 
+2026-01-06 15:21:09,749 - INFO - Chat-Modus (kein RAG-Intent erkannt)
+2026-01-06 15:21:11,007 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-06 15:21:11,017 - INFO - assistant_answer: Hallo! Ja, ich funktioniere einwandfrei. Wie kann ich dir heute helfen?
+2026-01-06 15:21:25,477 - INFO - user_question: Was versteht man unter Künstlicher Intelligenz?
+2026-01-06 15:21:25,478 - INFO - Chat-Modus (kein RAG-Intent erkannt)
+2026-01-06 15:21:28,574 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-06 15:21:28,575 - INFO - assistant_answer: Künstliche Intelligenz (KI) bezeichnet die Simulation menschlicher Intelligenz in Maschinen, die darauf ausgelegt sind, Aufgaben zu erfüllen, die typischerweise menschliches Denken erfordern. Dazu gehören Fähigkeiten wie Lernen, Schlussfolgern, Problemlösen, Wahrnehmung und Sprachverstehen. Es gibt verschiedene Unterbereiche der KI, darunter:
+
+1. **Maschinelles Lernen**: Ein Teilbereich, der Algorithmen umfasst, die aus Daten lernen, um Muster zu erkennen und Vorhersagen zu treffen.
+
+2. **Neuronale Netze**: Inspiriert von der Funktionsweise des menschlichen Gehirns, werden sie verwendet, um komplexe Muster und Beziehungen in Daten zu verstehen.
+
+3. **Natural Language Processing (NLP)**: Hierbei handelt es sich um Technologien, die es Maschinen ermöglichen, menschliche Sprache zu verstehen, zu interpretieren und zu erzeugen.
+
+4. **Robotik**: KI in Robotern ermöglicht es ihnen, autonom zu agieren und Entscheidungen zu treffen basierend auf ihrer Umgebung.
+
+KI wird in vielen Bereichen eingesetzt, darunter Medizin, Automatisierung, Kundenservice, Gaming und viele andere. Gibt es einen speziellen Aspekt der Künstlichen Intelligenz, den du näher betrachten möchtest?
+2026-01-06 15:21:44,350 - INFO - user_question: dursuche dein Rag für die antwort
+2026-01-06 15:21:44,351 - INFO - RAG-Intent erkannt - Wissensbasis wird durchsucht...
+2026-01-06 15:21:44,695 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-06 15:21:44,718 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34320'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': '073e73ea-eb0b-11f0-8e66-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-06 15:21:45,289 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': '073e73ea-eb0b-11f0-8e66-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Tue, 06 Jan 2026 14:21:45 GMT'
+2026-01-06 15:21:45,291 - INFO - Relevanz-Score: 0.572 (9 Ergebnisse über 0.5)
+2026-01-06 15:21:45,291 - INFO - RAG aktiviert - Gefundene Quellen: ['AI_OpenAI.pdf (Seite 1)', 'AI_OpenAI.pdf (Seite 2)', 'AI_OpenAI.pdf (Seite 3)', 'Verarbeitung.pdf (Seite 1)', 'Vergleich_PowerAutomate_LogicApps.pdf (Seite 1)', 'Vergleich_PowerAutomate_LogicApps.pdf (Seite 2)']
+2026-01-06 15:21:48,655 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-06 15:21:48,656 - INFO - assistant_answer: Künstliche Intelligenz (KI) bezeichnet die Fähigkeit von Computern und Software, Aufgaben zu lösen, die normalerweise menschliche Intelligenz erfordern. Dazu gehören unter anderem Sprachverarbeitung, visuelle Erkennung, Lernen aus Erfahrung und selbstständige Entscheidungsfindung. KI ist inzwischen ein wichtiger Bestandteil in vielen Lebensbereichen, von der Gesundheitsversorgung über die Industrie bis hin zur Verwaltung.
+
+Einige wichtige Aspekte der KI sind:
+
+- **Anwendungsbereiche**: KI-Technologien werden in verschiedenen Feldern eingesetzt, darunter Gesundheitswesen (Diagnosesysteme), Industrie (Optimierung von Produktionsprozessen), Mobilität (autonome Fahrzeuge) und Handel (personalisierte Empfehlungen).
+
+- **Chancen und Risiken**: KI bietet große Möglichkeiten, wie die Erhöhung der Produktivität und Innovation in Geschäftsmodellen, aber auch Herausforderungen, wie Arbeitsplatzverlagerung und ethische Fragestellungen, die berücksichtigt werden müssen.
+
+- **OpenAI**: OpenAI ist eine Organisation, die in der Forschung und Entwicklung von KI tätig ist, insbesondere im Bereich generativer KI. Produkte wie ChatGPT, DALL·E und Codex sind Beispiele für ihre Arbeit.
+
+Die Zukunft von KI wird viele Bereiche transformieren, und es ist wichtig, dass wir diese Technologie verantwortungsvoll und mit ethischem Bewusstsein nutzen. Wenn du mehr über ein bestimmtes Thema innerhalb der KI wissen möchtest, lass es mich wissen!

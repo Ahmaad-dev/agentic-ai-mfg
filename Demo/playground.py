@@ -55,7 +55,7 @@ def embed(text: str):
         print(f"Embedding-Fehler: {e}")
         return None
 
-def retrieve_context(query: str, k: int = 4, min_score: float = 0.7):
+def retrieve_context(query: str, k: int = 4, min_score: float = 0.5):
     """
     Retrieval mit Score-Threshold
     min_score: Minimaler Relevanz-Score (0.0 - 1.0), darunter wird Kontext verworfen
@@ -174,7 +174,7 @@ while True:
     # Schritt 2: Wenn Intent erkannt → RAG probieren, aber nur nutzen wenn Score gut
     if has_rag_intent:
         logger.info("RAG-Intent erkannt - Wissensbasis wird durchsucht...")
-        context, sources, relevance_score, has_relevant_results = retrieve_context(user_input, k=10, min_score=0.7)
+        context, sources, relevance_score, has_relevant_results = retrieve_context(user_input, k=10, min_score=0.5)
         
         # RAG = (Intent erkannt) AND (Score >= Threshold)
         use_rag = has_rag_intent and has_relevant_results
