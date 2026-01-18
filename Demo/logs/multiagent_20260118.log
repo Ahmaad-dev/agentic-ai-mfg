@@ -1,0 +1,372 @@
+2026-01-18 14:42:52,995 - INFO - User: hi
+2026-01-18 14:42:52,998 - INFO - [Orchestrator] Orchestriere Anfrage: hi
+2026-01-18 14:42:54,356 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:42:54,369 - INFO - [Orchestrator] Routing: chat - Die Anfrage ist allgemein und eignet sich für Smalltalk.
+2026-01-18 14:42:54,369 - INFO - [Chat Agent] Verarbeite Anfrage: hi
+2026-01-18 14:42:54,697 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:42:54,699 - INFO - [Chat Agent] Antwort generiert (31 Zeichen)
+2026-01-18 14:42:54,699 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 14:42:54,700 - INFO - Routing-Begründung: Die Anfrage ist allgemein und eignet sich für Smalltalk.
+2026-01-18 14:43:10,809 - INFO - User: wie geht es dirß 
+2026-01-18 14:43:10,810 - INFO - [Orchestrator] Orchestriere Anfrage: wie geht es dirß 
+2026-01-18 14:43:11,599 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:43:11,600 - INFO - [Orchestrator] Routing: chat - Die Anfrage ist eine allgemeine Frage im Rahmen von Smalltalk.
+2026-01-18 14:43:11,600 - INFO - [Chat Agent] Verarbeite Anfrage: wie geht es dirß 
+2026-01-18 14:43:12,046 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:43:12,047 - INFO - [Chat Agent] Antwort generiert (52 Zeichen)
+2026-01-18 14:43:12,047 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 14:43:12,047 - INFO - Routing-Begründung: Die Anfrage ist eine allgemeine Frage im Rahmen von Smalltalk.
+2026-01-18 14:43:19,299 - INFO - User: gut soweit
+2026-01-18 14:43:19,300 - INFO - [Orchestrator] Orchestriere Anfrage: gut soweit
+2026-01-18 14:43:20,085 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:43:20,086 - INFO - [Orchestrator] Routing: chat - Die Antwort des Benutzers ist eine allgemeine Aussage über sein Wohlbefinden und passt zum Smalltalk.
+2026-01-18 14:43:20,086 - INFO - [Chat Agent] Verarbeite Anfrage: gut soweit
+2026-01-18 14:43:20,503 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:43:20,504 - INFO - [Chat Agent] Antwort generiert (81 Zeichen)
+2026-01-18 14:43:20,504 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 14:43:20,505 - INFO - Routing-Begründung: Die Antwort des Benutzers ist eine allgemeine Aussage über sein Wohlbefinden und passt zum Smalltalk.
+2026-01-18 14:43:37,593 - INFO - User: also ich will wissen was ich zum thema power automate in meinem unternehmen habe
+2026-01-18 14:43:37,593 - INFO - [Orchestrator] Orchestriere Anfrage: also ich will wissen was ich zum thema power automate in meinem unternehmen habe
+2026-01-18 14:43:38,614 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:43:38,615 - INFO - [Orchestrator] Routing: rag - Die Anfrage bezieht sich auf Informationen zu Power Automate im Unternehmen, was Firmendokumente oder technische Spezifikationen erfordern könnte.
+2026-01-18 14:43:38,615 - INFO - [RAG Agent] Verarbeite Anfrage: Power Automate Unternehmensdokumente
+2026-01-18 14:43:38,740 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:43:38,753 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34302'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': 'b1a8cc3e-f473-11f0-b519-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-18 14:43:39,283 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': 'b1a8cc3e-f473-11f0-b519-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Sun, 18 Jan 2026 13:43:39 GMT'
+2026-01-18 14:43:39,285 - INFO - [RAG Agent] Relevanz-Score: 0.696 (9 Ergebnisse)
+2026-01-18 14:43:39,735 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:43:39,736 - INFO - [RAG Agent] Antwort generiert mit 6 Quellen
+2026-01-18 14:43:39,736 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
+2026-01-18 14:43:39,737 - INFO - Routing-Begründung: Die Anfrage bezieht sich auf Informationen zu Power Automate im Unternehmen, was Firmendokumente oder technische Spezifikationen erfordern könnte.
+2026-01-18 14:44:14,300 - INFO - User: was gibt es in jaban mehr als Kinder? schau bei unseren unterlagen nach
+2026-01-18 14:44:14,300 - INFO - [Orchestrator] Orchestriere Anfrage: was gibt es in jaban mehr als Kinder? schau bei unseren unterlagen nach
+2026-01-18 14:44:15,188 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:44:15,189 - INFO - [Orchestrator] Routing: clarify - Die Anfrage ist unklar und benötigt mehr Kontext, insbesondere was mit 'jaban' gemeint ist.
+2026-01-18 14:44:15,189 - INFO - [Orchestrator] Unklare Anfrage erkannt - stelle Rückfragen
+2026-01-18 14:44:16,012 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:44:16,013 - INFO - Routing-Begründung: Die Anfrage ist unklar und benötigt mehr Kontext, insbesondere was mit 'jaban' gemeint ist.
+2026-01-18 14:44:26,947 - INFO - User: japan meinte ich 
+2026-01-18 14:44:26,947 - INFO - [Orchestrator] Orchestriere Anfrage: japan meinte ich 
+2026-01-18 14:44:28,187 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:44:28,188 - INFO - [Orchestrator] Routing: clarify - Die Anfrage benötigt mehr Kontext, um zu verstehen, was genau über Japan im Vergleich zu Kindern gewünscht ist.
+2026-01-18 14:44:28,188 - INFO - [Orchestrator] Unklare Anfrage erkannt - stelle Rückfragen
+2026-01-18 14:44:29,073 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:44:29,074 - INFO - Routing-Begründung: Die Anfrage benötigt mehr Kontext, um zu verstehen, was genau über Japan im Vergleich zu Kindern gewünscht ist.
+2026-01-18 14:44:58,946 - INFO - User: okay vergiss es
+2026-01-18 14:44:58,946 - INFO - [Orchestrator] Orchestriere Anfrage: okay vergiss es
+2026-01-18 14:44:59,589 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 400 Bad Request"
+2026-01-18 14:44:59,589 - ERROR - [Orchestrator] Routing-Fehler: Error code: 400 - {'error': {'message': "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766", 'type': None, 'param': 'prompt', 'code': 'content_filter', 'status': 400, 'innererror': {'code': 'ResponsibleAIPolicyViolation', 'content_filter_result': {'hate': {'filtered': False, 'severity': 'safe'}, 'jailbreak': {'filtered': True, 'detected': True}, 'self_harm': {'filtered': False, 'severity': 'safe'}, 'sexual': {'filtered': False, 'severity': 'safe'}, 'violence': {'filtered': False, 'severity': 'safe'}}}}}, Fallback zu Chat
+2026-01-18 14:44:59,589 - INFO - [Chat Agent] Verarbeite Anfrage: okay vergiss es
+2026-01-18 14:45:00,194 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 14:45:00,195 - INFO - [Chat Agent] Antwort generiert (145 Zeichen)
+2026-01-18 14:45:00,195 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 14:45:00,196 - INFO - Routing-Begründung: Routing-Fehler, Fallback aktiviert: Error code: 400 - {'error': {'message': "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766", 'type': None, 'param': 'prompt', 'code': 'content_filter', 'status': 400, 'innererror': {'code': 'ResponsibleAIPolicyViolation', 'content_filter_result': {'hate': {'filtered': False, 'severity': 'safe'}, 'jailbreak': {'filtered': True, 'detected': True}, 'self_harm': {'filtered': False, 'severity': 'safe'}, 'sexual': {'filtered': False, 'severity': 'safe'}, 'violence': {'filtered': False, 'severity': 'safe'}}}}}
+2026-01-18 15:18:45,238 - INFO - User: was bedeutet in meiner unterlagen jaspen
+2026-01-18 15:18:45,238 - INFO - [Orchestrator] Orchestriere Anfrage: was bedeutet in meiner unterlagen jaspen
+2026-01-18 15:18:46,245 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 15:18:46,251 - INFO - [Orchestrator] Routing: rag - Die Anfrage bezieht sich auf spezifische Unterlagen und deren Inhalt.
+2026-01-18 15:18:46,251 - INFO - [RAG Agent] Verarbeite Anfrage: jaspen Bedeutung in Unterlagen
+2026-01-18 15:18:46,369 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 15:18:46,386 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34332'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': '99e821a9-f478-11f0-8d9e-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-18 15:18:47,093 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': '99e821a9-f478-11f0-8d9e-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Sun, 18 Jan 2026 14:18:46 GMT'
+2026-01-18 15:18:47,096 - INFO - [RAG Agent] Relevanz-Score: 0.571 (9 Ergebnisse)
+2026-01-18 15:18:47,534 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 15:18:47,535 - INFO - [RAG Agent] Antwort generiert mit 6 Quellen
+2026-01-18 15:18:47,535 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
+2026-01-18 15:18:47,536 - INFO - Routing-Begründung: Die Anfrage bezieht sich auf spezifische Unterlagen und deren Inhalt.
+2026-01-18 15:19:02,356 - INFO - User: okay nutze dein eigenes wissen
+2026-01-18 15:19:02,357 - INFO - [Orchestrator] Orchestriere Anfrage: okay nutze dein eigenes wissen
+2026-01-18 15:19:03,144 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 15:19:03,145 - INFO - [Orchestrator] Routing: chat - Der Benutzer bittet um Informationen basierend auf allgemeinem Wissen, nicht auf Firmendokumenten.
+2026-01-18 15:19:03,145 - INFO - [Chat Agent] Verarbeite Anfrage: okay nutze dein eigenes wissen
+2026-01-18 15:19:03,907 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 15:19:03,909 - INFO - [Chat Agent] Antwort generiert (334 Zeichen)
+2026-01-18 15:19:03,909 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 15:19:03,913 - INFO - Routing-Begründung: Der Benutzer bittet um Informationen basierend auf allgemeinem Wissen, nicht auf Firmendokumenten.
+2026-01-18 15:43:12,849 - INFO - Chat Agent initialisiert: Temp=0.7, MaxTokens=500, HistoryPairs=5
+2026-01-18 15:43:12,849 - INFO - RAG Agent initialisiert: Temp=0.3, MaxTokens=700, TopK=8, MinScore=0.5
+2026-01-18 15:43:12,849 - INFO - Orchestrator initialisiert
+2026-01-18 15:43:31,389 - INFO - User: hi funktioniert das system noch?
+2026-01-18 15:43:31,389 - INFO - [Orchestrator] Orchestriere Anfrage: hi funktioniert das system noch?
+2026-01-18 15:43:32,460 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 15:43:32,465 - INFO - [Orchestrator] Routing: chat - Die Anfrage ist eine allgemeine Frage zur Funktionsfähigkeit des Systems.
+2026-01-18 15:43:32,466 - INFO - [Chat Agent] Verarbeite Anfrage: hi funktioniert das system noch?
+2026-01-18 15:43:32,895 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 15:43:32,895 - INFO - [Chat Agent] Antwort generiert (65 Zeichen, Temp=0.7, History=0 msgs)
+2026-01-18 15:43:32,895 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 15:43:32,896 - INFO - Routing-Begründung: Die Anfrage ist eine allgemeine Frage zur Funktionsfähigkeit des Systems.
+2026-01-18 16:29:03,465 - INFO - Chat Agent initialisiert: Temp=0.7, MaxTokens=700, HistoryPairs=5
+2026-01-18 16:29:03,465 - INFO - RAG Agent initialisiert: Temp=0.3, MaxTokens=700, TopK=8, MinScore=0.5
+2026-01-18 16:29:03,465 - INFO - Orchestrator initialisiert
+2026-01-18 16:29:05,880 - INFO - User: Hi 
+2026-01-18 16:29:05,880 - INFO - [Orchestrator] Orchestriere Anfrage: Hi 
+2026-01-18 16:29:06,757 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:29:06,763 - INFO - [Orchestrator] Routing: clarify - Die Anfrage ist unklar und benötigt mehr Kontext.
+2026-01-18 16:29:06,763 - INFO - [Orchestrator] Unklare Anfrage erkannt - stelle Rückfragen
+2026-01-18 16:29:07,191 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:29:07,192 - INFO - Routing-Begründung: Die Anfrage ist unklar und benötigt mehr Kontext.
+2026-01-18 16:29:13,911 - INFO - User: wie heißt du 
+2026-01-18 16:29:13,912 - INFO - [Orchestrator] Orchestriere Anfrage: wie heißt du 
+2026-01-18 16:29:14,652 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:29:14,653 - INFO - [Orchestrator] Routing: chat - Die Anfrage ist eine allgemeine Frage im Rahmen von Smalltalk.
+2026-01-18 16:29:14,653 - INFO - [Chat Agent] Verarbeite Anfrage: wie heißt du 
+2026-01-18 16:29:15,173 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:29:15,174 - INFO - [Chat Agent] Antwort generiert (76 Zeichen, Temp=0.7, History=2 msgs)
+2026-01-18 16:29:15,174 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 16:29:15,174 - INFO - Routing-Begründung: Die Anfrage ist eine allgemeine Frage im Rahmen von Smalltalk.
+2026-01-18 16:48:40,645 - INFO - Chat Agent initialisiert: Model=gpt-4o-mini, Temp=0.7, MaxTokens=700, HistoryPairs=5
+2026-01-18 16:48:40,645 - INFO - RAG Agent initialisiert: Model=gpt-4o-mini, Embeddings=text-embedding-3-small, Temp=0.3, MaxTokens=700, TopK=8, MinScore=0.5
+2026-01-18 16:48:40,645 - INFO - Orchestrator initialisiert: Model=gpt-4o-mini
+2026-01-18 16:48:44,683 - INFO - User: hi funtkionierst du 
+2026-01-18 16:48:44,683 - INFO - [Orchestrator] Orchestriere Anfrage: hi funtkionierst du 
+2026-01-18 16:48:45,660 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:48:45,665 - INFO - [Orchestrator] Routing: chat - Die Anfrage ist eine allgemeine Frage und Smalltalk.
+2026-01-18 16:48:45,666 - INFO - [Chat Agent] Verarbeite Anfrage: hi funtkionierst du 
+2026-01-18 16:48:46,062 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:48:46,063 - INFO - [Chat Agent] Antwort generiert (69 Zeichen, Temp=0.7, History=0 msgs)
+2026-01-18 16:48:46,063 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 16:48:46,063 - INFO - Routing-Begründung: Die Anfrage ist eine allgemeine Frage und Smalltalk.
+2026-01-18 16:48:59,736 - INFO - User: bitte prüfe ob powerautomate vollständig in meiner unterlagen sit 
+2026-01-18 16:48:59,736 - INFO - [Orchestrator] Orchestriere Anfrage: bitte prüfe ob powerautomate vollständig in meiner unterlagen sit 
+2026-01-18 16:49:00,651 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:49:00,651 - INFO - [Orchestrator] Routing: rag - Die Anfrage bezieht sich auf die Überprüfung von Firmendokumenten, insbesondere ob Power Automate in den Unterlagen enthalten ist.
+2026-01-18 16:49:00,651 - INFO - [RAG Agent] Verarbeite Anfrage: Power Automate Unterlagen überprüfen
+2026-01-18 16:49:00,765 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:49:00,776 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34290'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': '3522760e-f485-11f0-bcc3-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-18 16:49:01,288 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': '3522760e-f485-11f0-bcc3-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Sun, 18 Jan 2026 15:49:01 GMT'
+2026-01-18 16:49:01,290 - INFO - [RAG Agent] Relevanz-Score: 0.721 (8 Ergebnisse über 0.5)
+2026-01-18 16:49:01,742 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:49:01,743 - INFO - [RAG Agent] Antwort generiert mit 5 Quellen (Temp=0.3, History=2 msgs)
+2026-01-18 16:49:01,743 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
+2026-01-18 16:49:01,744 - INFO - Routing-Begründung: Die Anfrage bezieht sich auf die Überprüfung von Firmendokumenten, insbesondere ob Power Automate in den Unterlagen enthalten ist.
+2026-01-18 16:49:15,284 - INFO - User: was beinhaltet das dokument? 
+2026-01-18 16:49:15,284 - INFO - [Orchestrator] Orchestriere Anfrage: was beinhaltet das dokument? 
+2026-01-18 16:49:16,378 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:49:16,379 - INFO - [Orchestrator] Routing: rag - Die Anfrage bezieht sich auf den Inhalt eines Dokuments, was eine spezifische Information zu Firmendokumenten erfordert.
+2026-01-18 16:49:16,379 - INFO - [RAG Agent] Verarbeite Anfrage: Inhalt des Dokuments
+2026-01-18 16:49:16,486 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:49:16,503 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34323'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': '3e822a78-f485-11f0-a68c-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-18 16:49:16,654 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': '3e822a78-f485-11f0-a68c-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Sun, 18 Jan 2026 15:49:16 GMT'
+2026-01-18 16:49:16,654 - INFO - [RAG Agent] Relevanz-Score: 0.596 (8 Ergebnisse über 0.5)
+2026-01-18 16:49:19,855 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:49:19,855 - INFO - [RAG Agent] Antwort generiert mit 5 Quellen (Temp=0.3, History=4 msgs)
+2026-01-18 16:49:19,855 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
+2026-01-18 16:49:19,855 - INFO - Routing-Begründung: Die Anfrage bezieht sich auf den Inhalt eines Dokuments, was eine spezifische Information zu Firmendokumenten erfordert.
+2026-01-18 16:53:12,836 - INFO - Chat Agent initialisiert: Model=asdasd, Temp=0.7, MaxTokens=700, HistoryPairs=5
+2026-01-18 16:53:12,836 - INFO - RAG Agent initialisiert: Model=gpt-4o-mini, Embeddings=text-embedding-3-small, Temp=0.3, MaxTokens=700, TopK=8, MinScore=0.5
+2026-01-18 16:53:12,836 - INFO - Orchestrator initialisiert: Model=gpt-4o-mini
+2026-01-18 16:53:16,440 - INFO - User: funktionierts du 
+2026-01-18 16:53:16,440 - INFO - [Orchestrator] Orchestriere Anfrage: funktionierts du 
+2026-01-18 16:53:17,469 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:53:17,473 - INFO - [Orchestrator] Routing: clarify - Die Anfrage ist unklar und benötigt mehr Kontext.
+2026-01-18 16:53:17,473 - INFO - [Orchestrator] Unklare Anfrage erkannt - stelle Rückfragen
+2026-01-18 16:53:18,039 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:53:18,040 - INFO - Routing-Begründung: Die Anfrage ist unklar und benötigt mehr Kontext.
+2026-01-18 16:59:31,298 - INFO - Chat Agent initialisiert: Model=gpt-4o-mini, Temp=0.7, MaxTokens=700, HistoryPairs=5
+2026-01-18 16:59:31,298 - INFO - RAG Agent initialisiert: Model=test tests-5, Embeddings=text-embedding-3-small, Temp=0.3, MaxTokens=700, TopK=8, MinScore=0.5
+2026-01-18 16:59:31,298 - INFO - Orchestrator initialisiert: Model=gpt-4o-mini
+2026-01-18 16:59:32,850 - INFO - User: hi du 
+2026-01-18 16:59:32,850 - INFO - [Orchestrator] Orchestriere Anfrage: hi du 
+2026-01-18 16:59:33,739 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:59:33,746 - INFO - [Orchestrator] Routing: clarify - Die Anfrage ist unklar und benötigt mehr Kontext.
+2026-01-18 16:59:33,746 - INFO - [Orchestrator] Unklare Anfrage erkannt - stelle Rückfragen
+2026-01-18 16:59:34,209 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:59:34,211 - INFO - Routing-Begründung: Die Anfrage ist unklar und benötigt mehr Kontext.
+2026-01-18 16:59:42,400 - INFO - User: was ist logic apps? 
+2026-01-18 16:59:42,400 - INFO - [Orchestrator] Orchestriere Anfrage: was ist logic apps? 
+2026-01-18 16:59:43,193 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:59:43,193 - INFO - [Orchestrator] Routing: chat - Die Anfrage ist eine allgemeine Frage zu einem Konzept und benötigt keine spezifischen Firmendokumente.
+2026-01-18 16:59:43,193 - INFO - [Chat Agent] Verarbeite Anfrage: was ist logic apps? 
+2026-01-18 16:59:46,148 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:59:46,150 - INFO - [Chat Agent] Antwort generiert (1518 Zeichen, Temp=0.7, History=2 msgs)
+2026-01-18 16:59:46,150 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 16:59:46,150 - INFO - Routing-Begründung: Die Anfrage ist eine allgemeine Frage zu einem Konzept und benötigt keine spezifischen Firmendokumente.
+2026-01-18 16:59:54,195 - INFO - User: suche meiner unterlagen durch 
+2026-01-18 16:59:54,196 - INFO - [Orchestrator] Orchestriere Anfrage: suche meiner unterlagen durch 
+2026-01-18 16:59:55,055 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:59:55,056 - INFO - [Orchestrator] Routing: rag - Die Anfrage bezieht sich auf das Durchsuchen von Unterlagen, was auf Firmendokumente oder Richtlinien hindeutet.
+2026-01-18 16:59:55,057 - INFO - [RAG Agent] Verarbeite Anfrage: Unterlagen durchsuchen
+2026-01-18 16:59:55,346 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 16:59:55,356 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34311'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': 'bb4b6a95-f486-11f0-8d10-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-18 16:59:55,877 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': 'bb4b6a95-f486-11f0-8d10-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Sun, 18 Jan 2026 15:59:55 GMT'
+2026-01-18 16:59:55,880 - INFO - [RAG Agent] Relevanz-Score: 0.572 (8 Ergebnisse über 0.5)
+2026-01-18 16:59:55,931 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/test%20tests-5/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 404 DeploymentNotFound"
+2026-01-18 16:59:55,932 - ERROR - [RAG Agent] Fehler: Error code: 404 - {'error': {'code': 'DeploymentNotFound', 'message': 'The API deployment for this resource does not exist. If you created the deployment within the last 5 minutes, please wait a moment and try again.'}}
+2026-01-18 16:59:55,932 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
+2026-01-18 16:59:55,934 - INFO - Routing-Begründung: Die Anfrage bezieht sich auf das Durchsuchen von Unterlagen, was auf Firmendokumente oder Richtlinien hindeutet.
+2026-01-18 17:01:48,331 - INFO - User: bitte nochma
+2026-01-18 17:01:48,332 - INFO - [Orchestrator] Orchestriere Anfrage: bitte nochma
+2026-01-18 17:01:49,058 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 17:01:49,059 - INFO - [Orchestrator] Routing: clarify - Die Anfrage 'bitte nochma' ist unklar und benötigt mehr Kontext.
+2026-01-18 17:01:49,060 - INFO - [Orchestrator] Unklare Anfrage erkannt - stelle Rückfragen
+2026-01-18 17:01:49,744 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 17:01:49,746 - INFO - Routing-Begründung: Die Anfrage 'bitte nochma' ist unklar und benötigt mehr Kontext.
+2026-01-18 17:02:01,392 - INFO - Chat Agent initialisiert: Model=gpt-4o-mini, Temp=0.7, MaxTokens=700, HistoryPairs=5
+2026-01-18 17:02:01,392 - INFO - RAG Agent initialisiert: Model=gpt-4o-mini, Embeddings=text-embedding-3-small, Temp=0.3, MaxTokens=700, TopK=8, MinScore=0.5
+2026-01-18 17:02:01,392 - INFO - Orchestrator initialisiert: Model=gpt-4o-mini
+2026-01-18 17:02:10,527 - INFO - User: was sind die logic apps laut meiner unterlagen von azure
+2026-01-18 17:02:10,527 - INFO - [Orchestrator] Orchestriere Anfrage: was sind die logic apps laut meiner unterlagen von azure
+2026-01-18 17:02:11,547 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 17:02:11,554 - INFO - [Orchestrator] Routing: rag - Die Anfrage bezieht sich auf spezifische Informationen zu Logic Apps in den Firmendokumenten von Azure.
+2026-01-18 17:02:11,555 - INFO - [RAG Agent] Verarbeite Anfrage: Logic Apps Azure Dokumentation
+2026-01-18 17:02:11,830 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 17:02:11,846 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34377'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': '0ca61ddb-f487-11f0-b6ba-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-18 17:02:12,387 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': '0ca61ddb-f487-11f0-b6ba-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Sun, 18 Jan 2026 16:02:12 GMT'
+2026-01-18 17:02:12,390 - INFO - [RAG Agent] Relevanz-Score: 0.721 (8 Ergebnisse über 0.5)
+2026-01-18 17:02:12,802 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 17:02:12,803 - INFO - [RAG Agent] Antwort generiert mit 5 Quellen (Temp=0.3, History=0 msgs)
+2026-01-18 17:02:12,803 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
+2026-01-18 17:02:12,803 - INFO - Routing-Begründung: Die Anfrage bezieht sich auf spezifische Informationen zu Logic Apps in den Firmendokumenten von Azure.
+2026-01-18 17:02:23,867 - INFO - User: ich meinte logic apps
+2026-01-18 17:02:23,867 - INFO - [Orchestrator] Orchestriere Anfrage: ich meinte logic apps
+2026-01-18 17:02:24,732 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 17:02:24,733 - INFO - [Orchestrator] Routing: rag - Die Anfrage bezieht sich auf spezifische Informationen zu Logic Apps, die in den Firmendokumenten enthalten sein könnten.
+2026-01-18 17:02:24,733 - INFO - [RAG Agent] Verarbeite Anfrage: Logic Apps Azure
+2026-01-18 17:02:25,007 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 17:02:25,020 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34316'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': '14804b19-f487-11f0-a8ce-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-18 17:02:25,120 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': '14804b19-f487-11f0-a8ce-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Sun, 18 Jan 2026 16:02:25 GMT'
+2026-01-18 17:02:25,121 - INFO - [RAG Agent] Relevanz-Score: 0.722 (8 Ergebnisse über 0.5)
+2026-01-18 17:02:26,802 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 17:02:26,803 - INFO - [RAG Agent] Antwort generiert mit 5 Quellen (Temp=0.3, History=2 msgs)
+2026-01-18 17:02:26,803 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
+2026-01-18 17:02:26,804 - INFO - Routing-Begründung: Die Anfrage bezieht sich auf spezifische Informationen zu Logic Apps, die in den Firmendokumenten enthalten sein könnten.

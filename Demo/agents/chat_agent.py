@@ -1,0 +1,94 @@
+"""
+ChatAgent - Allgemeine Konversation ohne Wissensbasis
+"""
+import logging
+from typing import Dict, Optional
+from .base_agent import BaseAgent
+
+logger = logging.getLogger(__name__)
+
+
+class ChatAgent(BaseAgent):
+    """Chat Agent - Allgemeine Konversation ohne Wissensbasis"""
+    
+    def __init__(
+        self,
+        aoai_client,
+        model_name: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = 500,
+        max_history_pairs: int = 5
+    ):
+        """
+        Args:
+            aoai_client: Azure OpenAI Client
+            model_name: Deployment-Name des Modells
+            system_prompt: Custom System-Prompt (None = default)
+            temperature: LLM Temperature (default: 0.7 für Kreativität)
+            max_tokens: Max Output-Tokens (default: 500)
+            max_history_pairs: Anzahl Message-Paare (default: 5 = 10 Messages)
+        """
+        super().__init__(
+            name="Chat",
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_history_pairs=max_history_pairs
+        )
+        
+        self.aoai_client = aoai_client
+        self.model_name = model_name
+    
+    def execute(self, user_input: str, context: Dict = None) -> Dict:
+        """Führt Chat-Konversation durch"""
+        logger.info(f"[{self.name} Agent] Verarbeite Anfrage: {user_input[:100]}")
+        
+        chat_history = self._get_chat_history(context)
+        
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            *chat_history,
+            {"role": "user", "content": user_input}
+        ]
+        
+        try:
+            # LLM-Call Parameter vorbereiten
+            call_params = {
+                "model": self.model_name,
+                "messages": messages,
+                "temperature": self.temperature
+            }
+            
+            if self.max_tokens is not None:
+                call_params["max_tokens"] = self.max_tokens
+            
+            response = self.aoai_client.chat.completions.create(**call_params)
+            
+            answer = response.choices[0].message.content
+            
+            logger.info(
+                f"[{self.name} Agent] Antwort generiert "
+                f"({len(answer)} Zeichen, Temp={self.temperature}, "
+                f"History={len(chat_history)} msgs)"
+            )
+            
+            return {
+                "response": answer,
+                "metadata": {
+                    "agent": self.name,
+                    "sources": [],
+                    "confidence": "high",
+                    "config": {
+                        "temperature": self.temperature,
+                        "max_tokens": self.max_tokens,
+                        "history_pairs": self.max_history_pairs
+                    }
+                }
+            }
+        except Exception as e:
+            logger.error(f"[{self.name} Agent] Fehler: {e}")
+            return {
+                "response": f"Es tut mir leid, es gab einen Fehler bei der Verarbeitung: {str(e)}",
+                "metadata": {"agent": self.name, "error": str(e)}
+            }
