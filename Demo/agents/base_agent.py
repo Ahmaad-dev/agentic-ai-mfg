@@ -11,6 +11,8 @@ class BaseAgent:
         self,
         name: str,
         system_prompt: str,
+        description: Optional[str] = None,
+        routing_description: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         max_history_pairs: Optional[int] = None
@@ -19,12 +21,16 @@ class BaseAgent:
         Args:
             name: Name des Agenten
             system_prompt: System-Prompt für den Agenten
+            description: Kurze Beschreibung des Agenten (für Logging/Docs)
+            routing_description: Optimierte Beschreibung für Orchestrator-Routing (falls None: nutzt description)
             temperature: LLM Temperature (0.0-1.0)
             max_tokens: Maximale Output-Tokens (None = default)
             max_history_pairs: Anzahl Message-Paare im Kontext (None = alle)
         """
         self.name = name
         self.system_prompt = system_prompt
+        self.description = description or f"{name} Agent"
+        self.routing_description = routing_description or self.description
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.max_history_pairs = max_history_pairs

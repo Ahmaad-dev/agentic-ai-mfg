@@ -65,6 +65,13 @@ class OrchestrationAgent(BaseAgent):
                 role = "User" if msg["role"] == "user" else "Assistant"
                 context_summary += f"{role}: {msg['content'][:300]}...\n"
         
+        # Dynamisch Agent-Optionen aus routing_descriptions bauen
+        agent_options = []
+        for key, agent in self.agents.items():
+            agent_options.append(f'- "{key}": {agent.routing_description}')
+        
+        agent_options_str = "\n".join(agent_options)
+        
         router_prompt = f"""Analysiere die folgende Benutzeranfrage und entscheide, welcher Agent zuständig ist.
 
 {context_summary}
@@ -72,14 +79,13 @@ class OrchestrationAgent(BaseAgent):
 AKTUELLE ANFRAGE: {user_input}
 
 OPTIONEN:
-- "chat": Allgemeine Fragen, Smalltalk, Erklärungen (keine Firmendokumente nötig)
-- "rag": Fragen zu Firmendokumenten, Richtlinien, technischen Spezifikationen, Prozessen
+{agent_options_str}
 - "clarify": Anfrage ist unklar, vage oder benötigt mehr Kontext (z.B. "Was?", "Stimmt das?", "Wie meinst du das?")
 
 REGELN:
 - Wenn die Anfrage ohne Kontext nicht verstanden werden kann → "clarify"
 - Wenn Pronomen ohne Bezug verwendet werden ("das", "es") → prüfe Kontext, sonst "clarify"
-- Bei klaren Fragen → "chat" oder "rag"
+- Bei klaren Fragen → wähle den passenden Agenten basierend auf den Beschreibungen oben
 
 Antworte NUR mit JSON:
 {{
@@ -99,7 +105,16 @@ Antworte NUR mit JSON:
                 max_tokens=self.router_max_tokens
             )
             
+            # Optional: LLM Request loggen
+            import main
+            if main.LOGGING_CONFIG.get("log_llm_requests", False):
+                logger.info(f"[{self.name}] LLM REQUEST (Routing):\n{router_prompt}")
+            
             output = response.choices[0].message.content.strip()
+            
+            # Optional: LLM Response loggen
+            if main.LOGGING_CONFIG.get("log_llm_responses", False):
+                logger.info(f"[{self.name}] LLM RESPONSE (Routing):\n{output}")
             
             # JSON bereinigen
             if output.startswith("```json"):
@@ -115,7 +130,12 @@ Antworte NUR mit JSON:
             if "agent" not in routing or routing["agent"] not in ["chat", "rag", "clarify"]:
                 raise ValueError(f"Ungültiges Routing: {routing}")
             
-            logger.info(f"[{self.name}] Routing: {routing['agent']} - {routing.get('reason', 'N/A')}")
+            # Optional: Routing-Entscheidung loggen
+            import main
+            if main.LOGGING_CONFIG.get("log_routing_decision", False):
+                logger.info(f"[{self.name}] ROUTING DECISION: {json.dumps(routing, indent=2, ensure_ascii=False)}")
+            else:
+                logger.info(f"[{self.name}] Routing: {routing['agent']} - {routing.get('reason', 'N/A')}")
             
             return routing
             

@@ -33,10 +33,23 @@ Gib IMMER die Quellen deiner Informationen an.
 
 # Chat Agent Einstellungen
 CHAT_AGENT_CONFIG = {
-    "temperature": 0.7,          # Kreativ für natürliche Konversation
+    "temperature": 0.7,
     "max_tokens": BASE_AGENT_CONFIG["max_tokens"],
     "max_history_pairs": BASE_AGENT_CONFIG["max_history_pairs"],
-    "system_prompt": DEFAULT_CHAT_SYSTEM_PROMPT  # Nutzt Default aus agent_config.py
+    "system_prompt": DEFAULT_CHAT_SYSTEM_PROMPT,
+    "description": "General conversation agent",
+    "routing_description": """Use for general questions, greetings, explanations, and conversations that do NOT require company documents.
+
+Use when:
+- General greetings (like "Hallo", "Wie geht's?")
+- General knowledge questions (like "Was ist KI?", "Erkläre mir...")
+- Explanations of general concepts
+- Small talk and casual conversation
+
+Do NOT use when:
+- User asks about company policies, procedures, or documentation
+- Questions about internal processes or technical specifications
+- User needs specific information from company documents"""
 }
 
 # RAG Agent Einstellungen
@@ -46,7 +59,21 @@ RAG_AGENT_CONFIG = {
     "max_history_pairs": BASE_AGENT_CONFIG["max_history_pairs"],
     "top_k": 8,                  # 8 Retrieval-Ergebnisse
     "min_score": 0.5,            # Minimaler Relevanz-Score
-    "system_prompt": DEFAULT_RAG_SYSTEM_PROMPT  # Nutzt Default aus agent_config.py
+    "system_prompt": DEFAULT_RAG_SYSTEM_PROMPT,
+    "description": "Document search and retrieval agent",
+    "routing_description": """Use for questions about INTERNAL company documents, policies, procedures, and technical specifications.
+
+Use when:
+- User asks about company policies or guidelines ("Was steht in Richtlinie X?", "Wie lautet die Policy für Y?")
+- Questions about internal processes ("Wie läuft der Prozess für Z?", "Zeige mir das SOP für...")
+- Technical specifications or documentation ("Was sind die technischen Anforderungen?", "Welche Spezifikationen...?")
+- User explicitly mentions documents, policies, procedures, or guidelines
+
+Do NOT use when:
+- General questions that don't require specific company documentation
+- Greetings or small talk
+- General knowledge questions
+"""
 }
 
 # Orchestrator Einstellungen

@@ -1,6 +1,7 @@
 """
 RAGAgent - Wissensbasis-gestützte Antworten
 """
+import json
 import logging
 from typing import Dict, List, Optional, Tuple
 from azure.search.documents.models import VectorizedQuery
@@ -19,6 +20,8 @@ class RAGAgent(BaseAgent):
         emb_model_name: str,
         search_client,
         system_prompt: Optional[str] = None,
+        description: Optional[str] = None,
+        routing_description: Optional[str] = None,
         temperature: float = 0.3,
         max_tokens: Optional[int] = 700,
         max_history_pairs: int = 2,
@@ -32,6 +35,8 @@ class RAGAgent(BaseAgent):
             emb_model_name: Deployment-Name des Embedding-Modells
             search_client: Azure Search Client
             system_prompt: Custom System-Prompt (None = default)
+            description: Kurze Beschreibung (für Logging)
+            routing_description: Routing-optimierte Beschreibung (für Orchestrator)
             temperature: LLM Temperature (default: 0.3 für Faktentreue)
             max_tokens: Max Output-Tokens (default: 700)
             max_history_pairs: Anzahl Message-Paare (default: 2 = 4 Messages)
@@ -41,6 +46,8 @@ class RAGAgent(BaseAgent):
         super().__init__(
             name="RAG",
             system_prompt=system_prompt,
+            description=description,
+            routing_description=routing_description,
             temperature=temperature,
             max_tokens=max_tokens,
             max_history_pairs=max_history_pairs
@@ -103,6 +110,14 @@ class RAGAgent(BaseAgent):
                     if source:
                         source_ref = f"{source} (Seite {page})" if page else source
                         sources.append(source_ref)
+            
+            # Optional: Retrieval-Ergebnisse loggen
+            import main
+            if main.LOGGING_CONFIG.get("log_retrieval_results", False):
+                retrieval_summary = f"Query: {query}\nGefunden: {len(chunks)} relevante Chunks (Score >= {self.min_score})\n"
+                for i, (chunk, score) in enumerate(zip(chunks[:3], scores[:3]), 1):  # Nur Top 3
+                    retrieval_summary += f"{i}. Score: {score:.3f} - {chunk[:100]}...\n"
+                logger.info(f"[{self.name} Agent] RETRIEVAL RESULTS:\n{retrieval_summary}")
             
             max_score = max(scores) if scores else 0.0
             has_relevant_results = len(chunks) > 0
@@ -170,6 +185,12 @@ class RAGAgent(BaseAgent):
             }
         ]
         
+        # Optional: LLM Request loggen
+        import main
+        if main.LOGGING_CONFIG.get("log_llm_requests", False):
+            messages_str = json.dumps(messages, indent=2, ensure_ascii=False)
+            logger.info(f"[{self.name} Agent] LLM REQUEST:\n{messages_str}")
+        
         try:
             # LLM-Call Parameter vorbereiten
             call_params = {
@@ -184,6 +205,10 @@ class RAGAgent(BaseAgent):
             response = self.aoai_client.chat.completions.create(**call_params)
             
             answer = response.choices[0].message.content
+            
+            # Optional: LLM Response loggen
+            if main.LOGGING_CONFIG.get("log_llm_responses", False):
+                logger.info(f"[{self.name} Agent] LLM RESPONSE:\n{answer}")
             
             logger.info(
                 f"[{self.name} Agent] Antwort generiert mit {len(sources)} Quellen "

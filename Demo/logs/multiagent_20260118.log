@@ -370,3 +370,195 @@ Response headers:
 2026-01-18 17:02:26,803 - INFO - [RAG Agent] Antwort generiert mit 5 Quellen (Temp=0.3, History=2 msgs)
 2026-01-18 17:02:26,803 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
 2026-01-18 17:02:26,804 - INFO - Routing-Begründung: Die Anfrage bezieht sich auf spezifische Informationen zu Logic Apps, die in den Firmendokumenten enthalten sein könnten.
+2026-01-18 19:51:29,509 - INFO - Chat Agent initialisiert: Model=gpt-4o-mini, Temp=0.7, MaxTokens=700, HistoryPairs=5
+2026-01-18 19:51:29,509 - INFO - RAG Agent initialisiert: Model=gpt-4o-mini, Embeddings=text-embedding-3-small, Temp=0.3, MaxTokens=700, TopK=8, MinScore=0.5
+2026-01-18 19:51:29,509 - INFO - Orchestrator initialisiert: Model=gpt-4o-mini
+2026-01-18 19:51:35,983 - INFO - User: hi funtkionierst du noch? 
+2026-01-18 19:51:35,983 - INFO - [Orchestrator] Orchestriere Anfrage: hi funtkionierst du noch? 
+2026-01-18 19:51:37,347 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 19:51:37,361 - INFO - [Orchestrator] LLM REQUEST (Routing):
+Analysiere die folgende Benutzeranfrage und entscheide, welcher Agent zuständig ist.
+
+
+
+AKTUELLE ANFRAGE: hi funtkionierst du noch? 
+
+OPTIONEN:
+- "chat": Use for general questions, greetings, explanations, and conversations that do NOT require company documents.
+
+Use when:
+- General greetings (like "Hallo", "Wie geht's?")
+- General knowledge questions (like "Was ist KI?", "Erkläre mir...")
+- Explanations of general concepts
+- Small talk and casual conversation
+
+Do NOT use when:
+- User asks about company policies, procedures, or documentation
+- Questions about internal processes or technical specifications
+- User needs specific information from company documents
+- "rag": Use for questions about INTERNAL company documents, policies, procedures, and technical specifications.
+
+Use when:
+- User asks about company policies or guidelines ("Was steht in Richtlinie X?", "Wie lautet die Policy für Y?")
+- Questions about internal processes ("Wie läuft der Prozess für Z?", "Zeige mir das SOP für...")
+- Technical specifications or documentation ("Was sind die technischen Anforderungen?", "Welche Spezifikationen...?")
+- User explicitly mentions documents, policies, procedures, or guidelines
+
+Do NOT use when:
+- General questions that don't require specific company documentation
+- Greetings or small talk
+- General knowledge questions
+
+- "clarify": Anfrage ist unklar, vage oder benötigt mehr Kontext (z.B. "Was?", "Stimmt das?", "Wie meinst du das?")
+
+REGELN:
+- Wenn die Anfrage ohne Kontext nicht verstanden werden kann → "clarify"
+- Wenn Pronomen ohne Bezug verwendet werden ("das", "es") → prüfe Kontext, sonst "clarify"
+- Bei klaren Fragen → wähle den passenden Agenten basierend auf den Beschreibungen oben
+
+Antworte NUR mit JSON:
+{
+  "agent": "chat" | "rag" | "clarify",
+  "reason": "Kurze Begründung",
+  "search_query": "Optimierte Query (nur bei rag, sonst null)"
+}
+2026-01-18 19:51:37,361 - INFO - [Orchestrator] LLM RESPONSE (Routing):
+{
+  "agent": "chat",
+  "reason": "Die Anfrage ist eine allgemeine Begrüßung und erfordert keine spezifischen Unternehmensdokumente.",
+  "search_query": null
+}
+2026-01-18 19:51:37,361 - INFO - [Orchestrator] ROUTING DECISION: {
+  "agent": "chat",
+  "reason": "Die Anfrage ist eine allgemeine Begrüßung und erfordert keine spezifischen Unternehmensdokumente.",
+  "search_query": null
+}
+2026-01-18 19:51:37,361 - INFO - [Chat Agent] Verarbeite Anfrage: hi funtkionierst du noch? 
+2026-01-18 19:51:38,050 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 19:51:38,051 - INFO - [Chat Agent] Antwort generiert (110 Zeichen, Temp=0.7, History=0 msgs)
+2026-01-18 19:51:38,051 - INFO - [Orchestrator] Anfrage abgeschlossen durch chat Agent
+2026-01-18 19:51:38,052 - INFO - Routing-Begründung: Die Anfrage ist eine allgemeine Begrüßung und erfordert keine spezifischen Unternehmensdokumente.
+2026-01-18 19:52:34,720 - INFO - User: was weißt du über power automate laut meiner dokumente
+2026-01-18 19:52:34,720 - INFO - [Orchestrator] Orchestriere Anfrage: was weißt du über power automate laut meiner dokumente
+2026-01-18 19:52:35,646 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 19:52:35,647 - INFO - [Orchestrator] LLM REQUEST (Routing):
+Analysiere die folgende Benutzeranfrage und entscheide, welcher Agent zuständig ist.
+
+
+
+BISHERIGER KONTEXT:
+User: hi funtkionierst du noch? ...
+Assistant: Hallo Ahmad! Ja, ich funktioniere noch und bin hier, um dir zu helfen. Wie kann ich dir heute behilflich sein?...
+
+
+AKTUELLE ANFRAGE: was weißt du über power automate laut meiner dokumente
+
+OPTIONEN:
+- "chat": Use for general questions, greetings, explanations, and conversations that do NOT require company documents.
+
+Use when:
+- General greetings (like "Hallo", "Wie geht's?")
+- General knowledge questions (like "Was ist KI?", "Erkläre mir...")
+- Explanations of general concepts
+- Small talk and casual conversation
+
+Do NOT use when:
+- User asks about company policies, procedures, or documentation
+- Questions about internal processes or technical specifications
+- User needs specific information from company documents
+- "rag": Use for questions about INTERNAL company documents, policies, procedures, and technical specifications.
+
+Use when:
+- User asks about company policies or guidelines ("Was steht in Richtlinie X?", "Wie lautet die Policy für Y?")
+- Questions about internal processes ("Wie läuft der Prozess für Z?", "Zeige mir das SOP für...")
+- Technical specifications or documentation ("Was sind die technischen Anforderungen?", "Welche Spezifikationen...?")
+- User explicitly mentions documents, policies, procedures, or guidelines
+
+Do NOT use when:
+- General questions that don't require specific company documentation
+- Greetings or small talk
+- General knowledge questions
+
+- "clarify": Anfrage ist unklar, vage oder benötigt mehr Kontext (z.B. "Was?", "Stimmt das?", "Wie meinst du das?")
+
+REGELN:
+- Wenn die Anfrage ohne Kontext nicht verstanden werden kann → "clarify"
+- Wenn Pronomen ohne Bezug verwendet werden ("das", "es") → prüfe Kontext, sonst "clarify"
+- Bei klaren Fragen → wähle den passenden Agenten basierend auf den Beschreibungen oben
+
+Antworte NUR mit JSON:
+{
+  "agent": "chat" | "rag" | "clarify",
+  "reason": "Kurze Begründung",
+  "search_query": "Optimierte Query (nur bei rag, sonst null)"
+}
+2026-01-18 19:52:35,647 - INFO - [Orchestrator] LLM RESPONSE (Routing):
+{
+  "agent": "rag",
+  "reason": "Der Benutzer fragt nach Informationen über Power Automate in Bezug auf seine Dokumente, was auf interne Dokumente hinweist.",
+  "search_query": "Power Automate Dokumente"
+}
+2026-01-18 19:52:35,647 - INFO - [Orchestrator] ROUTING DECISION: {
+  "agent": "rag",
+  "reason": "Der Benutzer fragt nach Informationen über Power Automate in Bezug auf seine Dokumente, was auf interne Dokumente hinweist.",
+  "search_query": "Power Automate Dokumente"
+}
+2026-01-18 19:52:35,647 - INFO - [RAG Agent] Verarbeite Anfrage: Power Automate Dokumente
+2026-01-18 19:52:35,928 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 19:52:35,944 - INFO - Request URL: 'https://ai-search-mfg.search.windows.net/indexes('process-docs-index')/docs/search.post.search?api-version=REDACTED'
+Request method: 'POST'
+Request headers:
+    'Content-Type': 'application/json'
+    'Content-Length': '34360'
+    'api-key': 'REDACTED'
+    'Accept': 'application/json;odata.metadata=none'
+    'x-ms-client-request-id': 'daafbdbc-f49e-11f0-84f1-6cf6da5712bd'
+    'User-Agent': 'azsdk-python-search-documents/11.6.0 Python/3.13.3 (Windows-11-10.0.26100-SP0)'
+A body is sent with the request
+2026-01-18 19:52:36,536 - INFO - Response status: 200
+Response headers:
+    'Transfer-Encoding': 'chunked'
+    'Content-Type': 'application/json; odata.metadata=none; odata.streaming=true; charset=utf-8'
+    'Content-Encoding': 'REDACTED'
+    'Vary': 'REDACTED'
+    'Strict-Transport-Security': 'REDACTED'
+    'Preference-Applied': 'REDACTED'
+    'OData-Version': 'REDACTED'
+    'request-id': 'daafbdbc-f49e-11f0-84f1-6cf6da5712bd'
+    'elapsed-time': 'REDACTED'
+    'Date': 'Sun, 18 Jan 2026 18:52:36 GMT'
+2026-01-18 19:52:36,538 - INFO - [RAG Agent] RETRIEVAL RESULTS:
+Query: Power Automate Dokumente
+Gefunden: 8 relevante Chunks (Score >= 0.5)
+1. Score: 0.697 - - Vergleich_PowerAutomate_LogicApps (Vergleich_PowerAutomate_LogicApps.pdf): Vergleich: Power Automa...
+2. Score: 0.686 - - Vergleich_PowerAutomate_LogicApps (Vergleich_PowerAutomate_LogicApps.pdf): Vergleich: Power Automa...
+3. Score: 0.668 - - Vergleich_PowerAutomate_LogicApps (Vergleich_PowerAutomate_LogicApps.pdf): et sich ideal für Facha...
+
+2026-01-18 19:52:36,538 - INFO - [RAG Agent] Relevanz-Score: 0.697 (8 Ergebnisse über 0.5)
+2026-01-18 19:52:36,539 - INFO - [RAG Agent] LLM REQUEST:
+[
+  {
+    "role": "system",
+    "content": "\nDu bist ein spezialisierter Wissensbasis-Assistent für Produktionsumgebungen.\nDu hast Zugriff auf interne Dokumente, Richtlinien und technische Spezifikationen.\nWICHTIG: Beantworte Fragen NUR basierend auf dem bereitgestellten Kontext aus der Wissensbasis.\nWenn der Kontext die Frage nicht beantwortet, sage klar: 'Diese Information ist nicht in den vorliegenden Dokumenten enthalten.'\nGib IMMER die Quellen deiner Informationen an.\n"
+  },
+  {
+    "role": "user",
+    "content": "hi funtkionierst du noch? "
+  },
+  {
+    "role": "assistant",
+    "content": "Hallo Ahmad! Ja, ich funktioniere noch und bin hier, um dir zu helfen. Wie kann ich dir heute behilflich sein?"
+  },
+  {
+    "role": "user",
+    "content": "KONTEXT AUS WISSENSBASIS:\n- Vergleich_PowerAutomate_LogicApps (Vergleich_PowerAutomate_LogicApps.pdf): Vergleich: Power Automate vs. Azure Logic Apps Einordnung & Zielsetzung Power Automate ist primär für High-Level-Tasks und einfache Automatisierungsflüsse konzipiert. Es richtet sich vorrangig an Business-User, bietet aber auch Funktionalitäten für Entwickler. Azure Logic Apps hingegen ist ein Dienst für professionelle Entwicklerteams, der komplexere und skalierbare Workflows ermöglicht und tief in Azure integriert ist. Technischer Hintergrund: Power Automate basiert technisch auf Azure Logic Apps, jedoch ohne dass dies für die Endanwender sichtbar ist. Zielgruppen Power Automate: Business-User, Citizen Developer, einfache Automatisierung durch Endanwender Azure Logic Apps: Entwickler, IT-Administratoren, Lösungsarchitekten, DevOps-Teams Hauptunterschiede (in Stichpunkten) Lizenzierung: - Power Automate: Nutzerbasiert (pro User / pro Flow) - Logic Apps: Verbrauchsbasiert („Pay as you go“) oder fixe Tarife Editor / Oberfläche: - Power Automate: Webinterface mit Fokus auf Benutzerfreundlichkeit - Logic Apps: Azure Portal, Visual Studio, VS Code Sicherheit: - Power Automate: DLP (Data Loss Prevention) innerhalb von Microsoft 365 - Logic Apps: Azure-native Sicherheit mit IAM, RBAC, Netzwerkschutz Fehlerbehandlung: - Power Automate: Grundlegende Fehleranzeige - Logic Apps: Detailliertes Logging und Monitoring Trigger: - Beide: Manuell, Event-basiert, zeitgesteuert - Logic Apps zusätzlich: HTTP Webhooks, Azure Event Grid Custom Code Integration: - Power Automate: Eingeschränkt - Logic Apps: Integration mit Azure Functions, Inline-Code möglich Zusammenfassung - Power Automate eignet sich ideal für Fachanwender zur schnellen Umsetzung von Automatisierungen ohne tiefgehende Programmierkenntnisse. - Logic Apps ist optimal für komplexe Szenarien in Enterprise-Umgebungen mit Skalie\n- Vergleich_PowerAutomate_LogicApps (Vergleich_PowerAutomate_LogicApps.pdf): Vergleich: Power Automate vs. Azure Logic Apps Entwicklerkontrolle.\n- Vergleich_PowerAutomate_LogicApps (Vergleich_PowerAutomate_LogicApps.pdf): et sich ideal für Fachanwender zur schnellen Umsetzung von Automatisierungen ohne tiefgehende Programmierkenntnisse. - Logic Apps ist optimal für komplexe Szenarien in Enterprise-Umgebungen mit Skalierungsbedarf und\n- AI_OpenAI (AI_OpenAI.pdf): - **Verwaltung & Behörden**: KI kann Verwaltungsprozesse beschleunigen, etwa durch automatisierte Textklassifikation oder Chatbots für Bürgeranfragen. 4. Chancen und Risiken von KI KI bietet enorme Chancen für Fortschritt und Effizienzsteigerung. Gleichzeitig wirft ihr Einsatz ethische, soziale und ökonomische Fragen auf. **Chancen:** - Erhöhung der Produktivität und Automatisierung - Verbesserte Diagnostik und Lebensqualität - Neue Geschäftsmodelle und Innovation **Risiken:** - Arbeitsplatzverlagerung durch Automatisierung - Verzerrungen und Diskriminierung durch fehlerhafte Trainingsdaten - Sicherheitsbedenken bei autonomen Systemen - Fehlende Transparenz bei Entscheidungen (Black Box) Es bedarf daher klarer ethischer Leitlinien und gesetzlicher Rahmenbedingungen. 5. OpenAI – Überblick OpenAI wurde 2015 als Non-Profit-Initiative mit dem Ziel gegründet, eine künstliche Intelligenz zu entwickeln, die der gesamten Menschheit zugutekommt. Heute ist OpenAI eine sogenannte „capped-profit“-Organisation, bei der Investoren begrenzte Renditen erhalten, während die langfristige Kontrolle in gemeinnütziger Hand bleibt. Die Mission von OpenAI lautet: *Ensure that artificial general intelligence benefits all of humanity*. Das Unternehmen hat sich auf die Forschung und Entwicklung von generativen KI-Modellen spezialisiert und setzt dabei neue Standards. 6. Produkte und Entwicklungen von OpenAI **ChatGPT:** ChatGPT ist ein Sprachmodell, das menschenähnliche Texte generieren kann. Es wird weltweit in Bildung, Wirtschaft und Support eingesetzt. **DALL·E:** Dieses Modell erzeugt Bilder auf Basis von Texteingaben. Es kann kreative und fotorealistische Bilder erstellen. **Codex:**\n- AI_OpenAI (AI_OpenAI.pdf): Künstliche Intelligenz (KI) – Grundlagen und Einblick in OpenAI 1. Einleitung Künstliche Intelligenz (KI) ist keine Zukunftsvision mehr, sondern längst Teil unseres Alltags. Vom Smartphone über das Auto bis hin zu Anwendungen in der Medizin, Produktion und Verwaltung – KI-Technologien verändern, wie wir leben, arbeiten und kommunizieren. Ziel dieses Dokuments ist es, einen umfassenden Überblick über die Grundlagen der KI, ihre Anwendungsfelder, die Herausforderungen sowie insbesondere die Rolle von OpenAI zu geben. OpenAI zählt zu den führenden Institutionen im Bereich der generativen KI und ist für Systeme wie ChatGPT, DALL·E und Codex bekannt. 2. Was ist Künstliche Intelligenz (KI)? Künstliche Intelligenz bezeichnet die Fähigkeit von Computern, Aufgaben zu lösen, die traditionell menschliche Intelligenz erfordern. Dazu gehören unter anderem Sprachverarbeitung, visuelle Erkennung, Lernen aus Erfahrung und selbstständige Entscheidungsfindung. Unterschieden wird zwischen starker KI, die menschenähnliches Denken und Bewusstsein simuliert, und schwacher KI, die auf bestimmte Anwendungsbereiche spezialisiert ist. Die technischen Grundlagen moderner KI beruhen auf Machine Learning (ML) und Deep Learning, bei denen Systeme aus großen Datenmengen lernen. Ein bekanntes Beispiel ist das Trainieren eines Sprachmodells mit Milliarden von Textbeispielen, um menschenähnliche Dialoge zu ermöglichen. 3. Anwendungsbereiche von KI Die Einsatzmöglichkeiten künstlicher Intelligenz sind breit gefächert: - **Gesundheitswesen**: KI-gestützte Diagnosesysteme analysieren Röntgenbilder und unterstützen Ärzte bei der Früherkennung von Krankheiten. - **Industrie**: In der Fertigung optimiert KI Produktionsprozesse, erkennt Anomalien und ermöglicht vorausschauende Wartung. - **Mobilität**: Autonom\n- AI_OpenAI (AI_OpenAI.pdf): Codex wurde speziell für die Programmierung entwickelt und kann Code generieren, erklären und vervollständigen. Es ist die Basis von GitHub Copilot. **Weitere Entwicklungen:** OpenAI forscht auch an Systemen zur Audioverarbeitung (z. B. Whisper), robotischen Steuerung sowie Sicherheitsmechanismen für KI. 7. Ethische Fragen und Verantwortung Der Einsatz von KI wirft zentrale ethische Fragen auf: - Wer trägt Verantwortung bei Fehlentscheidungen? - Wie kann Transparenz und Fairness gewährleistet werden? - Wie werden persönliche Daten geschützt? OpenAI verfolgt einen verantwortungsvollen Ansatz mit einem eigenen „AI Safety“-Team, öffentlichen Forschungsberichten und Partnerschaften mit Regierungen und NGOs. 8. Zukunft von KI Die zukünftige Entwicklung von KI wird viele Bereiche transformieren: - Intelligente Assistenzsysteme werden noch individueller. - KI-gestützte Forschung beschleunigt medizinische Durchbrüche. - Kreative Branchen werden durch generative KI neu definiert. Gleichzeitig bleibt der Bedarf an Regulierung und internationaler Zusammenarbeit entscheidend. Die Balance zwischen Innovation und Verantwortung ist zentral. 9. Fazit Künstliche Intelligenz ist eine Schlüsseltechnologie unserer Zeit. Sie bietet enorme Potenziale, erfordert jedoch einen bewussten und kritischen Umgang. Unternehmen wie OpenAI zeigen, wie technischer Fortschritt mit ethischem Anspruch vereint werden kann. Die nächsten Jahre werden zeigen, wie wir als Gesellschaft mit dieser Technologie umgehen – ob wir sie nur nutzen oder auch gestalten. 10. Quellen und Literatur - OpenAI (2024): https://openai.com/ - Russell & Norvig (2021): Künstliche Intelligenz – Ein moderner Ansatz - Bitkom e.V. (2023): KI-Report Deutschland - BMBF (2022): KI in der Anwendung – Chancen und Herausforderungen - Diverse \n- AI_OpenAI (AI_OpenAI.pdf): tzen Ärzte bei der Früherkennung von Krankheiten. - **Industrie**: In der Fertigung optimiert KI Produktionsprozesse, erkennt Anomalien und ermöglicht vorausschauende Wartung. - **Mobilität**: Autonome Fahrzeuge nutzen KI zur Navigation, Objekterkennung und Entscheidungsfindung im Straßenverkehr. - **Handel**: Personalisierte Empfehlungen auf Plattformen wie Amazon oder Netflix beruhen auf KI-Algorithmen. - **Bildung**: Adaptive Lernsysteme passen sich dem Wissensstand der Lernenden an und unterstützen individualisiertes Lernen.\n- AI_OpenAI (AI_OpenAI.pdf): i.com/ - Russell & Norvig (2021): Künstliche Intelligenz – Ein moderner Ansatz - Bitkom e.V. (2023): KI-Report Deutschland - BMBF (2022): KI in der Anwendung – Chancen und Herausforderungen - Diverse Presseberichte und Fachartikel (2023–2025)\n\n---\n\nFRAGE: Power Automate Dokumente\n\nBeantworte die Frage basierend auf dem Kontext. Zitiere die relevanten Quellen."
+  }
+]
+2026-01-18 19:52:38,037 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
+2026-01-18 19:52:38,037 - INFO - [RAG Agent] LLM RESPONSE:
+Die Informationen zu Power Automate sind im Dokument "Vergleich_PowerAutomate_LogicApps" enthalten. Power Automate ist primär für High-Level-Tasks und einfache Automatisierungsflüsse konzipiert. Es richtet sich vorrangig an Business-User, bietet jedoch auch Funktionalitäten für Entwickler. Die Lizenzierung erfolgt nutzerbasiert (pro User / pro Flow), und es bietet ein Webinterface mit Fokus auf Benutzerfreundlichkeit. Zudem beinhaltet es grundlegende Fehleranzeigen und hat eingeschränkte Möglichkeiten zur Integration von benutzerdefiniertem Code.
+
+Für weitere Details kannst du das Dokument "Vergleich_PowerAutomate_LogicApps" einsehen.
+2026-01-18 19:52:38,037 - INFO - [RAG Agent] Antwort generiert mit 5 Quellen (Temp=0.3, History=2 msgs)
+2026-01-18 19:52:38,038 - INFO - [Orchestrator] Anfrage abgeschlossen durch rag Agent
+2026-01-18 19:52:38,038 - INFO - Routing-Begründung: Der Benutzer fragt nach Informationen über Power Automate in Bezug auf seine Dokumente, was auf interne Dokumente hinweist.

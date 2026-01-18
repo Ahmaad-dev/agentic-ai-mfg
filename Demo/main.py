@@ -23,6 +23,16 @@ from agent_config import (
 
 load_dotenv()
 
+# ========== LOGGING KONFIGURATION ==========
+# Steuert, was in die Log-Dateien geschrieben wird
+
+LOGGING_CONFIG = {
+    "log_llm_requests": False,   # LLM-Calls (kompletter Prompt) loggen
+    "log_llm_responses": False,  # LLM-Antworten (kompletter Output) loggen
+    "log_routing_decision": True,  # Orchestrator Routing-Entscheidung loggen
+    "log_retrieval_results": True  # RAG Retrieval-Ergebnisse loggen
+}
+
 # Logging einrichten
 logs_dir = Path(__file__).parent / "logs"
 logs_dir.mkdir(exist_ok=True)

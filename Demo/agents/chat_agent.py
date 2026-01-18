@@ -1,6 +1,7 @@
 """
 ChatAgent - Allgemeine Konversation ohne Wissensbasis
 """
+import json
 import logging
 from typing import Dict, Optional
 from .base_agent import BaseAgent
@@ -16,6 +17,8 @@ class ChatAgent(BaseAgent):
         aoai_client,
         model_name: str,
         system_prompt: Optional[str] = None,
+        description: Optional[str] = None,
+        routing_description: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = 500,
         max_history_pairs: int = 5
@@ -25,6 +28,8 @@ class ChatAgent(BaseAgent):
             aoai_client: Azure OpenAI Client
             model_name: Deployment-Name des Modells
             system_prompt: Custom System-Prompt (None = default)
+            description: Kurze Beschreibung (für Logging)
+            routing_description: Routing-optimierte Beschreibung (für Orchestrator)
             temperature: LLM Temperature (default: 0.7 für Kreativität)
             max_tokens: Max Output-Tokens (default: 500)
             max_history_pairs: Anzahl Message-Paare (default: 5 = 10 Messages)
@@ -32,6 +37,8 @@ class ChatAgent(BaseAgent):
         super().__init__(
             name="Chat",
             system_prompt=system_prompt,
+            description=description,
+            routing_description=routing_description,
             temperature=temperature,
             max_tokens=max_tokens,
             max_history_pairs=max_history_pairs
