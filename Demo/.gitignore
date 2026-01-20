@@ -12,4 +12,4 @@ __pycache__/
 .logs/
 
 # Smart Planning
-.smart_planning/
+smart-planning/
