@@ -1,4 +1,0 @@
-2026-01-09 14:50:24,163 - INFO - user_question: hi wer bist du 
-2026-01-09 14:50:24,164 - INFO - Chat-Modus (kein RAG-Intent erkannt)
-2026-01-09 14:50:26,952 - INFO - HTTP Request: POST https://agentic-ai-mfg.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview "HTTP/1.1 200 OK"
-2026-01-09 14:50:26,972 - INFO - assistant_answer: Hallo! Ich bin dein intelligenter Assistent für Produktionsumgebungen. Ich kann dir bei Fragen, Informationen oder Unterstützung in diesem Bereich helfen. Was kann ich für dich tun?
