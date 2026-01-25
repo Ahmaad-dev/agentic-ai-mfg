@@ -12,4 +12,8 @@ __pycache__/
 logs/
 
 # Smart Planning
-smart-planning/
+smart-planning_v1/example_snapshots/
+smart-planning_v1/docs/
+smart-planning_v1/snapshots-ai/
+smart-planning_v1/system-logs/
+smart-planning_v1/get_token.ps1
