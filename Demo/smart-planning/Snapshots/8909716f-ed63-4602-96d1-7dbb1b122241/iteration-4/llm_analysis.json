@@ -1,0 +1,12 @@
+{
+  "iteration": 4,
+  "original_error": {
+    "level": "ERROR",
+    "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+  },
+  "llm_analysis": {
+    "search_value": "D830081_005",
+    "error_type": "Demand IDs must be unique; duplicates found.",
+    "should_investigate": true
+  }
+}

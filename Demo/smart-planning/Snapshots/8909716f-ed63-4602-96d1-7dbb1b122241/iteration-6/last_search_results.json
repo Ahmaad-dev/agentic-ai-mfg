@@ -1,0 +1,160 @@
+{
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "search_mode": "empty_field",
+  "search_value": "demandId",
+  "error_type": "EMPTY_FIELD",
+  "results_count": 1,
+  "original_structure": [
+    {
+      "demandId": "",
+      "articleId": "SPE_EM",
+      "quantity": 1000,
+      "packaging": "71164",
+      "successor": "01A11305414002000",
+      "vgnr-vorschlag": null,
+      "dueDate": "2025-11-20T00:00:00Z",
+      "dispatcherGroup": "20",
+      "priority": 12
+    }
+  ],
+  "results": [
+    {
+      "path": "demands[3].demandId",
+      "value": "",
+      "original_object": {
+        "demandId": "",
+        "articleId": "SPE_EM",
+        "quantity": 1000,
+        "packaging": "71164",
+        "successor": "01A11305414002000",
+        "vgnr-vorschlag": null,
+        "dueDate": "2025-11-20T00:00:00Z",
+        "dispatcherGroup": "20",
+        "priority": 12
+      },
+      "references": {
+        "successor_demands": [],
+        "predecessor_demands": [],
+        "customer_orders": []
+      },
+      "article_context": {}
+    }
+  ],
+  "context": {
+    "total_demands_count": 15,
+    "total_customer_orders": 14,
+    "validation_rules": {
+      "demandId_must_be_unique": true,
+      "successor_must_reference_valid_demand": true
+    }
+  },
+  "enriched_context": {
+    "field_examples": {
+      "demandId": [
+        "DSPE_AR_fil_001",
+        "DSPE_AR_fil_002",
+        "DSPE_EM_001",
+        "DSPE_EM_003",
+        "DSPE_GS_gr_001",
+        "DSPE_GS_kl_001",
+        "DSPE_PU_gr_001",
+        "DSPE_PU_gr_002",
+        "DSPE_PU_gr_003",
+        "DSPE_PU_gr_004"
+      ],
+      "articleId": [
+        "SPE_AR_fil",
+        "SPE_EM",
+        "SPE_GS_gr",
+        "SPE_GS_kl",
+        "SPE_PU_gr",
+        "SPE_PU_kl",
+        "SPE_ZU_gr",
+        "SPE_ZU_kl"
+      ],
+      "packaging": [
+        "70409",
+        "71164",
+        "70702",
+        "71105",
+        "71330",
+        "71611"
+      ],
+      "successor": [
+        "01A11305414001000",
+        "SPE_AR_fil  01",
+        "01A11305414002000",
+        "01A11305415001000",
+        "01A11305418001000",
+        "01A11305419001000",
+        "01A11305422001000",
+        "01A11305422002000",
+        "01A11305422003000"
+      ],
+      "dispatcherGroup": [
+        "20",
+        "10"
+      ]
+    },
+    "format_patterns": {
+      "demandId": {
+        "field_name": "demandId",
+        "total_count": 15,
+        "non_empty_count": 14,
+        "sample_values": [
+          "DSPE_AR_fil_001",
+          "DSPE_AR_fil_002",
+          "DSPE_EM_001",
+          "DSPE_EM_003",
+          "DSPE_GS_gr_001"
+        ],
+        "length_range": {
+          "min": 11,
+          "max": 15
+        },
+        "detected_patterns": [
+          "Starts with 'D'",
+          "Contains underscore separator"
+        ]
+      }
+    },
+    "related_entities": {
+      "demands_same_article": [
+        {
+          "demandId": "DSPE_EM_001",
+          "articleId": "SPE_EM",
+          "quantity": 1000,
+          "dueDate": "2025-11-20T00:00:00Z"
+        },
+        {
+          "demandId": "",
+          "articleId": "SPE_EM",
+          "quantity": 1000,
+          "dueDate": "2025-11-20T00:00:00Z"
+        },
+        {
+          "demandId": "DSPE_EM_003",
+          "articleId": "SPE_EM",
+          "quantity": 500,
+          "dueDate": "2025-11-20T00:00:00Z"
+        }
+      ],
+      "all_valid_demand_ids": [
+        "DSPE_AR_fil_001",
+        "DSPE_AR_fil_002",
+        "DSPE_EM_001",
+        "DSPE_EM_003",
+        "DSPE_GS_gr_001",
+        "DSPE_GS_kl_001",
+        "DSPE_PU_gr_001",
+        "DSPE_PU_gr_002",
+        "DSPE_PU_gr_003",
+        "DSPE_PU_gr_004",
+        "DSPE_PU_kl_001",
+        "DSPE_ZU_gr_001",
+        "DSPE_ZU_gr_002",
+        "DSPE_ZU_kl_001"
+      ]
+    }
+  }
+}

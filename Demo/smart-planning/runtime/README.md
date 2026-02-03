@@ -1,0 +1,220 @@
+# Smart Planning API - Snapshot Tools
+
+Dieses Verzeichnis enthält Skripte zum Erstellen und Verwalten von Snapshots über die Smart Planning API.
+
+## Virtual Environment
+
+cd C:\Projektarbeiten\agentic-ai-mfg\demo
+.venv\Scripts\Activate.ps1
+
+## Skripte
+
+### 1. Python: `create_snapshot.py`
+
+**Als Skript ausführen:**
+```bash
+python create_snapshot.py
+```
+example:
+C:\Projektarbeiten\agentic-ai-mfg\demo\smart-planning\runtime
+
+python create_snapshot.py
+
+
+### 2. Python: `validate_snapshot.py`
+
+**Als Skript ausführen:**
+```bash
+python validate_snapshot.py
+```
+example:
+C:\Projektarbeiten\agentic-ai-mfg\demo\smart-planning\runtime
+
+python validate_snapshot.py
+
+
+### 3. Python: `identify_snapshot.py`
+
+Sucht nach spezifischen Werten oder leeren Feldern in den Snapshot-Daten.
+
+**Wichtig:**
+- Benötigt eine aktive Snapshot-ID in `runtime-files/current_snapshot.txt`
+- Liest Daten aus `Snapshots/{snapshot_id}/snapshot-data.json`
+- Speichert Ergebnisse in `last_search_results.json` (Snapshot-Ordner + neueste Iteration)
+
+**Modus 1: Suche nach Wert (VALUE mode)**
+```bash
+python identify_snapshot.py <search_value>
+```
+
+Beispiele:
+```bash
+# Suche nach Demand-ID
+python identify_snapshot.py D830081_005
+
+# Suche nach Article-ID
+python identify_snapshot.py 830081
+```
+
+**Modus 2: Suche nach leeren Feldern (EMPTY_FIELD mode)**
+```bash
+python identify_snapshot.py --empty <field_name>
+```
+
+Beispiele:
+```bash
+# Finde leere demandId Felder
+python identify_snapshot.py --empty demandId
+
+# Finde leere articleId Felder
+python identify_snapshot.py --empty articleId
+```
+
+**Output:**
+- Konsolen-Ausgabe mit gefundenen Ergebnissen
+- `last_search_results.json` mit:
+  - `search_mode`: "value" oder "empty_field"
+  - `error_type`: DUPLICATE_ID, SINGLE_MATCH oder EMPTY_FIELD
+  - `original_structure`: Array der gefundenen Objekte
+  - `results`: Detaillierte Analyse mit Referenzen und Artikel-Kontext
+  - `context`: Gesamt-Statistiken
+
+
+### 4. Python: `identify_error_llm.py`
+
+Automatisierte Fehleranalyse mit Azure OpenAI LLM.
+
+**Wichtig:**
+- Benötigt `.env` Datei mit Azure OpenAI Credentials (siehe Umgebungsvariablen unten)
+- Benötigt aktive Snapshot-ID in `runtime-files/current_snapshot.txt`
+- Analysiert nur ERROR-Level Messages (ignoriert WARNINGs)
+- Erstellt automatisch `iteration-{nummer}` Ordner mit Analyse-Ergebnissen
+
+**Als Skript ausführen:**
+```bash
+python identify_error_llm.py
+```
+
+**Demo-Modus (für Tests ohne echte Validation-Daten):**
+```bash
+python identify_error_llm.py --demo
+```
+
+**Workflow:**
+1. Lädt Validation-Daten aus `snapshot-validation.json`
+2. LLM analysiert erste ERROR-Message
+3. LLM entscheidet automatisch zwischen:
+   - **VALUE mode**: Bei konkreten IDs (z.B. "Duplicate IDs: D830081_005")
+   - **EMPTY_FIELD mode**: Bei leeren Feldern (z.B. "Demand IDs must not be empty")
+4. Erstellt `iteration-{nummer}` Ordner mit:
+   - `llm_identify_response.json` - LLM-Antwort
+   - `llm_identify_call.json` - Kompletter Request/Response + Token-Verbrauch
+   - `last_search_results.json` - Detaillierte Suchergebnisse (falls investigate)
+5. Triggert automatisch `identify_snapshot.py` mit korrektem Modus
+
+**Output-Beispiel:**
+```
+📊 Found 2 ERROR message(s)
+🤖 LLM Analysis:
+   Search Mode: empty_field
+   Search Value: demandId
+   Error Type: Demand IDs must not be empty
+   Should Investigate: True
+
+📁 Created iteration folder: iteration-5
+🔧 Triggering identify tool in EMPTY FIELD mode for: demandId
+```
+
+
+### 5. Python: `generate_correction_llm.py`
+
+Generiert strukturierte Korrekturvorschläge mit Azure OpenAI LLM.
+
+**Wichtig:**
+- Benötigt `.env` Datei mit Azure OpenAI Credentials
+- Benötigt aktive Snapshot-ID in `runtime-files/current_snapshot.txt`
+- Verwendet `llm-validation-fix-rules.md` als **Single Point of Truth** für Behebungsregeln
+- Nutzt bestehenden Iteration-Ordner (erstellt KEINEN neuen)
+
+**Als Skript ausführen:**
+```bash
+python generate_correction_llm.py
+```
+
+**Workflow:**
+1. Lädt Snapshot-ID aus `current_snapshot.txt`
+2. Findet höchsten Iteration-Ordner mit `llm_identify_response.json`
+3. Lädt 3 Inputs:
+   - `llm-validation-fix-rules.md` - Behebungsregeln (fachliche Logik)
+   - `llm_identify_response.json` - Original-Error + Analyse
+   - `last_search_results.json` - Fundstellen + enriched_context
+4. LLM-Call mit strukturiertem Prompt
+5. Speichert in bestehenden `iteration-{nummer}` Ordner:
+   - `llm_correction_proposal.json` - Strukturierter Korrekturvorschlag
+   - `llm_correction_call.json` - Kompletter Request/Response + Token-Verbrauch
+
+**Output-Format (llm_correction_proposal.json):**
+```json
+{
+  "iteration": 6,
+  "snapshot_id": "...",
+  "original_error": {...},
+  "error_analyzed": {...},
+  "correction_proposal": {
+    "action": "update_field",
+    "target_path": "demands[3].demandId",
+    "current_value": "",
+    "new_value": "DSPE_EM_002",
+    "reasoning": "Pattern detected: DSPE_{articleId}_{sequence}...",
+    "additional_updates": []
+  }
+}
+```
+
+**Output-Beispiel:**
+```
+Snapshot ID: 8909716f-ed63-4602-96d1-7dbb1b122241
+Using existing iteration: 6
+
+Loading inputs...
+- Fix rules loaded (2906 chars)
+- Error analysis loaded (iteration 6)
+- Search results loaded (1 results)
+
+Generating correction proposal with LLM...
+
+Proposal generated:
+- Action: update_field
+- Target: demands[3].demandId
+- New Value: DSPE_EM_002
+- Additional Updates: 0
+
+Token Usage:
+- Prompt: 2678
+- Completion: 102
+- Total: 2780
+```
+
+
+## Umgebungsvariablen
+
+Die `.env` Datei muss folgende Variablen enthalten:
+
+```env
+# Smart Planning API
+CLIENT_SECRET=<your_client_secret>
+
+# Azure OpenAI (für identify_error_llm.py)
+AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com
+AZURE_OPENAI_DEPLOYMENT=<your-deployment-name>
+AZURE_OPENAI_API_VERSION=2025-01-01-preview
+AZURE_OPENAI_API_KEY=<your-api-key>
+```
+
+
+
+
+## Hinweise
+
+- SSL-Zertifikatsvalidierung ist in der Test-Umgebung deaktiviert
+- Der Crawler benötigt ca. 5-15 Sekunden zur Verarbeitung

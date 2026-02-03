@@ -1,0 +1,78 @@
+{
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "search_value": "D830081_005",
+  "error_type": "DUPLICATE_ID",
+  "results_count": 2,
+  "original_structure": [
+    {
+      "demandId": "D830081_005",
+      "articleId": "830081",
+      "quantity": 77,
+      "packaging": "70603",
+      "successor": "  F313128770020",
+      "dueDate": "2025-12-11T00:00:00Z",
+      "dispatcherGroup": "20",
+      "priority": null
+    },
+    {
+      "demandId": "D830081_005",
+      "articleId": "830081",
+      "quantity": 187,
+      "packaging": "70603",
+      "successor": "  F313122300010",
+      "dueDate": "2026-01-08T00:00:00Z",
+      "dispatcherGroup": "20",
+      "priority": null
+    }
+  ],
+  "results": [
+    {
+      "path": "demands[165].demandId",
+      "value": "D830081_005",
+      "original_object": {
+        "demandId": "D830081_005",
+        "articleId": "830081",
+        "quantity": 77,
+        "packaging": "70603",
+        "successor": "  F313128770020",
+        "dueDate": "2025-12-11T00:00:00Z",
+        "dispatcherGroup": "20",
+        "priority": null
+      },
+      "references": {
+        "successor_demands": [],
+        "predecessor_demands": [],
+        "customer_orders": []
+      },
+      "article_context": {}
+    },
+    {
+      "path": "demands[166].demandId",
+      "value": "D830081_005",
+      "original_object": {
+        "demandId": "D830081_005",
+        "articleId": "830081",
+        "quantity": 187,
+        "packaging": "70603",
+        "successor": "  F313122300010",
+        "dueDate": "2026-01-08T00:00:00Z",
+        "dispatcherGroup": "20",
+        "priority": null
+      },
+      "references": {
+        "successor_demands": [],
+        "predecessor_demands": [],
+        "customer_orders": []
+      },
+      "article_context": {}
+    }
+  ],
+  "context": {
+    "total_demands_count": 218,
+    "total_customer_orders": 66,
+    "validation_rules": {
+      "demandId_must_be_unique": true,
+      "successor_must_reference_valid_demand": true
+    }
+  }
+}

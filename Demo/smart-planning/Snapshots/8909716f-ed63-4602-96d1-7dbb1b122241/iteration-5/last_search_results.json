@@ -1,0 +1,51 @@
+{
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "search_mode": "empty_field",
+  "search_value": "demandId",
+  "error_type": "EMPTY_FIELD",
+  "results_count": 1,
+  "original_structure": [
+    {
+      "demandId": "",
+      "articleId": "SPE_EM",
+      "quantity": 1000,
+      "packaging": "71164",
+      "successor": "01A11305414002000",
+      "vgnr-vorschlag": null,
+      "dueDate": "2025-11-20T00:00:00Z",
+      "dispatcherGroup": "20",
+      "priority": 12
+    }
+  ],
+  "results": [
+    {
+      "path": "demands[3].demandId",
+      "value": "",
+      "original_object": {
+        "demandId": "",
+        "articleId": "SPE_EM",
+        "quantity": 1000,
+        "packaging": "71164",
+        "successor": "01A11305414002000",
+        "vgnr-vorschlag": null,
+        "dueDate": "2025-11-20T00:00:00Z",
+        "dispatcherGroup": "20",
+        "priority": 12
+      },
+      "references": {
+        "successor_demands": [],
+        "predecessor_demands": [],
+        "customer_orders": []
+      },
+      "article_context": {}
+    }
+  ],
+  "context": {
+    "total_demands_count": 15,
+    "total_customer_orders": 14,
+    "validation_rules": {
+      "demandId_must_be_unique": true,
+      "successor_must_reference_valid_demand": true
+    }
+  }
+}

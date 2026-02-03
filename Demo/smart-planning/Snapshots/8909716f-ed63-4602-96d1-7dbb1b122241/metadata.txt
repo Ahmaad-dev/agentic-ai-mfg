@@ -1,0 +1,69 @@
+# SNAPSHOT INFORMATIONS
+
+```json
+{
+  "name": "SP-Agent: Snapshot vom 2026-02-01 15:47:51",
+  "comment": null,
+  "id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "parentId": null,
+  "nrOfChildren": 0,
+  "isSuccessfullyValidated": true,
+  "dataModifiedAt": "2026-02-01T14:47:53.666313Z",
+  "dataModifiedBy": "service-account-apiclient-test",
+  "planningRun": null
+}
+```
+
+
+## INITIAL VALIDATION (First Run)
+
+**Validated at:** 2026-02-01 15:48:19
+**Total messages:** 3
+**Summary:** 3 WARNING
+**Status:** Valid
+
+### Detailed validation messages:
+
+```json
+[
+    {
+        "level": "WARNING",
+        "message": "[validate_worker_consistency] Workers with availability but no qualifications: 2197, 5137, 6077, 6215, 6346, 6348"
+    },
+    {
+        "level": "WARNING",
+        "message": "[validate_worker_consistency] Workers with qualifications but no availability: 6041"
+    },
+    {
+        "level": "WARNING",
+        "message": "[validate_equipment_connectivity] Isolated equipment detected: Equipment BMU01 is isolated: missing successor; Equipment BPU01 is isolated: missing successor; Equipment BPU03 is isolated: missing successor; Equipment LO01 is isolated: missing predecessor and missing successor; Equipment LO02 is isolated: missing predecessor and missing successor; Equipment LO03 is isolated: missing predecessor and missing successor"
+    }
+]
+```
+
+
+## VALIDATION Iteration 1
+
+**Validated at:** 2026-02-01 17:38:19
+**Total messages:** 3
+**Summary:** 3 WARNING
+**Status:** Valid
+
+### Detailed validation messages:
+
+```json
+[
+    {
+        "level": "WARNING",
+        "message": "[validate_worker_consistency] Workers with availability but no qualifications: 2197, 5137, 6077, 6215, 6346, 6348"
+    },
+    {
+        "level": "WARNING",
+        "message": "[validate_worker_consistency] Workers with qualifications but no availability: 6041"
+    },
+    {
+        "level": "WARNING",
+        "message": "[validate_equipment_connectivity] Isolated equipment detected: Equipment BMU01 is isolated: missing successor; Equipment BPU01 is isolated: missing successor; Equipment BPU03 is isolated: missing successor; Equipment LO01 is isolated: missing predecessor and missing successor; Equipment LO02 is isolated: missing predecessor and missing successor; Equipment LO03 is isolated: missing predecessor and missing successor"
+    }
+]
+```
