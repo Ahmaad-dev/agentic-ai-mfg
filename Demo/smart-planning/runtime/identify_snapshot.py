@@ -203,6 +203,66 @@ def find_references(data: Dict, target_value: str, result_path: str) -> Dict:
     return references
 
 
+def get_array_context(data: Dict, result_path: str, items_before: int = 3, items_after: int = 3) -> Dict:
+    """
+    Get surrounding array items for context analysis.
+    Returns neighboring items from the same array to help LLM detect patterns.
+    """
+    array_context = {}
+    
+    # Parse path to extract array name and index
+    # Example: "demands[1].articleId" -> array_name="demands", index=1
+    if "[" not in result_path or "]" not in result_path:
+        return {}  # Not an array element
+    
+    try:
+        parts = result_path.split("[")
+        array_name = parts[0].split(".")[-1]  # Get last part before [
+        index_str = parts[1].split("]")[0]
+        target_index = int(index_str)
+    except (ValueError, IndexError):
+        return {}
+    
+    # Find the array in data
+    array_data = None
+    if array_name in data and isinstance(data[array_name], list):
+        array_data = data[array_name]
+    else:
+        # Try nested arrays (e.g., customerOrderPositions)
+        for key, value in data.items():
+            if isinstance(value, list) and key == array_name:
+                array_data = value
+                break
+    
+    if not array_data:
+        return {}
+    
+    # Get items before and after
+    start_idx = max(0, target_index - items_before)
+    end_idx = min(len(array_data), target_index + items_after + 1)
+    
+    items_before_list = []
+    items_after_list = []
+    
+    for i in range(start_idx, target_index):
+        if i < len(array_data):
+            items_before_list.append(array_data[i])
+    
+    for i in range(target_index + 1, end_idx):
+        if i < len(array_data):
+            items_after_list.append(array_data[i])
+    
+    array_context = {
+        "array_name": array_name,
+        "total_items": len(array_data),
+        "found_at_index": target_index,
+        "items_before": items_before_list,
+        "items_after": items_after_list
+    }
+    
+    return array_context
+
+
 def get_article_context(data: Dict, article_id: Any) -> Dict:
     """Get context information about an article"""
     if "articles" not in data or not isinstance(data["articles"], list):
@@ -466,12 +526,16 @@ def main():
             if isinstance(parent, dict) and "articleId" in parent:
                 article_context = get_article_context(data, parent.get("articleId"))
             
+            # Get array context (3 items before/after for pattern detection)
+            array_context = get_array_context(data, path, items_before=3, items_after=3)
+            
             json_results.append({
                 "path": path,
                 "value": r["value"],
                 "original_object": parent if isinstance(parent, dict) else {},
                 "references": references,
-                "article_context": article_context
+                "article_context": article_context,
+                "array_context": array_context
             })
         
         # Build context section

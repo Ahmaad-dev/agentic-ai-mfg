@@ -1,11 +1,11 @@
 [
     {
         "level": "ERROR",
-        "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+        "message": "[validate_demand_article_ids] Missing articles for the following demand article IDs: SPE_PUasdsda_gr"
     },
     {
         "level": "ERROR",
-        "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+        "message": "[validate_demand_article_ids] Missing articles for the following demand article IDs: SPE_PUasdsda_gr"
     },
     {
         "level": "WARNING",
@@ -14,6 +14,10 @@
     {
         "level": "WARNING",
         "message": "[validate_worker_consistency] Workers with qualifications but no availability: 6041"
+    },
+    {
+        "level": "WARNING",
+        "message": "[validate_equipment_worker_qualification_compatibility] Qualifications with fewer than 3 workers: Blackbelt: 1, Brandschutz: 1, Brandwart: 1, Labor: 2"
     },
     {
         "level": "WARNING",
