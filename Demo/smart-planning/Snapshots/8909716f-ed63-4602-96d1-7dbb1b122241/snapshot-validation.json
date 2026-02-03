@@ -1,11 +1,11 @@
 [
     {
         "level": "ERROR",
-        "message": "[validate_unique_ids] Demand IDs must not be empty. Empty IDs found: ."
+        "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
     },
     {
         "level": "ERROR",
-        "message": "[validate_unique_ids] Demand IDs must not be empty. Empty IDs found: ."
+        "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
     },
     {
         "level": "WARNING",

@@ -67,3 +67,373 @@
     }
 ]
 ```
+
+### LLM Correction Applied (Iteration 8)
+**Action:** update_field
+**Target Path:** `demands[165].demandId`
+**Old Value:** `D830081_005`
+**New Value:** `D830081_005_2`
+**Reasoning:** The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.
+
+**Additional Updates:**
+- Path: `demands[166].demandId` → `D830081_005_3`
+
+
+### LLM Correction Applied (Iteration 8)
+
+**Original Error:**
+- Level: ERROR
+- Message: [validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005.
+
+**Error Analysis:**
+- Error Type: DUPLICATE_ID
+- Search Mode: value
+- Search Value: `D830081_005`
+- Results Found: 2
+
+**Correction Applied:**
+- Action: update_field
+- Target Path: `demands[165].demandId`
+- Old Value: `D830081_005`
+- New Value: `D830081_005_2`
+- Reasoning: The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.
+
+**Additional Updates:**
+- Path: `demands[166].demandId` → `D830081_005_3`
+
+
+### LLM Correction Applied (Iteration 8)
+
+**Original Error:**
+- Level: ERROR
+- Message: [validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005.
+
+**Error Analysis:**
+- Error Type: DUPLICATE_ID
+- Search Mode: value
+- Search Value: `D830081_005`
+- Results Found: 2
+
+**Correction Applied:**
+- Action: update_field
+- Target Path: `demands[165].demandId`
+- Old Value: `D830081_005`
+- New Value: `D830081_005_2`
+- Reasoning: The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.
+
+**Additional Updates:**
+- Path: `demands[166].demandId` → `D830081_005_3`
+
+**Original llm_correction_proposal:**
+
+```json
+{
+  "iteration": 8,
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "original_error": {
+    "level": "ERROR",
+    "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+  },
+  "error_analyzed": {
+    "search_mode": "value",
+    "search_value": "D830081_005",
+    "error_type": "DUPLICATE_ID",
+    "results_count": 2
+  },
+  "correction_proposal": {
+    "action": "update_field",
+    "target_path": "demands[165].demandId",
+    "current_value": "D830081_005",
+    "new_value": "D830081_005_2",
+    "reasoning": "The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.",
+    "additional_updates": [
+      {
+        "target_path": "demands[166].demandId",
+        "current_value": "D830081_005",
+        "new_value": "D830081_005_3"
+      }
+    ]
+  }
+}
+```
+
+
+### LLM Correction Applied (Iteration 8)
+
+**Original Error:**
+- Level: ERROR
+- Message: [validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005.
+
+**Error Analysis:**
+- Error Type: DUPLICATE_ID
+- Search Mode: value
+- Search Value: `D830081_005`
+- Results Found: 2
+
+**Correction Applied:**
+- Action: update_field
+- Target Path: `demands[165].demandId`
+- Old Value: `D830081_005`
+- New Value: `D830081_005_2`
+- Reasoning: The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.
+
+**Additional Updates:**
+- Path: `demands[166].demandId` → `D830081_005_3`
+
+**Original llm_correction_proposal:**
+
+```json
+{
+  "iteration": 8,
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "original_error": {
+    "level": "ERROR",
+    "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+  },
+  "error_analyzed": {
+    "search_mode": "value",
+    "search_value": "D830081_005",
+    "error_type": "DUPLICATE_ID",
+    "results_count": 2
+  },
+  "correction_proposal": {
+    "action": "update_field",
+    "target_path": "demands[165].demandId",
+    "current_value": "D830081_005",
+    "new_value": "D830081_005_2",
+    "reasoning": "The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.",
+    "additional_updates": [
+      {
+        "target_path": "demands[166].demandId",
+        "current_value": "D830081_005",
+        "new_value": "D830081_005_3"
+      }
+    ]
+  }
+}
+```
+
+
+### LLM Correction Applied (Iteration 8)
+
+**Original Error:**
+- Level: ERROR
+- Message: [validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005.
+
+**Error Analysis:**
+- Error Type: DUPLICATE_ID
+- Search Mode: value
+- Search Value: `D830081_005`
+- Results Found: 2
+
+**Correction Applied:**
+- Action: update_field
+- Target Path: `demands[165].demandId`
+- Old Value: `D830081_005`
+- New Value: `D830081_005_2`
+- Reasoning: The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.
+
+**Additional Updates:**
+- Path: `demands[166].demandId` → `D830081_005_3`
+
+**Original llm_correction_proposal:**
+
+```json
+{
+  "iteration": 8,
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "original_error": {
+    "level": "ERROR",
+    "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+  },
+  "error_analyzed": {
+    "search_mode": "value",
+    "search_value": "D830081_005",
+    "error_type": "DUPLICATE_ID",
+    "results_count": 2
+  },
+  "correction_proposal": {
+    "action": "update_field",
+    "target_path": "demands[165].demandId",
+    "current_value": "D830081_005",
+    "new_value": "D830081_005_2",
+    "reasoning": "The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.",
+    "additional_updates": [
+      {
+        "target_path": "demands[166].demandId",
+        "current_value": "D830081_005",
+        "new_value": "D830081_005_3"
+      }
+    ]
+  }
+}
+```
+
+
+### LLM Correction Applied (Iteration 8)
+
+**Original Error:**
+- Level: ERROR
+- Message: [validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005.
+
+**Error Analysis:**
+- Error Type: DUPLICATE_ID
+- Search Mode: value
+- Search Value: `D830081_005`
+- Results Found: 2
+
+**Correction Applied:**
+- Action: update_field
+- Target Path: `demands[165].demandId`
+- Old Value: `D830081_005`
+- New Value: `D830081_005_2`
+- Reasoning: The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.
+
+**Additional Updates:**
+- Path: `demands[166].demandId` → `D830081_005_3`
+
+**Original llm_correction_proposal:**
+
+```json
+{
+  "iteration": 8,
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "original_error": {
+    "level": "ERROR",
+    "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+  },
+  "error_analyzed": {
+    "search_mode": "value",
+    "search_value": "D830081_005",
+    "error_type": "DUPLICATE_ID",
+    "results_count": 2
+  },
+  "correction_proposal": {
+    "action": "update_field",
+    "target_path": "demands[165].demandId",
+    "current_value": "D830081_005",
+    "new_value": "D830081_005_2",
+    "reasoning": "The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.",
+    "additional_updates": [
+      {
+        "target_path": "demands[166].demandId",
+        "current_value": "D830081_005",
+        "new_value": "D830081_005_3"
+      }
+    ]
+  }
+}
+```
+
+
+### LLM Correction Applied (Iteration 8)
+
+**Original Error:**
+- Level: ERROR
+- Message: [validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005.
+
+**Error Analysis:**
+- Error Type: DUPLICATE_ID
+- Search Mode: value
+- Search Value: `D830081_005`
+- Results Found: 2
+
+**Correction Applied:**
+- Action: update_field
+- Target Path: `demands[165].demandId`
+- Old Value: `D830081_005`
+- New Value: `D830081_005_2`
+- Reasoning: The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.
+
+**Additional Updates:**
+- Path: `demands[166].demandId` → `D830081_005_3`
+
+**Original llm_correction_proposal:**
+
+```json
+{
+  "iteration": 8,
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "original_error": {
+    "level": "ERROR",
+    "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+  },
+  "error_analyzed": {
+    "search_mode": "value",
+    "search_value": "D830081_005",
+    "error_type": "DUPLICATE_ID",
+    "results_count": 2
+  },
+  "correction_proposal": {
+    "action": "update_field",
+    "target_path": "demands[165].demandId",
+    "current_value": "D830081_005",
+    "new_value": "D830081_005_2",
+    "reasoning": "The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.",
+    "additional_updates": [
+      {
+        "target_path": "demands[166].demandId",
+        "current_value": "D830081_005",
+        "new_value": "D830081_005_3"
+      }
+    ]
+  }
+}
+```
+
+
+### LLM Correction Applied (Iteration 8)
+
+**Original Error:**
+- Level: ERROR
+- Message: [validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005.
+
+**Error Analysis:**
+- Error Type: DUPLICATE_ID
+- Search Mode: value
+- Search Value: `D830081_005`
+- Results Found: 2
+
+**Correction Applied:**
+- Action: update_field
+- Target Path: `demands[165].demandId`
+- Old Value: `D830081_005`
+- New Value: `D830081_005_2`
+- Reasoning: The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.
+
+**Additional Updates:**
+- Path: `demands[166].demandId` → `D830081_005_3`
+
+**Original llm_correction_proposal:**
+
+```json
+{
+  "iteration": 8,
+  "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
+  "original_error": {
+    "level": "ERROR",
+    "message": "[validate_unique_ids] Demand IDs must be unique. Duplicates found: D830081_005."
+  },
+  "error_analyzed": {
+    "search_mode": "value",
+    "search_value": "D830081_005",
+    "error_type": "DUPLICATE_ID",
+    "results_count": 2
+  },
+  "correction_proposal": {
+    "action": "update_field",
+    "target_path": "demands[165].demandId",
+    "current_value": "D830081_005",
+    "new_value": "D830081_005_2",
+    "reasoning": "The demand ID 'D830081_005' is duplicated. To ensure uniqueness, it is updated to 'D830081_005_2'.",
+    "additional_updates": [
+      {
+        "target_path": "demands[166].demandId",
+        "current_value": "D830081_005",
+        "new_value": "D830081_005_3"
+      }
+    ]
+  }
+}
+```
+

@@ -196,6 +196,248 @@ Token Usage:
 ```
 
 
+### 6. Python: `validate_correction_schema_llm.py`
+
+Validiert LLM-generierte Korrekturvorschläge gegen Pydantic-Schema mit automatischer LLM-Korrektur.
+
+**Wichtig:**
+- Eigenständiges Tool (wird NICHT automatisch von apply_correction.py aufgerufen)
+- Benötigt aktive Snapshot-ID in `runtime-files/current_snapshot.txt`
+- Benötigt `llm_correction_proposal.json` im höchsten Iteration-Ordner
+- Verwendet Pydantic-Models aus `correction_models.py` für Schema-Validierung
+- Max. 5 Retry-Versuche mit LLM bei Schema-Fehlern
+
+**Als Skript ausführen:**
+```bash
+python validate_correction_schema_llm.py
+```
+
+**Workflow:**
+1. Findet höchsten Iteration-Ordner mit `llm_correction_proposal.json`
+2. Lädt Korrekturvorschlag aus `llm_correction_proposal.json`
+3. Validiert gegen Pydantic-Schema (LLMCorrectionResponse)
+4. Bei Validierungsfehler:
+   - LLM erhält ValidationError + Original-Inputs + JSON-Schema
+   - Max. 5 Retry-Versuche
+   - Bei Erfolg: Überschreibt `llm_correction_proposal.json` mit korrigierter Version
+5. Speichert alle Versuche im Iteration-Ordner:
+   - `retry_0.json` - Originaler Vorschlag (vor Validation)
+   - `retry_1.json` bis `retry_5.json` - LLM-Korrekturversuche
+
+**Exit Codes:**
+- `0` = Schema valid (entweder direkt oder nach erfolgreicher LLM-Korrektur)
+- `1` = Schema invalid (auch nach 5 Retries)
+
+**Output-Beispiel (Success):**
+```
+=== Schema Validation ===
+
+Snapshot ID: 736a4e03-652f-4f74-b8ca-4da803d30173
+Using iteration: 1
+
+Loading correction proposal...
+Validating schema...
+✓ OK Schema validation passed
+
+=== Done ===
+```
+
+**Output-Beispiel (Mit Retry):**
+```
+=== Schema Validation ===
+
+Snapshot ID: 736a4e03-652f-4f74-b8ca-4da803d30173
+Using iteration: 1
+
+Loading correction proposal...
+Validating schema...
+⚠ Schema validation failed
+
+Starting LLM retry process (max 5 attempts)...
+
+Retry 1/5: Calling LLM to fix schema...
+✓ LLM generated corrected proposal
+Validating corrected proposal...
+✓ OK Schema validation passed
+
+File updated: llm_correction_proposal.json
+
+=== Done ===
+```
+
+
+### 7. Python: `apply_correction.py`
+
+Wendet LLM-generierte Korrekturvorschläge auf snapshot-data.json an.
+
+**Wichtig:**
+- Eigenständiges Tool (Schema-Validierung muss vorher separat durchgeführt werden)
+- Benötigt aktive Snapshot-ID in `runtime-files/current_snapshot.txt`
+- Benötigt **validiertes** `llm_correction_proposal.json` im höchsten Iteration-Ordner
+- Erstellt **Backup** von snapshot-data.json und snapshot-validation.json im Iteration-Ordner
+- Ändert snapshot-data.json im **Haupt-Snapshot-Ordner** (nicht in Iteration)
+- Dokumentiert komplette LLM-Analyse in metadata.txt
+
+**Als Skript ausführen:**
+```bash
+python apply_correction.py
+```
+
+**Workflow:**
+1. Findet höchsten Iteration-Ordner mit `llm_correction_proposal.json`
+2. **Schema-Check**: Validiert Vorschlag gegen Pydantic-Schema
+   - Bei INVALID: Klare Fehlermeldung + Exit 1
+   - Empfehlung: `python validate_correction_schema_llm.py` ausführen
+3. **Backup**: Kopiert snapshot-data.json + snapshot-validation.json → iteration-{nummer}/
+4. Lädt Korrekturvorschlag aus `llm_correction_proposal.json`
+5. Parst target_path (z.B. `demands[3].demandId`)
+6. Wendet Korrektur an:
+   - Hauptkorrektur (target_path + new_value)
+   - Additional_updates (falls vorhanden, z.B. für Referenz-Updates)
+7. Speichert korrigierte snapshot-data.json im Haupt-Snapshot-Ordner
+8. **Metadata-Dokumentation**: Erweitert metadata.txt mit:
+   - Original Error (level + message)
+   - Error Analysis (error_type, search_mode, search_value, results_count)
+   - Correction Applied (action, target_path, old/new value, reasoning)
+   - Additional Updates (Liste aller zusätzlichen Änderungen)
+   - Original LLM Proposal (kompletter JSON in Code-Block)
+
+**Path-Format:**
+- Pattern: `arrayName[index].fieldName`
+- Beispiel: `demands[3].demandId` → Ändert demands[3].demandId
+
+**Exit Codes:**
+- `0` = Success - Korrektur erfolgreich angewendet
+- `1` = Failure - Schema invalid oder Fehler beim Anwenden
+
+**Output-Beispiel:**
+```
+=== Correction Applier ===
+
+Snapshot ID: 8909716f-ed63-4602-96d1-7dbb1b122241
+Using iteration: 6
+
+Backing up files to iteration-6...
+  ✓ Backed up: snapshot-data.json
+  ✓ Backed up: snapshot-validation.json
+
+Loading correction proposal...
+  Action: update_field
+  Target: demands[3].demandId
+  Reasoning: Pattern detected: DSPE_{articleId}_{sequence}...
+
+Loading snapshot data...
+
+Applying main correction:
+  Path: demands[3].demandId
+  New Value: DSPE_EM_002
+  Old Value: 
+  ✓ Applied
+
+Saving corrected snapshot data...
+✓ Saved to: ..\Snapshots\...\snapshot-data.json
+
+Appending to metadata.txt...
+✓ Metadata updated
+
+=== Done ===
+
+Next step: Run update_snapshot.py to upload corrections to server
+```
+
+**Error-Beispiel (Invalid Schema):**
+```
+=== Correction Applier ===
+
+ERROR: INVALID JSON SCHEMA DETECTED
+
+The correction proposal in llm_correction_proposal.json does not match the required schema.
+
+Validation Error:
+1 validation error for LLMCorrectionResponse
+iteration
+  Field required [type=missing, input_value={...}, input_type=dict]
+
+PLEASE RUN THIS TOOL FIRST:
+  python validate_correction_schema_llm.py
+
+This will validate the schema and automatically fix it with LLM if needed.
+```
+
+
+### 8. Python: `update_snapshot.py`
+
+Lädt korrigierte Snapshot-Daten auf den Smart Planning API Server hoch.
+
+**Wichtig:**
+- Benötigt aktive Snapshot-ID in `runtime-files/current_snapshot.txt`
+- Benötigt korrigierte `snapshot-data.json` im Snapshot-Ordner
+- Benötigt `metadata.txt` im Snapshot-Ordner (für Name/Comment)
+- Verwendet PUT /snapshots/{snapshotId} API-Endpoint
+
+**Als Skript ausführen:**
+```bash
+python update_snapshot.py
+```
+
+**Workflow:**
+1. Lädt Snapshot-ID aus `current_snapshot.txt`
+2. Lädt korrigierte snapshot-data.json aus `Snapshots/{uuid}/snapshot-data.json`
+3. Lädt Snapshot-Metadata (name, comment) aus `metadata.txt`
+4. Konvertiert snapshot-data zu JSON-String für `dataJson` Feld
+5. PUT Request zu `/snapshots/{snapshotId}` mit SnapshotUpdateRequest:
+   - `name`: Snapshot-Name
+   - `comment`: Snapshot-Kommentar (optional)
+   - `dataJson`: Komplette Snapshot-Daten als JSON-String
+6. Speichert Upload-Ergebnis in `upload-result.json`
+
+**Exit Codes:**
+- `0` = Success - Snapshot erfolgreich auf Server aktualisiert
+- `1` = Failure - Fehler beim Upload (HTTP-Error, File not found, etc.)
+
+**Output-Beispiel:**
+```
+======================================================================
+UPDATE SNAPSHOT - Upload Corrected Data to Server
+======================================================================
+
+Snapshot ID: 736a4e03-652f-4f74-b8ca-4da803d30173
+
+→ Loading corrected snapshot data from:
+  C:\...\Snapshots\736a4e03-652f-4f74-b8ca-4da803d30173\snapshot-data.json
+  ✓ Data loaded (1,618,742 characters)
+
+→ Loading snapshot metadata from:
+  C:\...\Snapshots\736a4e03-652f-4f74-b8ca-4da803d30173\metadata.txt
+  ✓ Name: SP-Agent: Snapshot vom 2026-02-03 21:52:34
+  ✓ Comment: (none)
+✓ Authentication successful
+
+→ Uploading snapshot data to server...
+  Snapshot ID: 736a4e03-652f-4f74-b8ca-4da803d30173
+  Name: SP-Agent: Snapshot vom 2026-02-03 21:52:34
+  Data size: 1,618,742 characters
+
+======================================================================
+✓ SUCCESS - Snapshot updated on server!
+======================================================================
+
+Server response:
+{
+  "name": "SP-Agent: Snapshot vom 2026-02-03 21:52:34",
+  "comment": null,
+  "id": "736a4e03-652f-4f74-b8ca-4da803d30173",
+  "dataModifiedAt": "2026-02-03T21:19:20.097247338Z",
+  "dataModifiedBy": "service-account-apiclient-test",
+  "isSuccessfullyValidated": false
+}
+
+→ Upload result saved to: C:\...\upload-result.json
+
+→ Next step: Run validate_snapshot.py to verify corrections
+```
+
+
 ## Umgebungsvariablen
 
 Die `.env` Datei muss folgende Variablen enthalten:

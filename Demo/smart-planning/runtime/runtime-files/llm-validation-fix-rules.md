@@ -4,7 +4,7 @@
 
 **Problem:** Mehrere Einträge haben dieselbe ID.
 
-**Strategie:** Nummeriere Duplikate mit `_2`, `_3`, etc.
+**Strategie:** Nummeriere Duplikate mit `_1`, `_2`, `_3`, etc.
 
 **Beispiel:**
 ```json
@@ -22,7 +22,7 @@
 // oder
 "articles": [
     {"articleId": "SPE_AR_fil_2"},
-    {"articleId": "SPE_AR_fil"}
+    {"articleId": "SPE_AR_fil_1"}
 ]
 ```
 

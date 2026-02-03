@@ -1,36 +1,64 @@
 {
   "snapshot_id": "8909716f-ed63-4602-96d1-7dbb1b122241",
-  "search_mode": "empty_field",
-  "search_value": "demandId",
-  "error_type": "EMPTY_FIELD",
-  "results_count": 1,
+  "search_mode": "value",
+  "search_value": "D830081_005",
+  "error_type": "DUPLICATE_ID",
+  "results_count": 2,
   "original_structure": [
     {
-      "demandId": "",
-      "articleId": "SPE_EM",
-      "quantity": 1000,
-      "packaging": "71164",
-      "successor": "01A11305414002000",
-      "vgnr-vorschlag": null,
-      "dueDate": "2025-11-20T00:00:00Z",
+      "demandId": "D830081_005",
+      "articleId": "830081",
+      "quantity": 77,
+      "packaging": "70603",
+      "successor": "  F313128770020",
+      "dueDate": "2025-12-11T00:00:00Z",
       "dispatcherGroup": "20",
-      "priority": 12
+      "priority": null
+    },
+    {
+      "demandId": "D830081_005",
+      "articleId": "830081",
+      "quantity": 187,
+      "packaging": "70603",
+      "successor": "  F313122300010",
+      "dueDate": "2026-01-08T00:00:00Z",
+      "dispatcherGroup": "20",
+      "priority": null
     }
   ],
   "results": [
     {
-      "path": "demands[3].demandId",
-      "value": "",
+      "path": "demands[165].demandId",
+      "value": "D830081_005",
       "original_object": {
-        "demandId": "",
-        "articleId": "SPE_EM",
-        "quantity": 1000,
-        "packaging": "71164",
-        "successor": "01A11305414002000",
-        "vgnr-vorschlag": null,
-        "dueDate": "2025-11-20T00:00:00Z",
+        "demandId": "D830081_005",
+        "articleId": "830081",
+        "quantity": 77,
+        "packaging": "70603",
+        "successor": "  F313128770020",
+        "dueDate": "2025-12-11T00:00:00Z",
         "dispatcherGroup": "20",
-        "priority": 12
+        "priority": null
+      },
+      "references": {
+        "successor_demands": [],
+        "predecessor_demands": [],
+        "customer_orders": []
+      },
+      "article_context": {}
+    },
+    {
+      "path": "demands[166].demandId",
+      "value": "D830081_005",
+      "original_object": {
+        "demandId": "D830081_005",
+        "articleId": "830081",
+        "quantity": 187,
+        "packaging": "70603",
+        "successor": "  F313122300010",
+        "dueDate": "2026-01-08T00:00:00Z",
+        "dispatcherGroup": "20",
+        "priority": null
       },
       "references": {
         "successor_demands": [],
@@ -41,8 +69,8 @@
     }
   ],
   "context": {
-    "total_demands_count": 15,
-    "total_customer_orders": 14,
+    "total_demands_count": 218,
+    "total_customer_orders": 66,
     "validation_rules": {
       "demandId_must_be_unique": true,
       "successor_must_reference_valid_demand": true
@@ -51,109 +79,112 @@
   "enriched_context": {
     "field_examples": {
       "demandId": [
-        "DSPE_AR_fil_001",
-        "DSPE_AR_fil_002",
-        "DSPE_EM_001",
-        "DSPE_EM_003",
-        "DSPE_GS_gr_001",
-        "DSPE_GS_kl_001",
-        "DSPE_PU_gr_001",
-        "DSPE_PU_gr_002",
-        "DSPE_PU_gr_003",
-        "DSPE_PU_gr_004"
+        "D100112_001",
+        "D100112_002",
+        "D100112_003",
+        "D100112_004",
+        "D100131_001",
+        "D106097_001",
+        "D106264_001",
+        "D106270_001",
+        "D106270_002",
+        "D106278_001"
       ],
       "articleId": [
-        "SPE_AR_fil",
-        "SPE_EM",
-        "SPE_GS_gr",
-        "SPE_GS_kl",
-        "SPE_PU_gr",
-        "SPE_PU_kl",
-        "SPE_ZU_gr",
-        "SPE_ZU_kl"
+        "100112",
+        "100131",
+        "106097",
+        "106264",
+        "106270",
+        "106278",
+        "106316",
+        "106323",
+        "106336",
+        "106342"
       ],
       "packaging": [
-        "70409",
-        "71164",
-        "70702",
+        "70603",
         "71105",
-        "71330",
-        "71611"
+        "71123",
+        "70653",
+        "71162",
+        "70702",
+        "70381",
+        "70382",
+        "70387",
+        "71191"
       ],
       "successor": [
-        "01A11305414001000",
-        "SPE_AR_fil  01",
-        "01A11305414002000",
-        "01A11305415001000",
-        "01A11305418001000",
-        "01A11305419001000",
-        "01A11305422001000",
-        "01A11305422002000",
-        "01A11305422003000"
+        "  F313082670030",
+        "  F313127440010",
+        "02A11306909013000",
+        "32A11306812012000",
+        "03A11306670001000",
+        "02A11306790009000",
+        "02A11306353013000",
+        "33A11301384002000",
+        "  F420075660010",
+        "02A11306919001000"
       ],
       "dispatcherGroup": [
-        "20",
-        "10"
+        "20"
       ]
     },
-    "format_patterns": {
-      "demandId": {
-        "field_name": "demandId",
-        "total_count": 15,
-        "non_empty_count": 14,
-        "sample_values": [
-          "DSPE_AR_fil_001",
-          "DSPE_AR_fil_002",
-          "DSPE_EM_001",
-          "DSPE_EM_003",
-          "DSPE_GS_gr_001"
-        ],
-        "length_range": {
-          "min": 11,
-          "max": 15
-        },
-        "detected_patterns": [
-          "Starts with 'D'",
-          "Contains underscore separator"
-        ]
-      }
-    },
+    "format_patterns": {},
     "related_entities": {
       "demands_same_article": [
         {
-          "demandId": "DSPE_EM_001",
-          "articleId": "SPE_EM",
-          "quantity": 1000,
-          "dueDate": "2025-11-20T00:00:00Z"
+          "demandId": "D830081_001",
+          "articleId": "830081",
+          "quantity": 244,
+          "dueDate": "2025-12-15T00:00:00Z"
         },
         {
-          "demandId": "",
-          "articleId": "SPE_EM",
-          "quantity": 1000,
-          "dueDate": "2025-11-20T00:00:00Z"
+          "demandId": "D830081_002",
+          "articleId": "830081",
+          "quantity": 960,
+          "dueDate": "2026-03-04T00:00:00Z"
         },
         {
-          "demandId": "DSPE_EM_003",
-          "articleId": "SPE_EM",
-          "quantity": 500,
-          "dueDate": "2025-11-20T00:00:00Z"
+          "demandId": "D830081_003",
+          "articleId": "830081",
+          "quantity": 39.6,
+          "dueDate": "2025-12-10T00:00:00Z"
+        },
+        {
+          "demandId": "D830081_004",
+          "articleId": "830081",
+          "quantity": 460,
+          "dueDate": "2026-01-09T00:00:00Z"
+        },
+        {
+          "demandId": "D830081_005",
+          "articleId": "830081",
+          "quantity": 77,
+          "dueDate": "2025-12-11T00:00:00Z"
         }
       ],
       "all_valid_demand_ids": [
-        "DSPE_AR_fil_001",
-        "DSPE_AR_fil_002",
-        "DSPE_EM_001",
-        "DSPE_EM_003",
-        "DSPE_GS_gr_001",
-        "DSPE_GS_kl_001",
-        "DSPE_PU_gr_001",
-        "DSPE_PU_gr_002",
-        "DSPE_PU_gr_003",
-        "DSPE_PU_gr_004",
-        "DSPE_PU_kl_001",
-        "DSPE_ZU_gr_001",
-        "DSPE_ZU_gr_002",
-        "DSPE_ZU_kl_001"
+        "D100112_001",
+        "D100112_002",
+        "D100112_003",
+        "D100112_004",
+        "D100131_001",
+        "D106097_001",
+        "D106264_001",
+        "D106270_001",
+        "D106270_002",
+        "D106278_001",
+        "D106316_001",
+        "D106316_002",
+        "D106323_001",
+        "D106323_002",
+        "D106336_001",
+        "D106336_002",
+        "D106342_001",
+        "D106342_002",
+        "D106430_001",
+        "D106430_002"
       ]
     }
   }
