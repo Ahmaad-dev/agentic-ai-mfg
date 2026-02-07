@@ -8,7 +8,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Tuple
 
 
 def load_snapshot_data():
@@ -101,10 +101,126 @@ def search_in_dict(obj: Any, search_value: str, path: str = "") -> List[Dict]:
     return results
 
 
+def levenshtein_distance(s1: str, s2: str) -> int:
+    """Calculate Levenshtein distance between two strings"""
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            # Cost of insertions, deletions, or substitutions
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1]
+
+
+def calculate_similarity_score(search_value: str, candidate: str) -> float:
+    """Calculate similarity score (0-1, where 1 is identical)"""
+    search_lower = search_value.lower()
+    candidate_lower = candidate.lower()
+    
+    # Exact match
+    if search_lower == candidate_lower:
+        return 1.0
+    
+    # Substring match gets bonus
+    substring_bonus = 0.0
+    if search_lower in candidate_lower or candidate_lower in search_lower:
+        substring_bonus = 0.2
+    
+    # Levenshtein-based similarity
+    max_len = max(len(search_lower), len(candidate_lower))
+    if max_len == 0:
+        return 0.0
+    
+    distance = levenshtein_distance(search_lower, candidate_lower)
+    similarity = 1.0 - (distance / max_len)
+    
+    return min(1.0, similarity + substring_bonus)
+
+
+def fuzzy_search_in_dict(obj: Any, search_value: str, path: str = "", min_similarity: float = 0.6) -> List[Tuple[Dict, float]]:
+    """Recursively search for similar values using fuzzy matching"""
+    results = []
+    
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            current_path = f"{path}.{key}" if path else key
+            
+            # Check if the value is similar
+            if isinstance(value, str) and len(value) > 0:
+                similarity = calculate_similarity_score(search_value, value)
+                if similarity >= min_similarity:
+                    results.append(({
+                        "path": current_path,
+                        "key": key,
+                        "value": value,
+                        "parent": obj
+                    }, similarity))
+            
+            # Recurse into nested structures
+            if isinstance(value, (dict, list)):
+                results.extend(fuzzy_search_in_dict(value, search_value, current_path, min_similarity))
+                
+    elif isinstance(obj, list):
+        for idx, item in enumerate(obj):
+            current_path = f"{path}[{idx}]"
+            
+            # Check if item is similar
+            if isinstance(item, str) and len(item) > 0:
+                similarity = calculate_similarity_score(search_value, item)
+                if similarity >= min_similarity:
+                    results.append(({
+                        "path": current_path,
+                        "index": idx,
+                        "value": item,
+                        "parent": obj
+                    }, similarity))
+            
+            # Recurse into nested structures
+            if isinstance(item, (dict, list)):
+                results.extend(fuzzy_search_in_dict(item, search_value, current_path, min_similarity))
+    
+    return results
+
+
 def search_by_id(data: Dict, search_id: str) -> List[Dict]:
-    """Search specifically for an ID field"""
+    """Search specifically for an ID field with fuzzy fallback"""
     print(f"\nSearching for ID: {search_id}")
     results = search_in_dict(data, search_id)
+    
+    # If no exact matches found, try fuzzy search
+    if not results:
+        print(f"No exact matches found. Trying fuzzy search...")
+        fuzzy_results = fuzzy_search_in_dict(data, search_id, min_similarity=0.6)
+        
+        if fuzzy_results:
+            # Sort by similarity (highest first) and take top 5
+            fuzzy_results.sort(key=lambda x: x[1], reverse=True)
+            top_matches = fuzzy_results[:5]
+            
+            print(f"\nFound {len(top_matches)} similar match(es):")
+            for result, similarity in top_matches:
+                print(f"  - {result['value']} (similarity: {similarity:.2f})")
+            
+            # Convert to regular results format but add similarity score
+            results = []
+            for result_dict, similarity in top_matches:
+                result_dict['similarity_score'] = similarity
+                result_dict['fuzzy_match'] = True
+                results.append(result_dict)
+        else:
+            print("No similar matches found even with fuzzy search.")
+    
     return results
 
 
@@ -114,12 +230,22 @@ def display_results(results: List[Dict], search_value: str):
         print(f"\nNo results found for: {search_value}")
         return
     
-    print(f"\nFound {len(results)} result(s):\n")
+    # Check if these are fuzzy matches
+    is_fuzzy = results[0].get('fuzzy_match', False) if results else False
+    
+    if is_fuzzy:
+        print(f"\nFound {len(results)} fuzzy match(es) (sorted by similarity):\n")
+    else:
+        print(f"\nFound {len(results)} exact result(s):\n")
     
     for idx, result in enumerate(results, 1):
         print(f"Result #{idx}:")
         print(f"  Path: {result['path']}")
         print(f"  Value: {result['value']}")
+        
+        # Show similarity score for fuzzy matches
+        if 'similarity_score' in result:
+            print(f"  Similarity: {result['similarity_score']:.2%}")
         
         # Try to show parent context
         parent = result.get('parent')
@@ -206,7 +332,8 @@ def find_references(data: Dict, target_value: str, result_path: str) -> Dict:
 def get_array_context(data: Dict, result_path: str, items_before: int = 3, items_after: int = 3) -> Dict:
     """
     Get surrounding array items for context analysis.
-    Returns neighboring items from the same array to help LLM detect patterns.
+    Returns neighboring items from the array for pattern and statistical analysis.
+    For articles array: Also provides similar_items based on domain intelligence (departmentId, workPlanId, article prefix).
     """
     array_context = {}
     
@@ -237,7 +364,7 @@ def get_array_context(data: Dict, result_path: str, items_before: int = 3, items
     if not array_data:
         return {}
     
-    # Get items before and after
+    # Get neighboring items
     start_idx = max(0, target_index - items_before)
     end_idx = min(len(array_data), target_index + items_after + 1)
     
@@ -259,6 +386,80 @@ def get_array_context(data: Dict, result_path: str, items_before: int = 3, items
         "items_before": items_before_list,
         "items_after": items_after_list
     }
+    
+    # DOMAIN INTELLIGENCE: For articles array, add similar_items with statistics
+    if array_name == "articles" and target_index < len(array_data):
+        target_item = array_data[target_index]
+        if isinstance(target_item, dict):
+            similar_items = []
+            target_dept = target_item.get('departmentId')
+            target_workplan = target_item.get('workPlanId')
+            target_articleid = target_item.get('articleId', '')
+            
+            # Extract article prefix (e.g., "SPE_ZU" from "SPE_ZU_kl")
+            article_prefix = '_'.join(target_articleid.split('_')[:2]) if '_' in target_articleid else target_articleid
+            
+            # Collect all similar articles (excluding target itself)
+            for i, item in enumerate(array_data):
+                if i == target_index or not isinstance(item, dict):
+                    continue
+                
+                item_articleid = item.get('articleId', '')
+                item_prefix = '_'.join(item_articleid.split('_')[:2]) if '_' in item_articleid else item_articleid
+                
+                # Match criteria (in order of preference):
+                # 1. Same departmentId AND workPlanId (best match)
+                # 2. Same article prefix (e.g., SPE_ZU_*)
+                # 3. Same departmentId only
+                match_reason = None
+                if (item.get('departmentId') == target_dept and 
+                    item.get('workPlanId') == target_workplan):
+                    match_reason = 'same_department_and_workplan'
+                elif item_prefix == article_prefix and article_prefix:
+                    match_reason = 'same_article_prefix'
+                elif item.get('departmentId') == target_dept:
+                    match_reason = 'same_department'
+                
+                if match_reason:
+                    similar_items.append({
+                        'articleId': item.get('articleId'),
+                        'departmentId': item.get('departmentId'),
+                        'departmentName': item.get('departmentName'),
+                        'workPlanId': item.get('workPlanId'),
+                        'relDensityMin': item.get('relDensityMin'),
+                        'relDensityMax': item.get('relDensityMax'),
+                        'match_reason': match_reason
+                    })
+            
+            # Calculate statistics for numerical fields if we have similar items
+            stats = {}
+            if similar_items:
+                # relDensityMin statistics
+                density_min_values = [item['relDensityMin'] for item in similar_items if item.get('relDensityMin') is not None]
+                if density_min_values:
+                    density_min_values_sorted = sorted(density_min_values)
+                    stats['relDensityMin'] = {
+                        'min': min(density_min_values),
+                        'max': max(density_min_values),
+                        'median': density_min_values_sorted[len(density_min_values_sorted) // 2],
+                        'count': len(density_min_values)
+                    }
+                
+                # relDensityMax statistics
+                density_max_values = [item['relDensityMax'] for item in similar_items if item.get('relDensityMax') is not None]
+                if density_max_values:
+                    density_max_values_sorted = sorted(density_max_values)
+                    stats['relDensityMax'] = {
+                        'min': min(density_max_values),
+                        'max': max(density_max_values),
+                        'median': density_max_values_sorted[len(density_max_values_sorted) // 2],
+                        'count': len(density_max_values)
+                    }
+            
+            array_context['similar_items'] = similar_items
+            array_context['similar_items_count'] = len(similar_items)
+            if stats:
+                array_context['similar_items_stats'] = stats
     
     return array_context
 
@@ -529,14 +730,21 @@ def main():
             # Get array context (3 items before/after for pattern detection)
             array_context = get_array_context(data, path, items_before=3, items_after=3)
             
-            json_results.append({
+            result_entry = {
                 "path": path,
                 "value": r["value"],
                 "original_object": parent if isinstance(parent, dict) else {},
                 "references": references,
                 "article_context": article_context,
                 "array_context": array_context
-            })
+            }
+            
+            # Add fuzzy match metadata if present
+            if "fuzzy_match" in r:
+                result_entry["fuzzy_match"] = r["fuzzy_match"]
+                result_entry["similarity_score"] = r.get("similarity_score", 0.0)
+            
+            json_results.append(result_entry)
         
         # Build context section
         context = {

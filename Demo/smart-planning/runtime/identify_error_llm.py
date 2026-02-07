@@ -16,6 +16,15 @@ from openai import AzureOpenAI
 load_dotenv()
 
 
+def load_validation_fix_rules():
+    """Load the validation fix rules document"""
+    rules_file = Path("runtime-files/llm-validation-fix-rules.md")
+    if not rules_file.exists():
+        raise FileNotFoundError("llm-validation-fix-rules.md not found")
+    
+    return rules_file.read_text(encoding='utf-8')
+
+
 def load_current_snapshot_id():
     """Load snapshot ID from current_snapshot.txt"""
     runtime_files_dir = Path(__file__).parent / "runtime-files"
@@ -118,34 +127,45 @@ def analyze_validation_with_llm(validation_data):
         return None
     
     print(f"Found {len(error_messages)} ERROR message(s)")
-    print(f"Analyzing first ERROR with LLM...")
+    print(f"Analyzing ALL ERRORs with LLM to prioritize...")
     
-    # Get the first error
-    first_error = error_messages[0]
+    # Load validation fix rules
+    try:
+        fix_rules = load_validation_fix_rules()
+    except Exception as e:
+        print(f"Error loading validation fix rules: {e}")
+        return None
     
-    # Create prompt for LLM
-    prompt = f"""You are analyzing a validation error from a Smart Planning system. 
-Your task is to extract the relevant ID or value that needs to be investigated.
+    # Create prompt for LLM with ALL errors
+    prompt = f"""You are analyzing validation errors from a Smart Planning system. 
+Your task is to SELECT the MOST CRITICAL error to fix first and extract the relevant information.
 
-Validation Error:
-{json.dumps(first_error, indent=2)}
+ALL Validation Errors ({len(error_messages)} total):
+{json.dumps(error_messages, indent=2)}
 
-Please analyze this error and determine the search strategy:
-1. If the error mentions a specific ID value (e.g., "D830081_005"), use "value" mode to search for that value
-2. If the error mentions EMPTY or MISSING field values, use "empty_field" mode and specify the field name (e.g., "demandId")
-3. A brief explanation of what the error is about
+Please analyze ALL errors using the rules from Section 0 (Error Identification & Prioritization):
+1. Identify dependencies - does one error cause others?
+2. Determine severity - which error is most critical?
+3. Select the BEST error to fix FIRST based on prioritization guidelines
+4. Choose the correct search_mode (value vs empty_field) based on the rules
+5. Extract the appropriate search_value
 
 Respond in JSON format:
 {{
+    "selected_error_index": 0,
+    "selected_error": {{"level": "ERROR", "message": "..."}},
     "search_mode": "value" or "empty_field",
     "search_value": "the ID value to search for (value mode) OR the field name (empty_field mode)",
-    "error_type": "brief description of the error",
-    "should_investigate": true or false
+    "error_type": "brief description of the selected error",
+    "should_investigate": true or false,
+    "prioritization_reasoning": "Why this error was selected as most critical (reference Section 0.1)"
 }}
 
-Examples:
-- For "Duplicate demand IDs found: D830081_005" → {{"search_mode": "value", "search_value": "D830081_005", "should_investigate": true}}
-- For "Demand IDs must not be empty" → {{"search_mode": "empty_field", "search_value": "demandId", "should_investigate": true}}
+---
+
+# VALIDATION FIX RULES (use Section 0 for error identification):
+
+{fix_rules}
 """
     
     system_message = "You are a helpful assistant that analyzes validation errors and extracts relevant information for investigation."
@@ -161,8 +181,12 @@ Examples:
         response_format={"type": "json_object"}
     )
     
-    # Parse LLM response
+    # Parse response
     llm_response = json.loads(response.choices[0].message.content)
+    
+    # Extract the selected error
+    selected_index = llm_response.get('selected_error_index', 0)
+    selected_error = error_messages[selected_index] if selected_index < len(error_messages) else error_messages[0]
     
     # Prepare full LLM call data for logging
     llm_call_data = {
@@ -187,12 +211,15 @@ Examples:
     }
     
     print(f"\nLLM Analysis:")
+    print(f"   Total Errors Analyzed: {len(error_messages)}")
+    print(f"   Selected Error Index: {selected_index}")
+    print(f"   Prioritization: {llm_response.get('prioritization_reasoning', 'N/A')}")
     print(f"   Search Mode: {llm_response.get('search_mode')}")
     print(f"   Search Value: {llm_response.get('search_value')}")
     print(f"   Error Type: {llm_response.get('error_type')}")
     print(f"   Should Investigate: {llm_response.get('should_investigate')}")
     
-    return llm_response, first_error, llm_call_data
+    return llm_response, selected_error, llm_call_data
 
 
 def trigger_identify_tool(search_mode, search_value):

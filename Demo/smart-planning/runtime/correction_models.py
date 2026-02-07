@@ -14,10 +14,10 @@ class AdditionalUpdate(BaseModel):
 
 class CorrectionProposal(BaseModel):
     """Model for the correction proposal from LLM"""
-    action: str = Field(..., description="Action to perform (e.g., update_field, create_entry)")
-    target_path: str = Field(..., description="Path to the field to update (e.g., demands[165].demandId)")
-    current_value: Union[str, int, float, bool, None] = Field(..., description="Current value of the field (supports all JSON types)")
-    new_value: Union[str, int, float, bool, None] = Field(..., description="New value to set (supports all JSON types)")
+    action: str = Field(..., description="Action to perform: update_field, add_to_array, remove_from_array")
+    target_path: str = Field(..., description="Path to the field/array (e.g., demands[165].demandId or demands)")
+    current_value: Optional[Union[str, int, float, bool, None, dict]] = Field(None, description="Current value (for update_field) or item to remove (for remove_from_array)")
+    new_value: Optional[Union[str, int, float, bool, None, dict]] = Field(None, description="New value (for update_field) or item to add (for add_to_array)")
     reasoning: str = Field(..., description="Explanation why this correction is needed")
     additional_updates: Optional[List[AdditionalUpdate]] = Field(
         default_factory=list,

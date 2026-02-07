@@ -122,24 +122,41 @@ def validate_proposal_schema(correction_proposal):
 
 def parse_target_path(path):
     """
-    Parse a target path like 'demands[3].demandId' into components.
-    Returns: (array_name, index, field_name)
-    Example: 'demands[3].demandId' -> ('demands', 3, 'demandId')
+    Parse a target path like 'demands[3].demandId' or 'demands' into components.
+    Returns: (array_name, index, field_name) or (array_name, None, None) for array paths
+    Examples: 
+      - 'demands[3].demandId' -> ('demands', 3, 'demandId')
+      - 'demands' -> ('demands', None, None)
     """
-    # Pattern: arrayName[index].fieldName
-    match = re.match(r'^(\w+)\[(\d+)\]\.(\w+)$', path)
-    if not match:
-        raise ValueError(f"Invalid target path format: {path}")
+    # Pattern for array element field: arrayName[index].fieldName
+    match_field = re.match(r'^(\w+)\[(\d+)\]\.(\w+)$', path)
+    if match_field:
+        array_name = match_field.group(1)
+        index = int(match_field.group(2))
+        field_name = match_field.group(3)
+        return array_name, index, field_name
     
-    array_name = match.group(1)
-    index = int(match.group(2))
-    field_name = match.group(3)
+    # Pattern for array with index only: arrayName[index]
+    match_array_index = re.match(r'^(\w+)\[(\d+)\]$', path)
+    if match_array_index:
+        array_name = match_array_index.group(1)
+        index = int(match_array_index.group(2))
+        return array_name, index, None
     
-    return array_name, index, field_name
+    # Pattern for array itself: arrayName
+    match_array = re.match(r'^(\w+)$', path)
+    if match_array:
+        array_name = match_array.group(1)
+        return array_name, None, None
+    
+    raise ValueError(f"Invalid target path format: {path}. Expected 'arrayName[index].fieldName', 'arrayName[index]', or 'arrayName'")
 
 def apply_single_update(data, target_path, new_value):
     """Apply a single field update to the data"""
     array_name, index, field_name = parse_target_path(target_path)
+    
+    if index is None or field_name is None:
+        raise ValueError(f"update_field action requires full path with index and field: {target_path}")
     
     # Validate array exists
     if array_name not in data:
@@ -149,11 +166,86 @@ def apply_single_update(data, target_path, new_value):
     if index >= len(data[array_name]):
         raise IndexError(f"Index {index} out of range for array '{array_name}' (length: {len(data[array_name])})")
     
+    # FIX: Parse JSON strings to proper structures if needed
+    # Sometimes LLM returns arrays/objects as JSON strings
+    if isinstance(new_value, str) and (new_value.startswith('[') or new_value.startswith('{')):
+        try:
+            parsed_value = json.loads(new_value)
+            print(f"  ⚠ Parsed JSON string to proper structure: {type(parsed_value).__name__}")
+            new_value = parsed_value
+        except json.JSONDecodeError:
+            # Not a valid JSON string, keep as-is
+            pass
+    
     # Apply update
     old_value = data[array_name][index].get(field_name)
     data[array_name][index][field_name] = new_value
     
     return old_value, new_value
+
+
+def add_to_array(data, target_path, new_item):
+    """Add a new item to an array"""
+    array_name, index, field_name = parse_target_path(target_path)
+    
+    if index is not None or field_name is not None:
+        raise ValueError(f"add_to_array action requires array path only (e.g., 'demands'), got: {target_path}")
+    
+    # Validate array exists
+    if array_name not in data:
+        raise KeyError(f"Array '{array_name}' not found in snapshot data")
+    
+    if not isinstance(data[array_name], list):
+        raise TypeError(f"'{array_name}' is not an array")
+    
+    # Add item to array
+    data[array_name].append(new_item)
+    new_index = len(data[array_name]) - 1
+    
+    print(f"  ✓ Added item at index {new_index}")
+    return new_index
+
+
+def remove_from_array(data, target_path, item_to_remove):
+    """Remove an item from an array by matching a field value"""
+    array_name, index, field_name = parse_target_path(target_path)
+    
+    # If index specified, remove that specific index
+    if index is not None:
+        if array_name not in data:
+            raise KeyError(f"Array '{array_name}' not found in snapshot data")
+        
+        if index >= len(data[array_name]):
+            raise IndexError(f"Index {index} out of range for array '{array_name}' (length: {len(data[array_name])})")
+        
+        removed_item = data[array_name].pop(index)
+        print(f"  ✓ Removed item at index {index}")
+        return removed_item
+    
+    # Otherwise, remove by matching item_to_remove dict
+    if array_name not in data:
+        raise KeyError(f"Array '{array_name}' not found in snapshot data")
+    
+    if not isinstance(data[array_name], list):
+        raise TypeError(f"'{array_name}' is not an array")
+    
+    if not isinstance(item_to_remove, dict):
+        raise TypeError(f"item_to_remove must be a dict when index not specified")
+    
+    # Find and remove matching item
+    for i, item in enumerate(data[array_name]):
+        if isinstance(item, dict):
+            # Check if all keys in item_to_remove match
+            match = all(
+                item.get(k) == v
+                for k, v in item_to_remove.items()
+            )
+            if match:
+                removed_item = data[array_name].pop(i)
+                print(f"  ✓ Removed item at index {i}")
+                return removed_item
+    
+    raise ValueError(f"No matching item found to remove from '{array_name}'")
 
 def apply_correction(snapshot_id, correction_proposal):
     """Apply correction proposal to snapshot-data.json"""
@@ -166,18 +258,36 @@ def apply_correction(snapshot_id, correction_proposal):
         data = json.load(f)
     
     proposal = correction_proposal.get("correction_proposal", {})
-    
-    # Apply main update
+    action = proposal.get("action")
     target_path = proposal.get("target_path")
-    new_value = proposal.get("new_value")
     
     print(f"\nApplying main correction:")
+    print(f"  Action: {action}")
     print(f"  Path: {target_path}")
-    print(f"  New Value: {new_value}")
     
-    old_value, applied_value = apply_single_update(data, target_path, new_value)
-    print(f"  Old Value: {old_value}")
-    print(f"  ✓ Applied")
+    # Execute based on action type
+    if action == "update_field":
+        new_value = proposal.get("new_value")
+        print(f"  New Value: {new_value}")
+        old_value, applied_value = apply_single_update(data, target_path, new_value)
+        print(f"  Old Value: {old_value}")
+        print(f"  ✓ Applied")
+        
+    elif action == "add_to_array":
+        new_item = proposal.get("new_value")
+        if not isinstance(new_item, dict):
+            raise TypeError(f"new_value for add_to_array must be a dict (object), got: {type(new_item)}")
+        print(f"  New Item: {json.dumps(new_item, indent=2)[:200]}...")
+        new_index = add_to_array(data, target_path, new_item)
+        
+    elif action == "remove_from_array":
+        item_to_remove = proposal.get("current_value")
+        print(f"  Item to Remove: {json.dumps(item_to_remove, indent=2)[:200]}...")
+        removed_item = remove_from_array(data, target_path, item_to_remove)
+        print(f"  Removed: {json.dumps(removed_item, indent=2)[:200]}...")
+        
+    else:
+        raise ValueError(f"Unknown action: {action}. Supported: update_field, add_to_array, remove_from_array")
     
     # Apply additional updates if present
     additional_updates = proposal.get("additional_updates", [])

@@ -148,6 +148,55 @@ def parse_metadata(metadata_file: Path) -> dict:
     }
 
 
+def append_upload_to_metadata(snapshot_dir: Path, response_data: dict):
+    """
+    Append upload status to metadata.txt for LLM context
+    
+    Args:
+        snapshot_dir: Path to snapshot directory
+        response_data: Server response with validation status
+    """
+    metadata_file = snapshot_dir / "metadata.txt"
+    if not metadata_file.exists():
+        return
+    
+    import re
+    
+    # Read existing content to find iteration number
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        existing_content = f.read()
+    
+    # Find highest upload iteration
+    iteration_pattern = r'## UPLOAD Iteration (\d+)'
+    iterations = re.findall(iteration_pattern, existing_content)
+    
+    if iterations:
+        next_iteration = max([int(i) for i in iterations]) + 1
+    else:
+        next_iteration = 1
+    
+    # Extract important fields
+    is_validated = response_data.get('isSuccessfullyValidated', False)
+    modified_at = response_data.get('dataModifiedAt', 'Unknown')
+    modified_by = response_data.get('dataModifiedBy', 'Unknown')
+    
+    # Status for LLM
+    if is_validated:
+        status_line = "**✓ SNAPSHOT IS VALID** - Server accepted the data without errors."
+    else:
+        status_line = "**✗ SNAPSHOT HAS ERRORS** - Server validation failed."
+    
+    with open(metadata_file, 'a', encoding='utf-8') as f:
+        f.write(f"\n\n## UPLOAD Iteration {next_iteration}\n\n")
+        f.write(f"**Uploaded at:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"**Server validated:** {is_validated}\n")
+        f.write(f"**Modified at (server):** {modified_at}\n")
+        f.write(f"**Modified by:** {modified_by}\n")
+        f.write(f"\n{status_line}\n")
+    
+    print(f"✓ Upload status appended to: {metadata_file}")
+
+
 def save_upload_result(snapshot_dir: Path, success: bool, response_data: dict = None, error: str = None):
     """
     Save upload result to upload-result.json in snapshot folder
@@ -258,6 +307,9 @@ def main():
         
         # Save upload result
         save_upload_result(snapshot_dir, success=True, response_data=response_data)
+        
+        # Append to metadata.txt for LLM context
+        append_upload_to_metadata(snapshot_dir, response_data)
         
         print("\n→ Next step: Run validate_snapshot.py to verify corrections")
         
