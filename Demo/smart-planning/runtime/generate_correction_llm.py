@@ -146,11 +146,16 @@ INPUT DATA EXPLANATION:
    - enriched_context.field_examples: Valid values for reference (use to understand correct formats)
    - enriched_context.format_patterns: Detected ID patterns with statistics (use to generate new IDs)
    - enriched_context.related_entities: Similar entries and all valid IDs (use to find gaps or duplicates)
+   - reference_data_available: If true, reference data from a valid snapshot is available as fallback
+   - reference_data: Sample entries (first 3) from reference snapshot
+   - reference_data_count: Total number of entries available in reference
+   - fallback_solution: If "reference_data", use reference snapshot to populate empty array
 
 HOW TO USE THE DATA:
-- Check field_examples to see what valid values look like
-- Use format_patterns to detect ID naming conventions (prefix, separators, length)
-- Use related_entities to find missing sequence numbers or similar entries
+- PLAN A: Check field_examples to see what valid values look like (preferred)
+- PLAN A: Use format_patterns to detect ID naming conventions (preferred)
+- PLAN A: Use related_entities to find missing sequence numbers or similar entries (preferred)
+- PLAN B: If reference_data_available=true AND fallback_solution="reference_data", propose to copy from reference
 - Follow the pattern exactly when generating new values
 
 ---
@@ -172,13 +177,30 @@ SEARCH RESULTS (Error Context):
 TASK:
 Analyze the error and generate a structured correction proposal following the fix rules.
 
+CRITICAL DECISION RULES:
+
+1. MANUAL INTERVENTION REQUIRED:
+   If search_results contains "manual_intervention_required": true:
+   - Use "action": "manual_intervention_required"
+   - Set "target_path": to the problematic field path
+   - Set "reasoning": Explain why automatic correction is not possible (include the "reason" from search_results)
+   - Do NOT attempt any automatic correction
+   - This happens when reference data fallback is disabled or no solution exists
+
+2. REFERENCE DATA FALLBACK (when enabled):
+   If search_results contains "fallback_solution": "reference_data":
+   - Use "action": "update_field"
+   - Set "new_value": "USE_REFERENCE_DATA" 
+   - Add to reasoning: "Using reference snapshot as fallback (contains X entries). ⚠ Manual verification recommended."
+   - This will copy all entries from the reference snapshot
+
 OUTPUT FORMAT (JSON):
 {{
-  "action": "update_field",
+  "action": "update_field" OR "manual_intervention_required",
   "target_path": "exact.path[index].field",
   "current_value": "current value",
-  "new_value": "corrected value",
-  "reasoning": "Explanation of why this correction is proposed",
+  "new_value": "corrected value" OR null (for manual_intervention_required),
+  "reasoning": "Explanation of why this correction is proposed OR why manual intervention is needed",
   "additional_updates": [
     {{
       "target_path": "path.to.reference",

@@ -68,7 +68,23 @@ python identify_snapshot.py --empty demandId
 
 # Finde leere articleId Felder
 python identify_snapshot.py --empty articleId
+
+# Finde leere workerQualifications (Root-Level Array)
+python identify_snapshot.py --empty workerQualifications
 ```
+
+**Spezialfall: Leere Root-Level Arrays (z.B. workerQualifications)**
+
+Bei leeren Root-Level Arrays verwendet das Tool einen 3-stufigen Hierarchie-Ansatz:
+
+1. **Plan A**: Versuche Daten aus Snapshot selbst zu lernen (field_examples, patterns)
+2. **Plan B**: Reference Data Fallback (wenn `config.json` → `use_reference_data_fallback: true`)
+   - Lädt Daten aus `runtime/identify-tool-files/reference-snapshot.json`
+   - Fügt `reference_data_available: true` zu `last_search_results.json` hinzu
+   - LLM kann dann `USE_REFERENCE_DATA` vorschlagen
+3. **Plan C**: Manual Intervention (wenn Config=false oder keine Reference-Daten)
+   - Fügt `manual_intervention_required: true` zu `last_search_results.json` hinzu
+   - LLM schlägt `action: "manual_intervention_required"` vor
 
 **Output:**
 - Konsolen-Ausgabe mit gefundenen Ergebnissen
@@ -77,6 +93,8 @@ python identify_snapshot.py --empty articleId
   - `error_type`: DUPLICATE_ID, SINGLE_MATCH oder EMPTY_FIELD
   - `original_structure`: Array der gefundenen Objekte
   - `results`: Detaillierte Analyse mit Referenzen und Artikel-Kontext
+  - **NEU**: `reference_data_available`, `reference_data`, `reference_data_count` (bei Plan B)
+  - **NEU**: `manual_intervention_required`, `reason` (bei Plan C)
   - `context`: Gesamt-Statistiken
 
 
@@ -170,6 +188,23 @@ python generate_correction_llm.py
   }
 }
 ```
+
+**Unterstützte Actions:**
+- `update_field`: Ändert einen Feldwert (Standard)
+- `add_to_array`: Fügt ein Element zu einem Array hinzu
+- `remove_from_array`: Entfernt ein Element aus einem Array
+- **NEU**: `manual_intervention_required`: Keine automatische Korrektur möglich (z.B. bei Config=false)
+
+**Spezialfall: Reference Data Fallback**
+
+Wenn `last_search_results.json` `reference_data_available: true` enthält, kann das LLM vorschlagen:
+```json
+{
+  "action": "update_field",
+  "new_value": "USE_REFERENCE_DATA"
+}
+```
+Das bedeutet: Verwende Daten aus `runtime/identify-tool-files/reference-snapshot.json`
 
 **Output-Beispiel:**
 ```
@@ -292,13 +327,17 @@ python apply_correction.py
 4. Lädt Korrekturvorschlag aus `llm_correction_proposal.json`
 5. Parst target_path (z.B. `demands[3].demandId`)
 6. Wendet Korrektur an:
-   - Hauptkorrektur (target_path + new_value)
+   - **Standard**: Hauptkorrektur (target_path + new_value)
+   - **USE_REFERENCE_DATA**: Lädt Daten aus `runtime/identify-tool-files/reference-snapshot.json`
+   - **manual_intervention_required**: Keine Änderung an snapshot-data.json
    - Additional_updates (falls vorhanden, z.B. für Referenz-Updates)
-7. Speichert korrigierte snapshot-data.json im Haupt-Snapshot-Ordner
+7. Speichert korrigierte snapshot-data.json im Haupt-Snapshot-Ordner (außer bei manual_intervention)
 8. **Metadata-Dokumentation**: Erweitert metadata.txt mit:
    - Original Error (level + message)
    - Error Analysis (error_type, search_mode, search_value, results_count)
    - Correction Applied (action, target_path, old/new value, reasoning)
+   - **NEU**: Reference Data Warning (bei `USE_REFERENCE_DATA`)
+   - **NEU**: Manual Intervention Warning (bei `manual_intervention_required`)
    - Additional Updates (Liste aller zusätzlichen Änderungen)
    - Original LLM Proposal (kompletter JSON in Code-Block)
 
@@ -436,6 +475,73 @@ Server response:
 
 → Next step: Run validate_snapshot.py to verify corrections
 ```
+
+
+## Konfiguration & Reference Data
+
+### Config-Datei: `identify-tool-files/config.json`
+
+Steuert das Verhalten der automatischen Fehlerkorrektur bei leeren Arrays.
+
+**Pfad:** `runtime/identify-tool-files/config.json`
+
+**Struktur:**
+```json
+{
+  "use_reference_data_fallback": true,
+  "description": "Controls whether reference snapshot data can be used as automatic fallback when no other solution exists"
+}
+```
+
+**Parameter:**
+- `use_reference_data_fallback` (boolean):
+  - `true`: Reference-Daten dürfen automatisch verwendet werden (Plan B)
+  - `false`: Nur manuelle Intervention erlaubt (Plan C)
+
+**Verwendung:**
+- Geladen von `identify_snapshot.py` bei `--empty` Modus
+- Bestimmt ob `reference_data_available` oder `manual_intervention_required` in `last_search_results.json` gesetzt wird
+- LLM nutzt diese Info zur Entscheidung zwischen automatischer Korrektur und manueller Review
+
+
+### Reference Snapshot: `identify-tool-files/reference-snapshot.json`
+
+Enthält valide Snapshot-Daten als Fallback-Quelle für leere Arrays.
+
+**Pfad:** `runtime/identify-tool-files/reference-snapshot.json`
+
+**Zweck:**
+- Bereitstellung von vollständigen, validierten Daten für leere Root-Level Arrays
+- Wird nur verwendet wenn `config.json` → `use_reference_data_fallback: true`
+- Typische Use Cases:
+  - `workerQualifications`: 93 Worker mit Qualifikationen
+  - Andere strukturelle Arrays die nicht snapshot-spezifisch sind
+
+**Erstellung:**
+Kopiere einen validen Snapshot als Referenz:
+```bash
+# Beispiel: Snapshot da6d77c3-8eb9-413c-8c19-1c4241aeb594 als Referenz
+cp Snapshots/da6d77c3-8eb9-413c-8c19-1c4241aeb594/original-data/snapshot-data.json \
+   runtime/identify-tool-files/reference-snapshot.json
+```
+
+**Workflow mit Reference Data:**
+1. `identify_snapshot.py --empty workerQualifications`
+   - Erkennt leeres Array
+   - Lädt Config (use_reference_data_fallback: true)
+   - Lädt Reference Snapshot
+   - Findet `workerQualifications` mit 93 Einträgen
+   - Schreibt `reference_data_available: true` + Sample in `last_search_results.json`
+
+2. `generate_correction_llm.py`
+   - Liest `reference_data_available: true`
+   - LLM schlägt vor: `"new_value": "USE_REFERENCE_DATA"`
+
+3. `apply_correction.py`
+   - Erkennt `USE_REFERENCE_DATA`
+   - Lädt 93 Einträge aus `reference-snapshot.json`
+   - Kopiert sie nach `snapshot-data.json`
+   - Dokumentiert in `metadata.txt` mit Warnung zur manuellen Verifikation
 
 
 ## Umgebungsvariablen

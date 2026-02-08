@@ -25,6 +25,34 @@ def load_validation_fix_rules():
     return rules_file.read_text(encoding='utf-8')
 
 
+def normalize_field_name(field_name):
+    """Convert common field name variations to camelCase"""
+    # Common field name mappings
+    field_mappings = {
+        "worker qualifications": "workerQualifications",
+        "work plans": "workPlans",
+        "customer order positions": "customerOrderPositions",
+        "packaging equipment compatibility": "packagingEquipmentCompatibility",
+        "demand id": "demandId",
+        "article id": "articleId",
+        "equipment key": "equipmentKey"
+    }
+    
+    # Normalize: lowercase and trim
+    normalized = field_name.lower().strip()
+    
+    # Check if we have a mapping
+    if normalized in field_mappings:
+        return field_mappings[normalized]
+    
+    # Fallback: remove spaces and convert to camelCase
+    words = normalized.split()
+    if len(words) > 1:
+        return words[0] + ''.join(word.capitalize() for word in words[1:])
+    
+    return field_name
+
+
 def load_current_snapshot_id():
     """Load snapshot ID from current_snapshot.txt"""
     runtime_files_dir = Path(__file__).parent / "runtime-files"
@@ -224,6 +252,10 @@ Respond in JSON format:
 
 def trigger_identify_tool(search_mode, search_value):
     """Trigger the identify_snapshot.py tool with the given search mode and value"""
+    
+    # Normalize field names for empty_field mode
+    if search_mode == "empty_field":
+        search_value = normalize_field_name(search_value)
     
     identify_script = Path(__file__).parent / "identify_snapshot.py"
     

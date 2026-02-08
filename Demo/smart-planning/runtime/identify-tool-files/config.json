@@ -1,0 +1,4 @@
+{
+  "use_reference_data_fallback": false,
+  "description": "Controls whether reference snapshot data can be used as automatic fallback when no other solution exists"
+}

@@ -126,8 +126,20 @@ def parse_target_path(path):
     Returns: (array_name, index, field_name) or (array_name, None, None) for array paths
     Examples: 
       - 'demands[3].demandId' -> ('demands', 3, 'demandId')
+      - 'equipment[0].predecessors[0]' -> ('equipment', 0, 'nested:predecessors[0]')
       - 'demands' -> ('demands', None, None)
     """
+    # Pattern for nested array access: arrayName[index].nestedField[nestedIndex]
+    # Example: equipment[0].predecessors[0]
+    match_nested = re.match(r'^(\w+)\[(\d+)\]\.(\w+)\[(\d+)\]$', path)
+    if match_nested:
+        array_name = match_nested.group(1)
+        index = int(match_nested.group(2))
+        nested_field = match_nested.group(3)
+        nested_index = int(match_nested.group(4))
+        # Return special format: (array_name, index, "nested:field[idx]")
+        return array_name, index, f"nested:{nested_field}[{nested_index}]"
+    
     # Pattern for array element field: arrayName[index].fieldName
     match_field = re.match(r'^(\w+)\[(\d+)\]\.(\w+)$', path)
     if match_field:
@@ -149,7 +161,7 @@ def parse_target_path(path):
         array_name = match_array.group(1)
         return array_name, None, None
     
-    raise ValueError(f"Invalid target path format: {path}. Expected 'arrayName[index].fieldName', 'arrayName[index]', or 'arrayName'")
+    raise ValueError(f"Invalid target path format: {path}. Expected 'arrayName[index].fieldName', 'arrayName[index].nestedArray[index]', 'arrayName[index]', or 'arrayName'")
 
 def apply_single_update(data, target_path, new_value):
     """Apply a single field update to the data"""
@@ -177,7 +189,35 @@ def apply_single_update(data, target_path, new_value):
             # Not a valid JSON string, keep as-is
             pass
     
-    # Apply update
+    # Handle nested array access (e.g., equipment[0].predecessors[0])
+    if field_name.startswith("nested:"):
+        # Extract nested field and index: "nested:predecessors[0]" -> "predecessors", 0
+        nested_match = re.match(r'^nested:(\w+)\[(\d+)\]$', field_name)
+        if not nested_match:
+            raise ValueError(f"Invalid nested field format: {field_name}")
+        
+        nested_field = nested_match.group(1)
+        nested_index = int(nested_match.group(2))
+        
+        # Validate nested field exists
+        if nested_field not in data[array_name][index]:
+            raise KeyError(f"Nested field '{nested_field}' not found in {array_name}[{index}]")
+        
+        # Validate nested field is an array
+        if not isinstance(data[array_name][index][nested_field], list):
+            raise TypeError(f"Nested field '{nested_field}' in {array_name}[{index}] is not an array")
+        
+        # Validate nested index
+        if nested_index >= len(data[array_name][index][nested_field]):
+            raise IndexError(f"Nested index {nested_index} out of range for {array_name}[{index}].{nested_field} (length: {len(data[array_name][index][nested_field])})")
+        
+        # Apply nested update
+        old_value = data[array_name][index][nested_field][nested_index]
+        data[array_name][index][nested_field][nested_index] = new_value
+        
+        return old_value, new_value
+    
+    # Apply regular update
     old_value = data[array_name][index].get(field_name)
     data[array_name][index][field_name] = new_value
     
@@ -204,6 +244,53 @@ def add_to_array(data, target_path, new_item):
     
     print(f"  ✓ Added item at index {new_index}")
     return new_index
+
+
+def load_reference_data(field_name):
+    """Load reference data from reference snapshot"""
+    identify_tool_files_dir = Path(__file__).parent / "identify-tool-files"
+    reference_file = identify_tool_files_dir / "reference-snapshot.json"
+    
+    if not reference_file.exists():
+        raise FileNotFoundError(f"Reference snapshot not found: {reference_file}")
+    
+    print(f"  ℹ Loading reference data from: {reference_file}")
+    
+    with open(reference_file, 'r', encoding='utf-8') as f:
+        reference_data = json.load(f)
+    
+    if field_name not in reference_data:
+        raise KeyError(f"Field '{field_name}' not found in reference snapshot")
+    
+    return reference_data[field_name]
+
+
+def replace_with_reference_data(data, target_path, new_value):
+    """Replace an empty array with data from reference snapshot"""
+    # Special case: new_value is "USE_REFERENCE_DATA"
+    if new_value != "USE_REFERENCE_DATA":
+        raise ValueError(f"replace_with_reference_data expects 'USE_REFERENCE_DATA', got: {new_value}")
+    
+    # Parse target path (should be just field name for root-level arrays)
+    field_name = target_path
+    
+    # Validate field exists and is an array
+    if field_name not in data:
+        raise KeyError(f"Field '{field_name}' not found in snapshot data")
+    
+    if not isinstance(data[field_name], list):
+        raise TypeError(f"Field '{field_name}' is not an array")
+    
+    # Load reference data
+    reference_data = load_reference_data(field_name)
+    
+    # Replace empty array with reference data
+    old_count = len(data[field_name])
+    data[field_name] = reference_data
+    new_count = len(data[field_name])
+    
+    print(f"  ✓ Replaced empty array with {new_count} entries from reference snapshot")
+    return old_count, new_count
 
 
 def remove_from_array(data, target_path, item_to_remove):
@@ -266,12 +353,28 @@ def apply_correction(snapshot_id, correction_proposal):
     print(f"  Path: {target_path}")
     
     # Execute based on action type
-    if action == "update_field":
+    if action == "manual_intervention_required":
+        # No automatic correction - just log to metadata
+        print(f"Important: MANUAL INTERVENTION REQUIRED")
+        print(f"  Reasoning: {proposal.get('reasoning')}")
+        print(f"\n  No automatic changes applied")
+        print(f"  This correction requires manual review and action")
+        
+        # Don't modify snapshot data, but continue to log in metadata
+        
+    elif action == "update_field":
         new_value = proposal.get("new_value")
-        print(f"  New Value: {new_value}")
-        old_value, applied_value = apply_single_update(data, target_path, new_value)
-        print(f"  Old Value: {old_value}")
-        print(f"  ✓ Applied")
+        
+        # Special case: USE_REFERENCE_DATA for empty arrays
+        if new_value == "USE_REFERENCE_DATA":
+            print(f"  New Value: USE_REFERENCE_DATA (will load from reference snapshot)")
+            old_count, new_count = replace_with_reference_data(data, target_path, new_value)
+            print(f"  Applied")
+        else:
+            print(f"  New Value: {new_value}")
+            old_value, applied_value = apply_single_update(data, target_path, new_value)
+            print(f"  Old Value: {old_value}")
+            print(f"  Applied")
         
     elif action == "add_to_array":
         new_item = proposal.get("new_value")
@@ -287,30 +390,34 @@ def apply_correction(snapshot_id, correction_proposal):
         print(f"  Removed: {json.dumps(removed_item, indent=2)[:200]}...")
         
     else:
-        raise ValueError(f"Unknown action: {action}. Supported: update_field, add_to_array, remove_from_array")
+        raise ValueError(f"Unknown action: {action}. Supported: update_field, add_to_array, remove_from_array, manual_intervention_required")
     
-    # Apply additional updates if present
-    additional_updates = proposal.get("additional_updates", [])
-    if additional_updates:
-        print(f"\nApplying {len(additional_updates)} additional update(s):")
-        for i, update in enumerate(additional_updates, 1):
-            update_path = update.get("target_path")
-            update_value = update.get("new_value")
-            
-            print(f"\n  Update {i}:")
-            print(f"    Path: {update_path}")
-            print(f"    New Value: {update_value}")
-            
-            old_val, new_val = apply_single_update(data, update_path, update_value)
-            print(f"    Old Value: {old_val}")
-            print(f"    ✓ Applied")
+    # Apply additional updates if present (only if not manual intervention)
+    if action != "manual_intervention_required":
+        additional_updates = proposal.get("additional_updates", [])
+        if additional_updates:
+            print(f"\nApplying {len(additional_updates)} additional update(s):")
+            for i, update in enumerate(additional_updates, 1):
+                update_path = update.get("target_path")
+                update_value = update.get("new_value")
+                
+                print(f"\n  Update {i}:")
+                print(f"    Path: {update_path}")
+                print(f"    New Value: {update_value}")
+                
+                old_val, new_val = apply_single_update(data, update_path, update_value)
+                print(f"    Old Value: {old_val}")
+                print(f"    ✓ Applied")
     
-    # Save updated snapshot data
-    print(f"\nSaving corrected snapshot data...")
-    with open(snapshot_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    
-    print(f"✓ Saved to: {snapshot_file}")
+    # Save updated snapshot data (only if not manual intervention)
+    if action != "manual_intervention_required":
+        print(f"\nSaving corrected snapshot data...")
+        with open(snapshot_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        print(f"Saved to: {snapshot_file}")
+    else:
+        print(f"\nSnapshot data NOT modified (manual intervention required)")
     
     return data
 
@@ -347,9 +454,26 @@ def append_correction_to_metadata(snapshot_id, correction_proposal):
     correction_entry += f"**Correction Applied:**\n"
     correction_entry += f"- Action: {proposal.get('action')}\n"
     correction_entry += f"- Target Path: `{proposal.get('target_path')}`\n"
-    correction_entry += f"- Old Value: `{proposal.get('current_value')}`\n"
-    correction_entry += f"- New Value: `{proposal.get('new_value')}`\n"
-    correction_entry += f"- Reasoning: {proposal.get('reasoning')}\n"
+    
+    # Check if manual intervention is required
+    if proposal.get('action') == "manual_intervention_required":
+        correction_entry += f"\n⚠⚠⚠ **MANUAL INTERVENTION REQUIRED** ⚠⚠⚠\n"
+        correction_entry += f"- Status: NO AUTOMATIC CORRECTION APPLIED\n"
+        correction_entry += f"- Reason: {proposal.get('reasoning')}\n"
+        correction_entry += f"- Action Required: User must manually review and fix this error\n"
+        correction_entry += f"- Current Value: `{proposal.get('current_value')}`\n\n"
+    else:
+        correction_entry += f"- Old Value: `{proposal.get('current_value')}`\n"
+        correction_entry += f"- New Value: `{proposal.get('new_value')}`\n"
+        
+        # Check if reference data was used
+        if proposal.get('new_value') == "USE_REFERENCE_DATA":
+            correction_entry += f"\n**IMPORTANT: Reference Data Fallback Used**\n"
+            correction_entry += f"- Source: Reference snapshot (runtime/identify-tool-files/reference-snapshot.json)\n"
+            correction_entry += f"- Operation: Copied array data from reference snapshot\n"
+            correction_entry += f"- Manual Verification: RECOMMENDED - verify that copied data is appropriate for this snapshot\n\n"
+        
+        correction_entry += f"- Reasoning: {proposal.get('reasoning')}\n"
     
     additional_updates = proposal.get('additional_updates', [])
     if additional_updates:

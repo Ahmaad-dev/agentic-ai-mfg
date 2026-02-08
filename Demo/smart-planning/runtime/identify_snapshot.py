@@ -46,6 +46,74 @@ def load_snapshot_data():
     return snapshot_id, data
 
 
+def load_reference_snapshot():
+    """Load reference snapshot for fallback data (only when needed)"""
+    identify_tool_files_dir = Path(__file__).parent / "identify-tool-files"
+    reference_file = identify_tool_files_dir / "reference-snapshot.json"
+    
+    if not reference_file.exists():
+        return None
+    
+    print(f"  [i] Loading reference snapshot for fallback data...")
+    
+    with open(reference_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    return data
+
+
+def load_config():
+    """Load configuration from config.json"""
+    identify_tool_files_dir = Path(__file__).parent / "identify-tool-files"
+    config_file = identify_tool_files_dir / "config.json"
+    
+    if not config_file.exists():
+        # Default: reference data fallback enabled
+        return {"use_reference_data_fallback": True}
+    
+    with open(config_file, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def find_empty_arrays(data: Any, search_field: str) -> List[Dict]:
+    """Find empty arrays in snapshot data that match the search field name"""
+    results = []
+    
+    def normalize_field_name(name: str) -> str:
+        """Normalize field name (remove spaces, lowercase)"""
+        return name.replace(" ", "").replace("_", "").lower()
+    
+    normalized_search = normalize_field_name(search_field)
+    
+    def search_recursive(obj: Any, path: str = ""):
+        """Recursively search for empty arrays"""
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                normalized_key = normalize_field_name(key)
+                current_path = f"{path}.{key}" if path else key
+                
+                # Check if this is an empty array and matches search field
+                if isinstance(value, list) and len(value) == 0:
+                    if normalized_key == normalized_search:
+                        results.append({
+                            "path": current_path,
+                            "field_name": key,
+                            "value": [],
+                            "is_empty_array": True
+                        })
+                
+                # Continue recursive search
+                search_recursive(value, current_path)
+        
+        elif isinstance(obj, list):
+            for idx, item in enumerate(obj):
+                current_path = f"{path}[{idx}]"
+                search_recursive(item, current_path)
+    
+    search_recursive(data)
+    return results
+
+
 def search_in_dict(obj: Any, search_value: str, path: str = "") -> List[Dict]:
     """Recursively search for a value in nested dictionary/list structures"""
     results = []
@@ -461,6 +529,34 @@ def get_array_context(data: Dict, result_path: str, items_before: int = 3, items
             if stats:
                 array_context['similar_items_stats'] = stats
     
+    # DOMAIN INTELLIGENCE: For equipment-related arrays, add all_equipment_keys for validation
+    # This applies to equipment array itself AND arrays that reference equipment predecessors
+    needs_equipment_keys = False
+    if array_name == "equipment":
+        needs_equipment_keys = True
+    elif target_index < len(array_data):
+        # Check if the target object has predecessors field (indicates equipment references)
+        target_item = array_data[target_index]
+        if isinstance(target_item, dict) and 'predecessors' in target_item:
+            needs_equipment_keys = True
+    
+    if needs_equipment_keys:
+        # Get all equipment from the equipment array (not from current array)
+        all_equipment_keys = []
+        equipment_array = data.get('equipment', [])
+        for item in equipment_array:
+            if isinstance(item, dict):
+                eq_key = item.get('equipmentKey')
+                if eq_key:
+                    all_equipment_keys.append({
+                        'equipmentKey': eq_key,
+                        'name': item.get('name'),
+                        'functions': item.get('functions')
+                    })
+        
+        array_context['all_equipment_keys'] = all_equipment_keys
+        array_context['total_equipment_count'] = len(all_equipment_keys)
+    
     return array_context
 
 
@@ -512,6 +608,59 @@ def build_enriched_context(data: Dict, search_mode: str, search_value: str, resu
                 field_examples[field] = examples
         
         enriched["field_examples"] = field_examples
+        
+        # CRITICAL: For packaging field errors, also collect valid packaging IDs from packagingEquipmentCompatibility
+        if search_mode == "value" and any("packaging" in r.get("path", "") for r in results):
+            if "packagingEquipmentCompatibility" in data and isinstance(data["packagingEquipmentCompatibility"], list):
+                packaging_ids_from_compatibility = []
+                for compat in data["packagingEquipmentCompatibility"]:
+                    if isinstance(compat, dict) and "packaging" in compat:
+                        pkg_id = compat.get("packaging")
+                        if pkg_id and str(pkg_id).strip() and pkg_id not in packaging_ids_from_compatibility:
+                            packaging_ids_from_compatibility.append(str(pkg_id))
+                
+                if packaging_ids_from_compatibility:
+                    # Merge with existing packaging examples (avoid duplicates)
+                    existing_packaging = field_examples.get("packaging", [])
+                    all_packaging_ids = list(existing_packaging)  # Copy existing
+                    for pkg_id in packaging_ids_from_compatibility:
+                        if pkg_id not in all_packaging_ids:
+                            all_packaging_ids.append(pkg_id)
+                    
+                    # Update field_examples with complete packaging list
+                    field_examples["packaging"] = all_packaging_ids
+                    enriched["field_examples"] = field_examples
+    
+    # Collect field examples from equipment array (first 10 non-empty values)
+    if "equipment" in data and isinstance(data["equipment"], list):
+        if "field_examples" not in enriched:
+            enriched["field_examples"] = {}
+        
+        # Key fields to collect examples for equipment
+        equipment_fields = ["qualification", "equipmentKey", "functions"]
+        
+        for field in equipment_fields:
+            examples = []
+            for equipment in data["equipment"]:
+                if isinstance(equipment, dict) and field in equipment:
+                    value = equipment.get(field)
+                    # Handle both string and list values
+                    if value and value != "":
+                        if isinstance(value, list):
+                            # For list fields like functions, collect unique list items
+                            for item in value:
+                                if item and item not in examples:
+                                    examples.append(item)
+                                    if len(examples) >= 20:
+                                        break
+                        elif value not in examples:
+                            examples.append(value)
+                            if len(examples) >= 20:
+                                break
+                if len(examples) >= 20:
+                    break
+            if examples:
+                enriched["field_examples"][field] = examples
         
         # Pattern analysis for the error field
         if search_mode == "empty_field":
@@ -681,8 +830,69 @@ def main():
         print(f"Snapshot data loaded successfully")
         print(f"\nSearching for empty '{field_name}' fields...")
         
-        # Search for empty fields
-        results = search_empty_field(data, field_name)
+        # First: Check for empty arrays at root level
+        empty_arrays = find_empty_arrays(data, field_name)
+        
+        if empty_arrays:
+            print(f"\n[OK] Found empty array: {empty_arrays[0]['path']}")
+            
+            # Load config to check if reference data fallback is enabled
+            config = load_config()
+            use_reference_fallback = config.get("use_reference_data_fallback", True)
+            
+            # Get field path for reference lookup
+            field_path = empty_arrays[0]['path']
+            
+            # PLAN A: Try to find data from snapshot itself (field_examples, patterns)
+            # For root-level arrays like workerQualifications, there's usually nothing to learn from
+            
+            # PLAN B: Reference data fallback (if enabled)
+            if use_reference_fallback:
+                print(f"  [i] Reference data fallback: ENABLED (checking availability...)")
+                reference_data = load_reference_snapshot()
+                
+                if reference_data and field_path in reference_data and reference_data[field_path]:
+                    print(f"  [OK] Reference data found: {len(reference_data[field_path])} entries")
+                    
+                    # Return result WITH reference data for automatic fallback
+                    results = [{
+                        "path": field_path,
+                        "field_name": empty_arrays[0]['field_name'],
+                        "value": [],
+                        "is_empty_array": True,
+                        "fallback_solution": "reference_data",
+                        "reference_data_available": True,
+                        "reference_data": reference_data[field_path][:3],  # First 3 as samples
+                        "reference_data_count": len(reference_data[field_path]),
+                        "warning": "[!] Using reference snapshot as automatic fallback - verify manually after correction"
+                    }]
+                else:
+                    print(f"  [!] Reference data not available for field: {field_path}")
+                    # PLAN C: Manual intervention required
+                    results = [{
+                        "path": field_path,
+                        "field_name": empty_arrays[0]['field_name'],
+                        "value": [],
+                        "is_empty_array": True,
+                        "manual_intervention_required": True,
+                        "reason": "Empty array with no reference data available"
+                    }]
+            else:
+                # Reference fallback DISABLED
+                print(f"  [i] Reference data fallback: DISABLED (manual intervention required)")
+                # PLAN C: Manual intervention required
+                results = [{
+                    "path": field_path,
+                    "field_name": empty_arrays[0]['field_name'],
+                    "value": [],
+                    "is_empty_array": True,
+                    "manual_intervention_required": True,
+                    "reason": "Empty array - reference data fallback disabled in config"
+                }]
+            
+        else:
+            # Search for empty fields in nested structures
+            results = search_empty_field(data, field_name)
         
     else:
         # Regular value search mode
@@ -730,19 +940,40 @@ def main():
             # Get array context (3 items before/after for pattern detection)
             array_context = get_array_context(data, path, items_before=3, items_after=3)
             
+            # Get the actual parent object (not the array) for nested paths like equipment[0].predecessors[0]
+            actual_parent = parent if isinstance(parent, dict) else {}
+            
+            # Special case: For array element paths (e.g., equipment[0].predecessors[0]), 
+            # we need to get the parent OBJECT (equipment[0]), not the parent ARRAY (predecessors)
+            if not isinstance(parent, dict) and '.' in path:
+                # Extract the object containing the array
+                # Example: equipment[0].predecessors[0] → extract equipment[0]
+                import re
+                obj_match = re.match(r'^(.+\[\d+\])\.[^.]+\[\d+\]$', path)
+                if obj_match:
+                    obj_path = obj_match.group(1)  # equipment[0]
+                    # Navigate to that object
+                    try:
+                        # Split by array notation
+                        array_name = obj_path[:obj_path.index('[')]
+                        index = int(obj_path[obj_path.index('[')+1:obj_path.index(']')])
+                        if array_name in data and isinstance(data[array_name], list):
+                            if index < len(data[array_name]):
+                                actual_parent = data[array_name][index]
+                    except Exception as e:
+                        print(f"Warning: Could not extract parent object from path '{path}': {e}")
+            
             result_entry = {
                 "path": path,
                 "value": r["value"],
-                "original_object": parent if isinstance(parent, dict) else {},
+                "original_object": actual_parent if isinstance(actual_parent, dict) else {},
                 "references": references,
                 "article_context": article_context,
                 "array_context": array_context
             }
             
-            # Add fuzzy match metadata if present
-            if "fuzzy_match" in r:
-                result_entry["fuzzy_match"] = r["fuzzy_match"]
-                result_entry["similarity_score"] = r.get("similarity_score", 0.0)
+            # Add all optional metadata from r (fuzzy match, empty array info, etc.)
+            result_entry.update({k: v for k, v in r.items() if k not in result_entry and k not in ["parent", "key", "index"]})
             
             json_results.append(result_entry)
         

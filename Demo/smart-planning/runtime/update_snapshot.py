@@ -66,7 +66,7 @@ class SmartPlanningAPI:
         response.raise_for_status()
         
         self.token = response.json()["access_token"]
-        print("✓ Authentication successful")
+        print("Authentication successful")
         return self.token
     
     def update_snapshot(self, snapshot_id: str, name: str, comment: str, data_json: str):
@@ -101,7 +101,7 @@ class SmartPlanningAPI:
         if comment is not None:
             body["comment"] = comment
         
-        print(f"\n→ Uploading snapshot data to server...")
+        print(f"\nUploading snapshot data to server...")
         print(f"  Snapshot ID: {snapshot_id}")
         print(f"  Name: {name}")
         print(f"  Data size: {len(data_json):,} characters")
@@ -182,9 +182,9 @@ def append_upload_to_metadata(snapshot_dir: Path, response_data: dict):
     
     # Status for LLM
     if is_validated:
-        status_line = "**✓ SNAPSHOT IS VALID** - Server accepted the data without errors."
+        status_line = "**SNAPSHOT IS VALID** - Server accepted the data without errors."
     else:
-        status_line = "**✗ SNAPSHOT HAS ERRORS** - Server validation failed."
+        status_line = "**SNAPSHOT HAS ERRORS** - Server validation failed."
     
     with open(metadata_file, 'a', encoding='utf-8') as f:
         f.write(f"\n\n## UPLOAD Iteration {next_iteration}\n\n")
@@ -194,7 +194,7 @@ def append_upload_to_metadata(snapshot_dir: Path, response_data: dict):
         f.write(f"**Modified by:** {modified_by}\n")
         f.write(f"\n{status_line}\n")
     
-    print(f"✓ Upload status appended to: {metadata_file}")
+    print(f"Upload status appended to: {metadata_file}")
 
 
 def save_upload_result(snapshot_dir: Path, success: bool, response_data: dict = None, error: str = None):
@@ -222,7 +222,7 @@ def save_upload_result(snapshot_dir: Path, success: bool, response_data: dict = 
     with open(result_file, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     
-    print(f"\n→ Upload result saved to: {result_file}")
+    print(f"\nUpload result saved to: {result_file}")
 
 
 def main():
@@ -266,7 +266,7 @@ def main():
             print(f"ERROR: snapshot-data.json not found: {snapshot_data_file}")
             sys.exit(1)
         
-        print(f"\n→ Loading corrected snapshot data from:")
+        print(f"\nLoading corrected snapshot data from:")
         print(f"  {snapshot_data_file}")
         
         with open(snapshot_data_file, 'r', encoding='utf-8') as f:
@@ -274,7 +274,7 @@ def main():
         
         # Convert to JSON string for API
         data_json = json.dumps(snapshot_data, ensure_ascii=False)
-        print(f"  ✓ Data loaded ({len(data_json):,} characters)")
+        print(f"  Data loaded ({len(data_json):,} characters)")
         
         # 4. Load metadata (name and comment)
         metadata_file = snapshot_dir / "metadata.txt"
@@ -282,12 +282,12 @@ def main():
             print(f"ERROR: metadata.txt not found: {metadata_file}")
             sys.exit(1)
         
-        print(f"\n→ Loading snapshot metadata from:")
+        print(f"\nLoading snapshot metadata from:")
         print(f"  {metadata_file}")
         
         metadata = parse_metadata(metadata_file)
-        print(f"  ✓ Name: {metadata['name']}")
-        print(f"  ✓ Comment: {metadata['comment'] or '(none)'}")
+        print(f"  Name: {metadata['name']}")
+        print(f"  Comment: {metadata['comment'] or '(none)'}")
         
         # 5. Upload to server
         api = SmartPlanningAPI()
@@ -300,7 +300,7 @@ def main():
         )
         
         print("\n" + "=" * 70)
-        print("✓ SUCCESS - Snapshot updated on server!")
+        print("SUCCESS - Snapshot updated on server!")
         print("=" * 70)
         print(f"\nServer response:")
         print(json.dumps(response_data, indent=2))
@@ -311,7 +311,7 @@ def main():
         # Append to metadata.txt for LLM context
         append_upload_to_metadata(snapshot_dir, response_data)
         
-        print("\n→ Next step: Run validate_snapshot.py to verify corrections")
+        print("\nNext step: Run validate_snapshot.py to verify corrections")
         
         sys.exit(0)
         
