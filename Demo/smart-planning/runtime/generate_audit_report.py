@@ -3,13 +3,17 @@ Audit Report Generator for Smart Planning Snapshots
 Generates a professional audit report based on metadata.txt
 """
 
+import sys
 import json
 import os
-import sys
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+
+# UTF-8 Encoding für Windows-Terminal
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 # Load environment variables
 load_dotenv()

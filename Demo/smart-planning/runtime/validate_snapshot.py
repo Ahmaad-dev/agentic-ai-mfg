@@ -4,12 +4,17 @@ Reads the current snapshot ID from runtime-files/current_snapshot.txt,
 validates it via API, and saves the validation results to snapshot-validation.json.
 """
 
+import sys
 import requests
 import json
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 import urllib3
+
+# UTF-8 Encoding für Windows-Terminal
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

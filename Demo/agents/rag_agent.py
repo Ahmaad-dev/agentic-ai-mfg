@@ -153,14 +153,15 @@ class RAGAgent(BaseAgent):
             )
             return {
                 "response": (
-                    "Ich konnte in den vorliegenden Dokumenten keine ausreichend relevanten Informationen zu deiner Frage finden. "
-                    "Könntest du die Frage präzisieren oder anders formulieren?"
+                    "Keine relevanten Dokumente gefunden. "
+                    f"Maximaler Relevanz-Score: {relevance_score:.3f} (Schwellenwert: {self.min_score})"
                 ),
                 "metadata": {
                     "agent": self.name,
                     "sources": [],
                     "relevance_score": relevance_score,
                     "retrieval_success": False,
+                    "raw_result": True,  # Signal für Orchestrator
                     "config": {
                         "top_k": self.top_k,
                         "min_score": self.min_score
@@ -216,12 +217,13 @@ class RAGAgent(BaseAgent):
             )
             
             return {
-                "response": answer,
+                "response": answer,  # Rohe LLM-Response
                 "metadata": {
                     "agent": self.name,
                     "sources": sources,
                     "relevance_score": relevance_score,
                     "retrieval_success": True,
+                    "raw_result": True,  # Signal für Orchestrator
                     "config": {
                         "temperature": self.temperature,
                         "max_tokens": self.max_tokens,

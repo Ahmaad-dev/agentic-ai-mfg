@@ -13,6 +13,10 @@ import re
 import shutil
 import sys
 from pathlib import Path
+
+# UTF-8 Encoding für Windows-Terminal
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 from datetime import datetime
 from pydantic import ValidationError
 

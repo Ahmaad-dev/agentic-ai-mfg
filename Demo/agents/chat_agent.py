@@ -53,8 +53,16 @@ class ChatAgent(BaseAgent):
         
         chat_history = self._get_chat_history(context)
         
+        # Prüfe ob Snapshot-Metadaten verfügbar sind
+        snapshot_context = ""
+        if context and "last_snapshot_metadata" in context:
+            import json
+            metadata = context["last_snapshot_metadata"]
+            snapshot_context = f"\n\nVERFÜGBARE SNAPSHOT-INFORMATIONEN (nutze diese um User-Fragen zu beantworten):\n{json.dumps(metadata, indent=2, ensure_ascii=False)}"
+            logger.info(f"[{self.name} Agent] Snapshot-Metadaten verfügbar für Kontext")
+        
         messages = [
-            {"role": "system", "content": self.system_prompt},
+            {"role": "system", "content": self.system_prompt + snapshot_context},
             *chat_history,
             {"role": "user", "content": user_input}
         ]
@@ -81,11 +89,12 @@ class ChatAgent(BaseAgent):
             )
             
             return {
-                "response": answer,
+                "response": answer,  # Rohe LLM-Response
                 "metadata": {
                     "agent": self.name,
                     "sources": [],
                     "confidence": "high",
+                    "raw_result": True,  # Signal für Orchestrator
                     "config": {
                         "temperature": self.temperature,
                         "max_tokens": self.max_tokens,

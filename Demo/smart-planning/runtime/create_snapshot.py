@@ -1,6 +1,7 @@
-"""
+"""  
 Skript zum Erstellen und Speichern von Snapshots über die Smart Planning API.
 """
+import sys
 import requests
 import json
 import time
@@ -9,6 +10,10 @@ import os
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
+
+# UTF-8 Encoding für Windows-Terminal
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 # .env Datei laden
 try:

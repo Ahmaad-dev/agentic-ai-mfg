@@ -2,6 +2,7 @@
 BaseAgent - Basis-Klasse für alle Agenten
 """
 from typing import Dict, Optional
+from agent_config import CHAT_HISTORY_CONFIG
 
 
 class BaseAgent:
@@ -49,17 +50,25 @@ class BaseAgent:
         raise NotImplementedError(f"Agent {self.name} muss execute() implementieren")
     
     def _get_chat_history(self, context: Dict) -> list:
-        """Extrahiert Chat-History mit Limit"""
+        """Extrahiert Chat-History mit Limit (Messages + Zeichen pro Message)"""
         if not context:
             return []
         
         history = context.get("chat_history", [])
         
-        if self.max_history_pairs is None:
-            return history
+        # 1. Limitiere Anzahl Messages
+        if self.max_history_pairs is not None:
+            max_messages = self.max_history_pairs * 2
+            if len(history) > max_messages:
+                history = history[-max_messages:]
         
-        max_messages = self.max_history_pairs * 2
-        if len(history) <= max_messages:
-            return history
+        # 2. Limitiere Zeichen pro Message (nutzt zentrale Config)
+        max_chars = CHAT_HISTORY_CONFIG.get("max_message_chars", 1000)
+        truncated_history = []
+        for msg in history:
+            truncated_msg = msg.copy()
+            if len(truncated_msg.get("content", "")) > max_chars:
+                truncated_msg["content"] = truncated_msg["content"][:max_chars]
+            truncated_history.append(truncated_msg)
         
-        return history[-max_messages:]
+        return truncated_history

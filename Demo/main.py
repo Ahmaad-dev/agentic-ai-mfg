@@ -13,11 +13,13 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
 # Agent-Imports
-from agents import ChatAgent, RAGAgent, OrchestrationAgent
+from agents import ChatAgent, RAGAgent, SPAgent, OrchestrationAgent
+import agent_config
 from agent_config import (
     CHAT_AGENT_CONFIG,
     RAG_AGENT_CONFIG,
     ORCHESTRATOR_CONFIG,
+    SP_AGENT_CONFIG,
     MAX_HISTORY_MESSAGES
 )
 
@@ -125,10 +127,18 @@ def initialize_agents(aoai_chat, aoai_rag, aoai_orchestration, search):
     )
     logger.info(f"RAG Agent initialisiert: Model={rag_model}, Embeddings={embeddings_deployment}, Temp={rag_agent.temperature}, MaxTokens={rag_agent.max_tokens}, TopK={rag_agent.top_k}, MinScore={rag_agent.min_score}")
     
+    # SP_Agent initialisieren (Smart Planning Agent) - KEINE LLM-Calls, pure Executor
+    sp_agent = SPAgent(
+        runtime_dir=Path(__file__).parent / "smart-planning" / "runtime",
+        routing_description=agent_config.SP_AGENT_CONFIG["routing_description"]
+    )
+    logger.info(f"SP Agent initialisiert: Runtime={sp_agent.runtime_dir}")
+    
     # Orchestrator initialisieren (mit eigenem Client)
     agents = {
         "chat": chat_agent,
-        "rag": rag_agent
+        "rag": rag_agent,
+        "sp": sp_agent  # Smart Planning Agent
     }
     
     orchestrator = OrchestrationAgent(
@@ -145,24 +155,27 @@ def initialize_agents(aoai_chat, aoai_rag, aoai_orchestration, search):
 def main():
     """Hauptprogramm"""
     
-    print("=" * 60)
-    print("  Multi-Agent System gestartet!")
-    print("=" * 60)
-    
     # Clients initialisieren (3 separate OpenAI Clients)
     aoai_chat, aoai_rag, aoai_orchestration, search = initialize_clients()
     
     # Agenten initialisieren
     orchestrator, agents = initialize_agents(aoai_chat, aoai_rag, aoai_orchestration, search)
     
-    print(f"  Orchestrator: {orchestrator.name}")
-    print(f"  Verfügbare Agenten: {', '.join(agents.keys())}")
-    print("=" * 60)
-    print("\n  Agent-Konfiguration:")
-    print(f"  [CHAT]  Temp={CHAT_AGENT_CONFIG['temperature']}, MaxTokens={CHAT_AGENT_CONFIG['max_tokens']}, History={CHAT_AGENT_CONFIG['max_history_pairs']} Paare")
-    print(f"  [RAG]   Temp={RAG_AGENT_CONFIG['temperature']}, MaxTokens={RAG_AGENT_CONFIG['max_tokens']}, TopK={RAG_AGENT_CONFIG['top_k']}, Score>={RAG_AGENT_CONFIG['min_score']}")
-    print("=" * 60)
-    print("  Eingabe 'exit' zum Beenden\n")
+    # Willkommensnachricht
+    print("\n" + "="*60)
+    print("  Multi-Agent System für Smart Planning")
+    print("="*60)
+    print("\nVerfügbare Funktionen:")
+    print("  • Allgemeine Fragen & Konversation (Chat Agent)")
+    print("  • Dokumentensuche (RAG Agent)")
+    print("  • Smart Planning: Snapshots erstellen, validieren, korrigieren (SP Agent)")
+    print("\nBeispiele:")
+    print("  - 'Erstelle einen Snapshot'")
+    print("  - 'Validiere Snapshot [ID]'")
+    print("  - 'Korrigiere alle Fehler'")
+    print("  - 'Suche in Dokumenten nach...'")
+    print("\nZum Beenden: 'exit', 'quit' oder 'beenden'\n")
+    print("="*60 + "\n")
     
     # Chat-Loop
     messages = []
@@ -190,19 +203,19 @@ def main():
         messages.append({"role": "user", "content": user_input})
         messages.append({"role": "assistant", "content": response})
         
-        # Ausgabe formatieren
-        agent_name = metadata.get("orchestrator_decision", {}).get("selected_agent", "unknown")
+        # Ausgabe mit Agent-Label
+        agent_label = ""
+        if metadata.get("agent"):
+            agent_name = metadata["agent"]
+            agent_labels = {
+                "Chat": "[Chat]",
+                "RAG": "[RAG]",
+                "SP_Agent": "[SP]",
+                "Orchestrator": "[Orchestrator]"
+            }
+            agent_label = agent_labels.get(agent_name, f"[{agent_name}]") + " "
         
-        if agent_name == "clarify":
-            agent_label = "Rückfrage"
-        else:
-            agent_label = agent_name.upper()
-        
-        print(f"\n[{agent_label}] Assistent: {response}\n")
-        
-        # Quellen ausgeben falls vorhanden
-        if metadata.get("sources"):
-            print("📚 Quellen:", ", ".join(metadata["sources"]), "\n")
+        print(f"\n{agent_label}Assistent: {response}\n")
         
         # Debug-Info loggen
         if metadata.get("orchestrator_decision"):

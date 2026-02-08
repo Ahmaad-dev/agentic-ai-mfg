@@ -304,8 +304,17 @@ def main():
     """Main function"""
     print("Starting LLM-based Error Analysis\n")
     
-    # Check for demo mode
-    demo_mode = len(sys.argv) > 1 and sys.argv[1] == "--demo"
+    # Check for command-line arguments
+    demo_mode = False
+    snapshot_id = None
+    
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--demo":
+            demo_mode = True
+        else:
+            # First argument is snapshot ID
+            snapshot_id = sys.argv[1]
+            print(f"Using Snapshot ID from command line: {snapshot_id}\n")
     
     if demo_mode:
         print("DEMO MODE: Using test validation data\n")
@@ -316,15 +325,17 @@ def main():
             }
         ]
         snapshot_id = "demo-snapshot"
-    else:
-        # Step 1: Load snapshot ID
+    elif not snapshot_id:
+        # Fallback: Load snapshot ID from current_snapshot.txt
         snapshot_id = load_current_snapshot_id()
         if not snapshot_id:
+            print("ERROR: No snapshot ID provided")
             return
         
-        print(f"Snapshot ID: {snapshot_id}\n")
-        
-        # Step 2: Load validation data
+        print(f"Snapshot ID from current_snapshot.txt: {snapshot_id}\n")
+    
+    # Step 2: Load validation data
+    if not demo_mode:
         validation_data = load_validation_data(snapshot_id)
         if validation_data is None:
             return

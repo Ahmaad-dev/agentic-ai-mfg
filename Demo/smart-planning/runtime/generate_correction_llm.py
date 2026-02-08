@@ -179,6 +179,14 @@ Analyze the error and generate a structured correction proposal following the fi
 
 CRITICAL DECISION RULES:
 
+0. TARGET PATH EXTRACTION (MOST IMPORTANT):
+   **ALWAYS extract target_path from the SEARCH RESULTS, NEVER construct it yourself!**
+   - Search results contain "path" field like "articles[40].articleId" or "demands[165].demandId"
+   - Use this EXACT path as base, then append the field that needs correction
+   - Example: If error is about "rel_density_min" and path is "articles[40].articleId", use "articles[40].rel_density_min"
+   - **NEVER use the search_value as array index** (e.g., WRONG: "articles[106270]" when search_value="106270")
+   - The search_value might be an ID value (106270), but the array index is in the path field!
+
 1. MANUAL INTERVENTION REQUIRED:
    If search_results contains "manual_intervention_required": true:
    - Use "action": "manual_intervention_required"

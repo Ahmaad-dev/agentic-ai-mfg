@@ -912,70 +912,73 @@ def main():
     # Display results
     display_results(results, search_value)
     
-    # Save enhanced results to file in snapshot directory
+    # WICHTIG: Save results IMMER (auch wenn leer) - generate_correction_llm braucht die Datei!
+    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
+    output_file = snapshot_dir / "last_search_results.json"
+    
+    # Determine error type based on search mode and results
     if results:
-        snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-        output_file = snapshot_dir / "last_search_results.json"
-        
-        # Determine error type based on search mode and results
         if search_mode == "empty_field":
             error_type = "EMPTY_FIELD"
         else:
             error_type = "DUPLICATE_ID" if len(results) > 1 else "SINGLE_MATCH"
+    else:
+        # Keine Ergebnisse - trotzdem error_type setzen für leere Datei
+        error_type = "NO_RESULTS_FOUND"
+    
+    # Prepare enhanced results for JSON
+    json_results = []
+    for r in results:
+        parent = r.get("parent", {})
+        path = r.get("path", "")
         
-        # Prepare enhanced results for JSON
-        json_results = []
-        for r in results:
-            parent = r.get("parent", {})
-            path = r.get("path", "")
-            
-            # Get references
-            references = find_references(data, search_value, path)
-            
-            # Get article context if parent has articleId
-            article_context = {}
-            if isinstance(parent, dict) and "articleId" in parent:
-                article_context = get_article_context(data, parent.get("articleId"))
-            
-            # Get array context (3 items before/after for pattern detection)
-            array_context = get_array_context(data, path, items_before=3, items_after=3)
-            
-            # Get the actual parent object (not the array) for nested paths like equipment[0].predecessors[0]
-            actual_parent = parent if isinstance(parent, dict) else {}
-            
-            # Special case: For array element paths (e.g., equipment[0].predecessors[0]), 
-            # we need to get the parent OBJECT (equipment[0]), not the parent ARRAY (predecessors)
-            if not isinstance(parent, dict) and '.' in path:
-                # Extract the object containing the array
-                # Example: equipment[0].predecessors[0] → extract equipment[0]
-                import re
-                obj_match = re.match(r'^(.+\[\d+\])\.[^.]+\[\d+\]$', path)
-                if obj_match:
-                    obj_path = obj_match.group(1)  # equipment[0]
-                    # Navigate to that object
-                    try:
-                        # Split by array notation
-                        array_name = obj_path[:obj_path.index('[')]
-                        index = int(obj_path[obj_path.index('[')+1:obj_path.index(']')])
-                        if array_name in data and isinstance(data[array_name], list):
-                            if index < len(data[array_name]):
-                                actual_parent = data[array_name][index]
-                    except Exception as e:
-                        print(f"Warning: Could not extract parent object from path '{path}': {e}")
-            
-            result_entry = {
-                "path": path,
-                "value": r["value"],
-                "original_object": actual_parent if isinstance(actual_parent, dict) else {},
-                "references": references,
-                "article_context": article_context,
-                "array_context": array_context
-            }
-            
-            # Add all optional metadata from r (fuzzy match, empty array info, etc.)
-            result_entry.update({k: v for k, v in r.items() if k not in result_entry and k not in ["parent", "key", "index"]})
-            
-            json_results.append(result_entry)
+        # Get references
+        references = find_references(data, search_value, path)
+        
+        # Get article context if parent has articleId
+        article_context = {}
+        if isinstance(parent, dict) and "articleId" in parent:
+            article_context = get_article_context(data, parent.get("articleId"))
+        
+        # Get array context (3 items before/after for pattern detection)
+        array_context = get_array_context(data, path, items_before=3, items_after=3)
+        
+        # Get the actual parent object (not the array) for nested paths like equipment[0].predecessors[0]
+        actual_parent = parent if isinstance(parent, dict) else {}
+        
+        # Special case: For array element paths (e.g., equipment[0].predecessors[0]), 
+        # we need to get the parent OBJECT (equipment[0]), not the parent ARRAY (predecessors)
+        if not isinstance(parent, dict) and '.' in path:
+            # Extract the object containing the array
+            # Example: equipment[0].predecessors[0] → extract equipment[0]
+            import re
+            obj_match = re.match(r'^(.+\[\d+\])\.[^.]+\[\d+\]$', path)
+            if obj_match:
+                obj_path = obj_match.group(1)  # equipment[0]
+                # Navigate to that object
+                try:
+                    # Split by array notation
+                    array_name = obj_path[:obj_path.index('[')]
+                    index = int(obj_path[obj_path.index('[')+1:obj_path.index(']')])
+                    if array_name in data and isinstance(data[array_name], list):
+                        if index < len(data[array_name]):
+                            actual_parent = data[array_name][index]
+                except Exception as e:
+                    print(f"Warning: Could not extract parent object from path '{path}': {e}")
+        
+        result_entry = {
+            "path": path,
+            "value": r["value"],
+            "original_object": actual_parent if isinstance(actual_parent, dict) else {},
+            "references": references,
+            "article_context": article_context,
+            "array_context": array_context
+        }
+        
+        # Add all optional metadata from r (fuzzy match, empty array info, etc.)
+        result_entry.update({k: v for k, v in r.items() if k not in result_entry and k not in ["parent", "key", "index"]})
+        
+        json_results.append(result_entry)
         
         # Build context section
         context = {
@@ -1032,6 +1035,38 @@ def main():
         
         print(f"Error Type: {error_type}")
         print(f"Total demands in snapshot: {context['total_demands_count']}")
+    
+    # Falls KEINE Ergebnisse gefunden wurden UND noch keine Datei erstellt wurde
+    if not results and not output_file.exists():
+        # KEINE ERGEBNISSE → Erstelle trotzdem eine leere Datei für generate_correction_llm!
+        print(f"No results found - creating empty last_search_results.json for pipeline compatibility")
+        
+        context = {
+            "total_demands_count": len(data.get("demands", [])) if "demands" in data else 0,
+            "total_customer_orders": len(data.get("customerOrderPositions", [])) if "customerOrderPositions" in data else 0,
+            "validation_rules": {
+                "demandId_must_be_unique": True,
+                "successor_must_reference_valid_demand": True
+            }
+        }
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                "snapshot_id": snapshot_id,
+                "search_mode": search_mode,
+                "search_value": search_value,
+                "error_type": error_type,
+                "results_count": 0,
+                "original_structure": [],
+                "results": [],
+                "context": context,
+                "enriched_context": {
+                    "error_summary": f"No instances of '{search_value}' found in snapshot",
+                    "recommendations": ["Verify search term spelling", "Check if field name is correct", "Data may already be correct"]
+                }
+            }, f, indent=2, ensure_ascii=False)
+        
+        print(f"Empty results file saved to: {output_file}")
 
 
 if __name__ == "__main__":
