@@ -384,18 +384,18 @@ DEFAULT_ORCHESTRATOR_SP_INTENT_PROMPT = """Analysiere die User-Anfrage für Smar
 4. Parameter für rename_snapshot (NUR wenn User umbenennen will!):
    - new_name: String EXAKT wie vom User genannt extrahieren
    - Beispiele: 
-     * "benenne um auf X" → "X"
-     * "ändere Name zu My Test. Version 1" → "My Test. Version 1"
-     * "seinen Namen auf sp Agent Achmed. Livetest umändern" → "sp Agent Achmed. Livetest"
+     * "benenne um auf X" -> "X"
+     * "ändere Name zu My Test. Version 1" -> "My Test. Version 1"
+     * "seinen Namen auf sp Agent Achmed. Livetest umändern" -> "sp Agent Achmed. Livetest"
    - BEHALTE Punkte, Leerzeichen, Sonderzeichen im Namen!
    - NICHT verwenden wenn User nur fragt: "welchen Namen hat er?"
 
 5. Parameter für download_snapshot:
    - identifier: Snapshot-ID (UUID) ODER Snapshot-Name aus User-Input
    - Beispiele:
-     * "hole Snapshot abc-123-def" → identifier: "abc-123-def"
-     * "lade 'Production Plan V2' herunter" → identifier: "Production Plan V2"
-     * "download den Snapshot Test" → identifier: "Test"
+     * "hole Snapshot abc-123-def" -> identifier: "abc-123-def"
+     * "lade 'Production Plan V2' herunter" -> identifier: "Production Plan V2"
+     * "download den Snapshot Test" -> identifier: "Test"
 
 Antworte NUR mit JSON:
 {{
