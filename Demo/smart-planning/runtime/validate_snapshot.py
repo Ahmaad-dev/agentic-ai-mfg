@@ -19,8 +19,10 @@ if sys.stdout.encoding != 'utf-8':
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file (aus demo-Verzeichnis)
+# Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 class SmartPlanningAPI:
     """Client for Smart Planning API"""

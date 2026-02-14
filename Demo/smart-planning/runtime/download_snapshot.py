@@ -15,10 +15,13 @@ from typing import Optional, Dict, Any, List
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
-# .env Datei laden
+# .env Datei laden (aus demo-Verzeichnis)
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    from pathlib import Path
+    # Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    load_dotenv(dotenv_path=env_path)
 except ImportError:
     pass  
 

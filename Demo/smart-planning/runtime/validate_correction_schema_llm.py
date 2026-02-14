@@ -15,8 +15,10 @@ from dotenv import load_dotenv
 
 from correction_models import LLMCorrectionResponse
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (aus demo-Verzeichnis)
+# Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 
 def validate_correction_proposal(correction_proposal):

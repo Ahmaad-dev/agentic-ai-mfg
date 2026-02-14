@@ -40,8 +40,10 @@ import sys
 # Disable SSL warnings for test environment
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (aus demo-Verzeichnis)
+# Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 
 class SmartPlanningAPI:

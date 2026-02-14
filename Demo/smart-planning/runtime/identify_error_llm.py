@@ -12,8 +12,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (aus demo-Verzeichnis)
+# Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 
 def load_validation_fix_rules():
