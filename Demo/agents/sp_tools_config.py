@@ -14,6 +14,14 @@ SP_TOOLS = {
         "output": "Snapshot-ID, Name, Timestamp",
         "dependencies": []
     },
+    "download_snapshot": {
+        "script": "download_snapshot.py",
+        "description": "Lädt einen existierenden Snapshot vom Server herunter (by ID oder Name)",
+        "usage": "Wird verwendet bei: 'Hole Snapshot X', 'Lade Snapshot von Server', 'Download Snapshot abc-123'",
+        "output": "Lokale Snapshot-Daten, Metadata, snapshot-data.json in Snapshots/{id}/",
+        "dependencies": [],
+        "requires_identifier": True
+    },
     "validate_snapshot": {
         "script": "validate_snapshot.py",
         "description": "Validiert einen Snapshot und zeigt Fehler/Warnungen",

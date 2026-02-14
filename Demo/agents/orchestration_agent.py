@@ -27,8 +27,8 @@ class OrchestrationAgent(BaseAgent):
         aoai_client,
         model_name: str,
         agents: Dict[str, BaseAgent],
-        router_temperature: float = 0,
-        router_max_tokens: int = 200,
+        router_temperature: float = None,
+        router_max_tokens: int = None,
         system_prompt: str = None,
         interpretation_system_prompt: str = None
     ):
@@ -54,7 +54,8 @@ class OrchestrationAgent(BaseAgent):
         self.aoai_client = aoai_client
         self.model_name = model_name
         self.agents = agents
-        self.router_max_tokens = router_max_tokens
+        self.router_max_tokens = router_max_tokens or CHAT_HISTORY_CONFIG["router_max_tokens"]
+        self.router_temperature = router_temperature if router_temperature is not None else CHAT_HISTORY_CONFIG["router_temperature"]
         # Interpretation Prompt aus Config (zentralisiert)
         self.interpretation_system_prompt = (
             interpretation_system_prompt or DEFAULT_ORCHESTRATOR_INTERPRETATION_PROMPT
@@ -101,8 +102,8 @@ class OrchestrationAgent(BaseAgent):
                     {"role": "system", "content": "Du bist ein präziser Execution Planner. Antworte nur mit JSON."},
                     {"role": "user", "content": planning_prompt}
                 ],
-                temperature=0.3,  # Deterministischer für Planung
-                max_tokens=800
+                temperature=CHAT_HISTORY_CONFIG["planning_temperature"],
+                max_tokens=CHAT_HISTORY_CONFIG["max_planning_tokens"] 
             )
             
             output = response.choices[0].message.content.strip()
@@ -287,6 +288,7 @@ class OrchestrationAgent(BaseAgent):
                     break
             
             metadata = {
+                "agent": "Orchestrator",  # Multi-Step → Orchestrator
                 "execution_plan": plan,
                 "completed_steps": step_results,
                 "total_steps": len(steps),
@@ -349,8 +351,8 @@ class OrchestrationAgent(BaseAgent):
                     {"role": "system", "content": self.interpretation_system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.5,
-                max_tokens=400
+                temperature=CHAT_HISTORY_CONFIG["interpretation_temperature"],
+                max_tokens=CHAT_HISTORY_CONFIG["max_interpretation_tokens"]
             )
             
             return response.choices[0].message.content.strip()
@@ -470,8 +472,8 @@ class OrchestrationAgent(BaseAgent):
                     {"role": "system", "content": self.interpretation_system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.5,
-                max_tokens=400
+                temperature=CHAT_HISTORY_CONFIG["interpretation_temperature"],
+                max_tokens=CHAT_HISTORY_CONFIG["max_interpretation_tokens"]
             )
             
             interpretation = response.choices[0].message.content.strip()
@@ -492,7 +494,7 @@ class OrchestrationAgent(BaseAgent):
         
         # AGENTIC MODE: Erstelle Execution Plan mit Adaptive Re-Planning
         if self.agentic_mode:
-            max_replanning_attempts = 2  # Max 2 Re-Planning Versuche
+            max_replanning_attempts = 4  # Max 4 Re-Planning Versuche
             attempt = 0
             original_input = user_input
             
@@ -576,7 +578,7 @@ class OrchestrationAgent(BaseAgent):
                 "metadata": {"error": "sp_agent_missing"}
             }
         
-        # Extrahiere Snapshot-ID aus Historie (UUID-Pattern)
+        # Extrahiere Snapshot-ID aus Historie
         snapshot_id_from_history = self._extract_snapshot_id_from_history(chat_history)
         
         # Nutze zentralen Intent Analysis Prompt
@@ -593,8 +595,8 @@ class OrchestrationAgent(BaseAgent):
                     {"role": "system", "content": "Du bist ein SP_Agent Intent Analyzer. Antworte nur mit JSON."},
                     {"role": "user", "content": intent_prompt}
                 ],
-                temperature=0.2,
-                max_tokens=300
+                temperature=CHAT_HISTORY_CONFIG["sp_intent_temperature"],
+                max_tokens=CHAT_HISTORY_CONFIG["max_intent_tokens"]
             )
             
             output = response.choices[0].message.content.strip()
@@ -636,14 +638,35 @@ class OrchestrationAgent(BaseAgent):
                 }
             
             elif intent["action_type"] == "tool":
-                # Baue Argument-Liste
+                # Baue Argument-Liste mit Historie-Fallbacks
                 args = []
                 snapshot_id = intent.get("snapshot_id")
                 
+                # FALLBACK: Snapshot-ID aus Historie wenn LLM keine liefert
+                if not snapshot_id and snapshot_id_from_history:
+                    snapshot_id = snapshot_id_from_history
+                    logger.info(f"[{self.name}] Snapshot-ID aus Historie verwendet: {snapshot_id}")
+                
                 if intent["action_name"] == "rename_snapshot":
                     new_name = intent.get("parameters", {}).get("new_name")
+                    
+                    # Kein Fallback für Namen - muss im aktuellen Input sein!
                     if snapshot_id and new_name:
                         args = [snapshot_id, new_name]
+                    elif snapshot_id:
+                        args = [snapshot_id]
+                
+                elif intent["action_name"] == "download_snapshot":
+                    identifier = intent.get("parameters", {}).get("identifier")
+                    
+                    # Identifier MUSS vorhanden sein (ID oder Name)
+                    if identifier:
+                        args = [identifier]
+                    else:
+                        # Fallback: Nutze snapshot_id falls vorhanden
+                        if snapshot_id:
+                            args = [snapshot_id]
+                
                 elif snapshot_id:
                     args = [snapshot_id]
                 
@@ -653,7 +676,7 @@ class OrchestrationAgent(BaseAgent):
                 )
                 
                 # Speichere Snapshot-Metadaten für späteren Zugriff
-                if intent["action_name"] == "create_snapshot" and "snapshot_metadata" in result:
+                if intent["action_name"] in ["create_snapshot", "download_snapshot"] and "snapshot_metadata" in result:
                     self.last_snapshot_metadata = result["snapshot_metadata"]
                     logger.info(f"[{self.name}] Snapshot-Metadaten gespeichert für späteren Zugriff")
                 
@@ -723,64 +746,66 @@ class OrchestrationAgent(BaseAgent):
         context_parts = []
         
         if action_type == "pipeline":
-            context_parts.append(f"Pipeline '{action_name}' wurde ausgeführt.")
-            context_parts.append(f"Status: {'Erfolgreich' if success else 'Fehlgeschlagen'}")
+            context_parts.append(f"Pipeline: {action_name}")
+            context_parts.append(f"Status: {'success' if success else 'failed'}")
             
             if not success:
-                failed_at = result.get("failed_at", "unbekannt")
-                context_parts.append(f"Fehlgeschlagen bei Schritt: {failed_at}")
-                context_parts.append(f"Fehler: {error or stderr}")
+                failed_at = result.get("failed_at")
+                context_parts.append(f"Failed at step: {failed_at}")
+                context_parts.append(f"Error: {error or stderr}")
                 
-                # Recovery-Suggestion ist jetzt strukturiert (Dict statt String)
+                # Recovery-Suggestion als Rohdaten
                 recovery = result.get("recovery_suggestion")
                 if recovery:
                     if isinstance(recovery, dict):
                         # Strukturierte Recovery-Daten
                         error_type = recovery.get("error_type", "unknown")
-                        context_parts.append(f"Fehlertyp: {error_type}")
+                        context_parts.append(f"Error type: {error_type}")
                         
                         if error_type == "missing_prerequisite":
-                            context_parts.append(f"Fehlender Schritt: {recovery.get('missing_step')}")
-                            context_parts.append(f"Benötigte Datei: {recovery.get('required_file')}")
+                            context_parts.append(f"Missing step: {recovery.get('missing_step')}")
+                            context_parts.append(f"Required file: {recovery.get('required_file')}")
                         elif error_type == "snapshot_not_found":
-                            context_parts.append("Snapshot-ID ungültig oder nicht existent")
+                            context_parts.append("Issue: snapshot ID invalid or non-existent")
                         elif error_type == "authentication_failed":
-                            context_parts.append(f"Konfigurationsproblem: {recovery.get('config_issue')}")
+                            context_parts.append(f"Config issue: {recovery.get('config_issue')}")
                         
-                        # Füge alle recovery-Felder hinzu für LLM-Kontext
+                        # Füge alle recovery-Felder hinzu als Rohdaten
                         for key, value in recovery.items():
                             if key not in ["error_type"]:
                                 context_parts.append(f"{key}: {value}")
                     else:
-                        # Fallback für alte String-Recovery (während Übergangszeit)
-                        context_parts.append(f"Recovery-Info: {recovery}")
+                        # Fallback für alte String-Recovery
+                        context_parts.append(f"Recovery data: {recovery}")
             else:
                 completed = result.get("completed_steps", [])
                 # completed_steps ist eine Liste von Dicts, extrahiere step-Namen
                 step_names = [s.get("step", "unknown") for s in completed]
-                context_parts.append(f"Abgeschlossene Schritte ({len(step_names)}): {', '.join(step_names)}")
+                context_parts.append(f"Completed steps ({len(step_names)}): {', '.join(step_names)}")
                 
                 final_validation = result.get("final_validation")
                 if final_validation:
                     is_valid = final_validation.get("is_valid", False)
                     errors = final_validation.get("errors", 0)
                     warnings = final_validation.get("warnings", 0)
-                    context_parts.append(f"Validierung: is_valid={is_valid}, errors={errors}, warnings={warnings}")
+                    context_parts.append(f"Final validation: is_valid={is_valid}, errors={errors}, warnings={warnings}")
         
         else:  # Tool
-            context_parts.append(f"Tool '{action_name}' wurde ausgeführt.")
-            context_parts.append(f"Status: {'Erfolgreich' if success else 'Fehlgeschlagen'}")
+            context_parts.append(f"Tool: {action_name}")
+            context_parts.append(f"Status: {'success' if success else 'failed'}")
             
             if not success:
-                context_parts.append(f"Fehler: {error or stderr}")
+                context_parts.append(f"Error: {error or stderr}")
             else:
-                # Spezialfall: create_snapshot hat Metadaten (ID, Name)
-                if action_name == "create_snapshot" and "snapshot_metadata" in result:
+                # Spezialfall: create_snapshot, download_snapshot haben Metadaten (ID, Name)
+                if action_name in ["create_snapshot", "download_snapshot"] and "snapshot_metadata" in result:
                     import json
                     metadata = result["snapshot_metadata"]
                     
-                    context_parts.append(f"Snapshot erfolgreich erstellt.")
-                    context_parts.append(f"Vollständige Metadaten:")
+                    # NUR Rohdaten - LLM entscheidet wie sie es formuliert
+                    action_label = "created" if action_name == "create_snapshot" else "downloaded"
+                    context_parts.append(f"Action: snapshot_{action_label}")
+                    context_parts.append(f"Snapshot-Metadaten:")
                     context_parts.append(json.dumps(metadata, indent=2, ensure_ascii=False))
                 
                 # Spezialfall: validate_snapshot hat strukturierte Validation-Daten
@@ -790,27 +815,38 @@ class OrchestrationAgent(BaseAgent):
                     errors = validation.get("errors", 0)
                     warnings = validation.get("warnings", 0)
                     
-                    # KLARE Aussage für LLM: Was bedeutet is_valid?
-                    if is_valid and errors == 0:
-                        context_parts.append(f"✅ SNAPSHOT IST VALIDE: Der Server hat den Snapshot erfolgreich akzeptiert (isSuccessfullyValidated=true)")
-                        context_parts.append(f"Validierung: errors={errors}, warnings={warnings}")
-                    else:
-                        context_parts.append(f"❌ SNAPSHOT IST NICHT VALIDE: Der Snapshot hat Fehler und kann nicht verwendet werden")
-                        context_parts.append(f"Validierung: is_valid={is_valid}, errors={errors}, warnings={warnings}")
+                    # WICHTIG: Zeige auch Snapshot-Metadata (Name, ID, etc.)
+                    if "snapshot_metadata" in result:
+                        import json
+                        metadata = result["snapshot_metadata"]
+                        context_parts.append("Snapshot-Metadaten:")
+                        context_parts.append(json.dumps(metadata, indent=2, ensure_ascii=False))
+                        
+                        # Minimaler Hinweis für LLM (keine hardcoded Formatierung!)
+                        if "llm_corrections" in metadata and metadata["llm_corrections"]:
+                            context_parts.append("\nNote: llm_corrections array contains applied KI corrections.")
                     
-                    # Fehler-Details
+                    # Status als Rohdaten - LLM interpretiert natürlich
+                    if is_valid and errors == 0:
+                        context_parts.append(f"Server validation: isSuccessfullyValidated=true")
+                        context_parts.append(f"Metrics: errors={errors}, warnings={warnings}")
+                    else:
+                        context_parts.append(f"Server validation: snapshot has errors, cannot be used")
+                        context_parts.append(f"Metrics: is_valid={is_valid}, errors={errors}, warnings={warnings}")
+                    
+                    # Fehler-Details als Rohdaten
                     if errors > 0:
                         error_details = validation.get("error_details", [])
-                        context_parts.append("Fehler-Details:")
+                        context_parts.append("Error details:")
                         for err in error_details:
-                            context_parts.append(f"  - {err.get('message', 'Unbekannt')}")
+                            context_parts.append(f"  - {err.get('message', 'Unknown')}")
                     
-                    # Warning-Details
+                    # Warning-Details als Rohdaten
                     if warnings > 0:
                         warning_details = validation.get("warning_details", [])
-                        context_parts.append(f"Warning-Details ({warnings} insgesamt):")
+                        context_parts.append(f"Warning details ({warnings} total):")
                         for warn in warning_details:
-                            context_parts.append(f"  - {warn.get('message', 'Unbekannt')}")
+                            context_parts.append(f"  - {warn.get('message', 'Unknown')}")
                 
                 elif stdout:
                     context_parts.append(f"Output: {stdout[:500]}")
@@ -842,8 +878,8 @@ class OrchestrationAgent(BaseAgent):
                     {"role": "system", "content": self.interpretation_system_prompt},
                     {"role": "user", "content": interpret_prompt}
                 ],
-                temperature=0.7,
-                max_tokens=1200  # Mehr Platz für Details bei Errors/Warnings
+                temperature=CHAT_HISTORY_CONFIG["sp_result_temperature"],
+                max_tokens=CHAT_HISTORY_CONFIG["max_interpretation_tokens"]
             )
             
             return response.choices[0].message.content.strip()

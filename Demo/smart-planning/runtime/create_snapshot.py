@@ -194,6 +194,10 @@ def create_and_save_snapshot(snapshots_dir: Optional[Path] = None) -> Dict[str, 
     metadata = {k: v for k, v in snapshot_data.items() if k != 'dataJson'}
     data_json = snapshot_data.get('dataJson', {})
     
+    # Ergänze Source-Information (eindeutig für LLM)
+    metadata["snapshot_source"] = "created_by_user"
+    metadata["user_created_at"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     # Metadata-Datei im Hybrid-Format speichern
     metadata_file = snapshot_folder / "metadata.txt"
     with open(metadata_file, 'w', encoding='utf-8') as f:

@@ -88,19 +88,33 @@ class SPAgent(BaseAgent):
                 "tool": tool_name
             }
             
-            # Spezialfall: create_snapshot → Parse Snapshot-Metadaten (Name, ID)
-            if tool_name == "create_snapshot" and result.returncode == 0:
+            # Spezialfall: create_snapshot, download_snapshot → Parse Snapshot-Metadaten (Name, ID)
+            if tool_name in ["create_snapshot", "download_snapshot"] and result.returncode == 0:
                 snapshot_metadata = self._read_snapshot_metadata_from_stdout(result.stdout)
                 if snapshot_metadata:
                     base_result["snapshot_metadata"] = snapshot_metadata
             
-            # Spezialfall: validate_snapshot → Parse Validation-Daten
+            # Spezialfall: validate_snapshot → Parse Validation-Daten UND Metadata
             if tool_name == "validate_snapshot" and result.returncode == 0 and args:
                 snapshot_id = args[0] if args else None
                 if snapshot_id:
+                    # Lese Validation-Daten (Errors/Warnings)
                     validation_data = self._read_validation_data(snapshot_id)
                     if validation_data:
                         base_result["validation"] = validation_data
+                    
+                    # Lese AUCH Metadata (Name, ID, etc.)
+                    snapshot_metadata = self._read_snapshot_metadata(snapshot_id)
+                    if snapshot_metadata:
+                        base_result["snapshot_metadata"] = snapshot_metadata
+            
+            # Spezialfall: rename_snapshot, identify_snapshot → Lese Metadata nach Erfolg
+            if tool_name in ["rename_snapshot", "identify_snapshot"] and result.returncode == 0 and args:
+                snapshot_id = args[0] if args else None
+                if snapshot_id:
+                    snapshot_metadata = self._read_snapshot_metadata(snapshot_id)
+                    if snapshot_metadata:
+                        base_result["snapshot_metadata"] = snapshot_metadata
             
             return base_result
             
@@ -123,13 +137,26 @@ class SPAgent(BaseAgent):
                 return None
             
             snapshot_id = matches[0]  # Erste gefundene UUID
+            return self._read_snapshot_metadata(snapshot_id)
+            
+        except Exception as e:
+            logger.warning(f"[{self.name}] Fehler beim Lesen der Snapshot-Metadaten aus stdout: {e}")
+            return None
+    
+    def _read_snapshot_metadata(self, snapshot_id: str) -> Optional[Dict]:
+        """Liest metadata.txt + LLM Corrections für eine gegebene Snapshot-ID"""
+        try:
+            import re
+            import json
+            from pathlib import Path
+            
             snapshot_dir = self.runtime_dir.parent / "Snapshots" / snapshot_id
             metadata_file = snapshot_dir / "metadata.txt"
             
             if not metadata_file.exists():
                 return None
             
-            # Lese metadata.txt und extrahiere JSON
+            # Lese metadata.txt und extrahiere ersten JSON-Block (Snapshot-Informationen)
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 content = f.read()
             
@@ -140,7 +167,41 @@ class SPAgent(BaseAgent):
             
             metadata = json.loads(json_match.group(1))
             
-            # Gib ALLE Metadaten zurück (nicht nur 4 Felder)
+            # SAUBER: Lade LLM Corrections aus iteration-X/llm_correction_proposal.json
+            llm_corrections = []
+            
+            # Suche alle iteration-X Ordner
+            iteration_dirs = sorted(
+                [d for d in snapshot_dir.iterdir() if d.is_dir() and d.name.startswith("iteration-")],
+                key=lambda d: int(d.name.split("-")[1])  # Sortiere nach Nummer
+            )
+            
+            for iteration_dir in iteration_dirs:
+                correction_file = iteration_dir / "llm_correction_proposal.json"
+                if correction_file.exists():
+                    try:
+                        with open(correction_file, 'r', encoding='utf-8') as f:
+                            correction_data = json.load(f)
+                        
+                        # Extrahiere relevante Felder aus correction_proposal
+                        proposal = correction_data.get("correction_proposal", {})
+                        iteration_num = correction_data.get("iteration", 0)
+                        
+                        llm_corrections.append({
+                            "iteration": iteration_num,
+                            "action": proposal.get("action"),
+                            "target_path": proposal.get("target_path"),
+                            "old_value": proposal.get("current_value"),
+                            "new_value": proposal.get("new_value"),
+                            "reasoning": proposal.get("reasoning")
+                        })
+                    except Exception as e:
+                        logger.warning(f"[{self.name}] Fehler beim Lesen von {correction_file}: {e}")
+            
+            # Füge Corrections zu Metadata hinzu
+            if llm_corrections:
+                metadata["llm_corrections"] = llm_corrections
+            
             return metadata
             
         except Exception as e:
@@ -167,16 +228,19 @@ class SPAgent(BaseAgent):
             errors = [msg for msg in validation_data if msg.get('level') == 'ERROR']
             warnings = [msg for msg in validation_data if msg.get('level') == 'WARNING']
             
-            # Server-Validierungsstatus
-            is_validated = False
+            # Server-Validierungsstatus (optional - nur wenn uploaded)
+            server_is_validated = False
             if upload_result_file.exists():
                 with open(upload_result_file, 'r', encoding='utf-8') as f:
                     upload_data = json.load(f)
                     server_response = upload_data.get("server_response", {})
-                    is_validated = server_response.get("isSuccessfullyValidated", False)
+                    server_is_validated = server_response.get("isSuccessfullyValidated", False)
             
+            # WICHTIG: Snapshot ist VALIDE wenn KEINE ERRORS vorhanden sind (Warnings sind OK!)
+            # Server-Status ist optional (nur relevant wenn Snapshot hochgeladen wurde)
             return {
-                "is_valid": is_validated and error_count == 0,
+                "is_valid": error_count == 0,  # Valide = Keine Errors (unabhängig von Upload)
+                "server_validated": server_is_validated,  # Optionaler Server-Status
                 "errors": error_count,
                 "warnings": warning_count,
                 "error_details": errors[:3],  # Max 3 Fehler

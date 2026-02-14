@@ -6,6 +6,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from azure.search.documents.models import VectorizedQuery
 from .base_agent import BaseAgent
+from agent_config import CHAT_HISTORY_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +23,11 @@ class RAGAgent(BaseAgent):
         system_prompt: Optional[str] = None,
         description: Optional[str] = None,
         routing_description: Optional[str] = None,
-        temperature: float = 0.3,
-        max_tokens: Optional[int] = 700,
-        max_history_pairs: int = 2,
-        top_k: int = 8,
-        min_score: float = 0.5
+        temperature: float = None,
+        max_tokens: Optional[int] = None,
+        max_history_pairs: int = None,
+        top_k: int = None,
+        min_score: float = None
     ):
         """
         Args:
@@ -37,28 +38,28 @@ class RAGAgent(BaseAgent):
             system_prompt: Custom System-Prompt (None = default)
             description: Kurze Beschreibung (für Logging)
             routing_description: Routing-optimierte Beschreibung (für Orchestrator)
-            temperature: LLM Temperature (default: 0.3 für Faktentreue)
-            max_tokens: Max Output-Tokens (default: 700)
-            max_history_pairs: Anzahl Message-Paare (default: 2 = 4 Messages)
-            top_k: Anzahl Retrieval-Ergebnisse (default: 8)
-            min_score: Minimaler Relevanz-Score (default: 0.5)
+            temperature: LLM Temperature (None = aus Config: 0.3 für Faktentreue)
+            max_tokens: Max Output-Tokens (None = aus Config: 3000)
+            max_history_pairs: Anzahl Message-Paare (None = aus Config: 5)
+            top_k: Anzahl Retrieval-Ergebnisse (None = aus Config: 8)
+            min_score: Minimaler Relevanz-Score (None = aus Config: 0.5)
         """
         super().__init__(
             name="RAG",
             system_prompt=system_prompt,
             description=description,
             routing_description=routing_description,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_history_pairs=max_history_pairs
+            temperature=temperature if temperature is not None else CHAT_HISTORY_CONFIG["rag_temperature"],
+            max_tokens=max_tokens if max_tokens is not None else CHAT_HISTORY_CONFIG["max_tokens"],
+            max_history_pairs=max_history_pairs if max_history_pairs is not None else CHAT_HISTORY_CONFIG["max_history_pairs"]
         )
         
         self.aoai_client = aoai_client
         self.model_name = model_name
         self.emb_model_name = emb_model_name
         self.search_client = search_client
-        self.top_k = top_k
-        self.min_score = min_score
+        self.top_k = top_k if top_k is not None else CHAT_HISTORY_CONFIG["rag_top_k"]
+        self.min_score = min_score if min_score is not None else CHAT_HISTORY_CONFIG["rag_min_score"]
     
     def _embed(self, text: str):
         """Erstellt Embedding für Text"""
