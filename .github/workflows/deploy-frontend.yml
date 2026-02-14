@@ -30,8 +30,8 @@ jobs:
         id: get-backend-url
         run: |
           BACKEND_URL=$(az containerapp show \
-            --name ca-agentic-ai-backend \
-            --resource-group rg-agentic-ai-mfg-prod \
+            --name ca-agentic-ai-backend-34b7u5 \
+            --resource-group rg-agentic-ai-mfg-environment \
             --query properties.configuration.ingress.fqdn \
             --output tsv)
           echo "backend_url=${BACKEND_URL}" >> $GITHUB_OUTPUT
