@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Image Version Tag (z.B. 0.1.0)'
+        description: 'Image Version Tag'
         required: true
         default: '0.1.0'
 
