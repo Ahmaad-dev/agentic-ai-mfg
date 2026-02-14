@@ -52,7 +52,7 @@ jobs:
 
       - name: Deployment Summary
         run: |
-          echo "### 🎉 Image erfolgreich gebaut!" >> $GITHUB_STEP_SUMMARY
+          echo "### Image erfolgreich gebaut!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
