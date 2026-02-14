@@ -64,7 +64,7 @@ CHAT_HISTORY_CONFIG = {
 }
 ```
 
-## 🏃 Nutzung
+## 🏃 Nutzung 
 
 ### Chat starten
 ```bash
