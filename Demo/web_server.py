@@ -169,7 +169,7 @@ def get_recent_messages(messages, max_pairs: int = 5):
 @app.route('/')
 def index():
     """Hauptseite"""
-    return render_template('chat.html')
+    return render_template('index.html')
 
 
 @app.route('/api/speech-config', methods=['GET'])

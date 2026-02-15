@@ -2,12 +2,12 @@
   "routes": [
     {
       "route": "/*",
-      "serve": "/chat.html",
+      "serve": "/index.html",
       "statusCode": 200
     }
   ],
   "navigationFallback": {
-    "rewrite": "/chat.html"
+    "rewrite": "/index.html"
   },
   "mimeTypes": {
     ".json": "application/json",
@@ -23,7 +23,7 @@
   },
   "responseOverrides": {
     "404": {
-      "rewrite": "/chat.html",
+      "rewrite": "/index.html",
       "statusCode": 200
     }
   }
