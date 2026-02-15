@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "ui/**"
+      - "Demo/ui/**"
       - ".github/workflows/deploy-frontend.yml"
   workflow_dispatch:
 
@@ -38,7 +38,7 @@ jobs:
 
       - name: Update API Config with Backend URL
         run: |
-          sed -i "s|BACKEND_URL_PLACEHOLDER|${{ steps.get-backend-url.outputs.backend_url }}|g" ui/scripts/config.js
+          sed -i "s|BACKEND_URL_PLACEHOLDER|${{ steps.get-backend-url.outputs.backend_url }}|g" Demo/ui/scripts/config.js
           echo "Updated config.js with backend URL: ${{ steps.get-backend-url.outputs.backend_url }}"
 
       - name: Build And Deploy Static Web App
@@ -47,6 +47,6 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "ui"
+          app_location: "Demo/ui"
           output_location: ""
           skip_app_build: true
