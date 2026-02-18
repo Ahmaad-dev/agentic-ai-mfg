@@ -18,8 +18,6 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ github.event.inputs.version }}
     
     steps:
       - uses: actions/checkout@v4
@@ -68,38 +66,3 @@ jobs:
           echo "**Image:** ${{ steps.acr.outputs.name }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-
-      - name: Azure login via OIDC
-        uses: azure/login@v2
-        with:
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-
-      - name: Terraform init
-        working-directory: infra/agentic-ai-mfg-infrastructure-terraform/infra
-        run: terraform init -backend-config=backend.tfvars
-
-      - name: Apply new image tag
-        working-directory: infra/agentic-ai-mfg-infrastructure-terraform/infra
-        env:
-          TF_VAR_image_tag: ${{ needs.build-and-push.outputs.image_tag }}
-          TF_VAR_azure_openai_api_key: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          TF_VAR_azure_search_admin_key: ${{ secrets.AZURE_SEARCH_ADMIN_KEY }}
-          TF_VAR_client_secret: ${{ secrets.CLIENT_SECRET }}
-          TF_VAR_azure_speech_key: ${{ secrets.AZURE_SPEECH_KEY }}
-        run: terraform apply -auto-approve
-
-      - name: Deployment Summary
-        run: |
-          echo "### Container App aktualisiert!" >> $GITHUB_STEP_SUMMARY
-          echo "**Image Tag:** ${{ needs.build-and-push.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
