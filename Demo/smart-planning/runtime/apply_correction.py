@@ -22,8 +22,15 @@ from pydantic import ValidationError
 
 from correction_models import LLMCorrectionResponse
 
-def load_current_snapshot_id():
-    """Load the current snapshot ID from runtime-files/current_snapshot.txt"""
+# Storage Manager (LOCAL / AZURE)
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage, get_iteration_folders_with_file
+
+def load_current_snapshot_id(snapshot_id: str = None):
+    """Load the current snapshot ID. Argument hat Priorität, Fallback auf current_snapshot.txt."""
+    if snapshot_id:
+        return snapshot_id
     current_snapshot_file = Path("runtime-files/current_snapshot.txt")
     if not current_snapshot_file.exists():
         raise FileNotFoundError("runtime-files/current_snapshot.txt not found")
@@ -40,69 +47,32 @@ def load_current_snapshot_id():
 
 def get_latest_iteration_number(snapshot_id):
     """Find the highest iteration folder that contains llm_correction_proposal.json"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    
-    if not snapshot_folder.exists():
-        raise FileNotFoundError(f"Snapshot folder not found: {snapshot_folder}")
-    
-    iteration_folders = [
-        d for d in snapshot_folder.iterdir()
-        if d.is_dir() and re.match(r'^iteration-(\d+)$', d.name)
-    ]
-    
-    if not iteration_folders:
-        raise FileNotFoundError(f"No iteration folders found in {snapshot_folder}")
-    
-    # Filter for folders that contain llm_correction_proposal.json
-    valid_iterations = [
-        d for d in iteration_folders
-        if (d / "llm_correction_proposal.json").exists()
-    ]
-    
-    if not valid_iterations:
-        raise FileNotFoundError(f"No iteration folders with llm_correction_proposal.json found")
-    
-    # Get highest valid iteration number
-    iteration_numbers = [
-        int(re.match(r'^iteration-(\d+)$', d.name).group(1))
-        for d in valid_iterations
-    ]
-    
-    return max(iteration_numbers)
+    nums = get_iteration_folders_with_file(snapshot_id, "llm_correction_proposal.json")
+    if not nums:
+        raise FileNotFoundError(f"No iteration folders with llm_correction_proposal.json found for {snapshot_id}")
+    return max(nums)
 
 def backup_files_to_iteration(snapshot_id, iteration_number):
     """Copy snapshot-data.json and snapshot-validation.json to iteration folder"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    iteration_folder = snapshot_folder / f"iteration-{iteration_number}"
-    
-    # Files to backup
-    files_to_backup = [
-        "snapshot-data.json",
-        "snapshot-validation.json"
-    ]
-    
+    storage = get_storage()
+    files_to_backup = ["snapshot-data.json", "snapshot-validation.json"]
+
     print(f"Backing up files to iteration-{iteration_number}...")
     for filename in files_to_backup:
-        source = snapshot_folder / filename
-        destination = iteration_folder / filename
-        
-        if source.exists():
-            shutil.copy2(source, destination)
+        data = storage.load_json(f"{snapshot_id}/{filename}")
+        if data is not None:
+            storage.save_json(f"{snapshot_id}/iteration-{iteration_number}/{filename}", data)
             print(f"  ✓ Backed up: {filename}")
         else:
             print(f"  ⚠ Skipped (not found): {filename}")
 
 def load_correction_proposal(snapshot_id, iteration_number):
     """Load the correction proposal from iteration folder"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    iteration_folder = snapshot_folder / f"iteration-{iteration_number}"
-    
-    proposal_file = iteration_folder / "llm_correction_proposal.json"
-    if not proposal_file.exists():
+    storage = get_storage()
+    data = storage.load_json(f"{snapshot_id}/iteration-{iteration_number}/llm_correction_proposal.json")
+    if data is None:
         raise FileNotFoundError(f"llm_correction_proposal.json not found in iteration-{iteration_number}")
-    
-    with open(proposal_file, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return data
 
 def validate_proposal_schema(correction_proposal):
     """
@@ -340,13 +310,13 @@ def remove_from_array(data, target_path, item_to_remove):
 
 def apply_correction(snapshot_id, correction_proposal):
     """Apply correction proposal to snapshot-data.json"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    snapshot_file = snapshot_folder / "snapshot-data.json"
-    
+    storage = get_storage()
+
     # Load snapshot data
     print("\nLoading snapshot data...")
-    with open(snapshot_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    data = storage.load_json(f"{snapshot_id}/snapshot-data.json")
+    if data is None:
+        raise FileNotFoundError(f"snapshot-data.json not found for snapshot {snapshot_id}")
     
     proposal = correction_proposal.get("correction_proposal", {})
     action = proposal.get("action")
@@ -416,21 +386,18 @@ def apply_correction(snapshot_id, correction_proposal):
     # Save updated snapshot data (only if not manual intervention)
     if action != "manual_intervention_required":
         print(f"\nSaving corrected snapshot data...")
-        with open(snapshot_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        
-        print(f"Saved to: {snapshot_file}")
+        storage.save_json(f"{snapshot_id}/snapshot-data.json", data)
+        print(f"Saved: {snapshot_id}/snapshot-data.json")
     else:
         print(f"\nSnapshot data NOT modified (manual intervention required)")
-    
+
     return data
 
 def append_correction_to_metadata(snapshot_id, correction_proposal):
     """Append LLM correction proposal to metadata.txt"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    metadata_file = snapshot_folder / "metadata.txt"
-    
-    if not metadata_file.exists():
+    storage = get_storage()
+    existing_content = storage.load_text(f"{snapshot_id}/metadata.txt")
+    if existing_content is None:
         print(f"\n⚠ metadata.txt not found, skipping metadata update")
         return
     
@@ -491,17 +458,21 @@ def append_correction_to_metadata(snapshot_id, correction_proposal):
     correction_entry += json.dumps(correction_proposal, indent=2, ensure_ascii=False)
     correction_entry += "\n```\n\n"
     
-    # Append to metadata.txt
-    with open(metadata_file, 'a', encoding='utf-8') as f:
-        f.write(correction_entry)
-    
+    # Append to metadata.txt via StorageManager
+    storage.save_text(f"{snapshot_id}/metadata.txt", existing_content + correction_entry)
     print(f"\n✓ Correction entry added to metadata.txt")
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
+                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
+    args, _ = parser.parse_known_args()
+
     print("=== Correction Applier ===\n")
     
-    # Load snapshot ID
-    snapshot_id = load_current_snapshot_id()
+    # Load snapshot ID (Argument hat Priorität)
+    snapshot_id = load_current_snapshot_id(args.snapshot_id)
     print(f"Snapshot ID: {snapshot_id}")
     
     # Get latest iteration number

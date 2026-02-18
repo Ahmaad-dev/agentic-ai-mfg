@@ -11,6 +11,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
+# Storage Manager (LOCAL / AZURE)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage
+
 # UTF-8 Encoding für Windows-Terminal
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -21,8 +25,10 @@ env_path = Path(__file__).parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 
-def load_snapshot_id():
-    """Load current snapshot ID from runtime-files/current_snapshot.txt"""
+def load_snapshot_id(snapshot_id: str = None):
+    """Load current snapshot ID. Argument hat Priorität, Fallback auf current_snapshot.txt."""
+    if snapshot_id:
+        return snapshot_id
     runtime_files_dir = Path(__file__).parent / "runtime-files"
     current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
     
@@ -41,27 +47,18 @@ def load_snapshot_id():
 
 def load_metadata(snapshot_id):
     """Load metadata.txt from snapshot folder"""
-    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-    metadata_file = snapshot_dir / "metadata.txt"
-    
-    if not metadata_file.exists():
-        print(f"Error: {metadata_file} not found")
+    storage = get_storage()
+    content = storage.load_text(f"{snapshot_id}/metadata.txt")
+    if content is None:
+        print(f"Error: metadata.txt not found for snapshot {snapshot_id}")
         sys.exit(1)
-    
-    with open(metadata_file, 'r', encoding='utf-8') as f:
-        return f.read()
+    return content
 
 
 def load_upload_results(snapshot_id):
     """Load upload-result.json from snapshot folder (optional)"""
-    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-    upload_results_file = snapshot_dir / "upload-result.json"
-    
-    if not upload_results_file.exists():
-        return None
-    
-    with open(upload_results_file, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    storage = get_storage()
+    return storage.load_json(f"{snapshot_id}/upload-result.json")
 
 
 def generate_audit_report_with_llm(metadata_content, upload_results, snapshot_id):
@@ -301,41 +298,41 @@ Erstelle jetzt den vollständigen Prüfbericht."""
 
 def save_audit_report(snapshot_id, report_content, token_usage):
     """Save audit report to snapshot folder"""
-    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-    
-    # Save as Markdown
-    report_file = snapshot_dir / "audit-report.md"
-    with open(report_file, 'w', encoding='utf-8') as f:
-        f.write(report_content)
-    
-    print(f"✓ Audit report saved to: {report_file}")
-    
-    # Save token usage stats
-    stats_file = snapshot_dir / "audit-report-stats.json"
+    storage = get_storage()
+
+    storage.save_text(f"{snapshot_id}/audit-report.md", report_content)
+    print(f"✓ Audit report saved ({storage.mode} mode): {snapshot_id}/audit-report.md")
+
     stats = {
         "generated_at": datetime.now().isoformat(),
         "snapshot_id": snapshot_id,
         "token_usage": token_usage,
-        "report_file": str(report_file)
+        "report_path": f"{snapshot_id}/audit-report.md"
     }
-    
-    with open(stats_file, 'w', encoding='utf-8') as f:
-        json.dump(stats, f, indent=2)
-    
-    print(f"✓ Report statistics saved to: {stats_file}")
-    
-    return report_file
+    storage.save_json(f"{snapshot_id}/audit-report-stats.json", stats)
+    print(f"✓ Report statistics saved: {snapshot_id}/audit-report-stats.json")
+
+    # Return a path string for the report (for display)
+    if storage.mode == "LOCAL":
+        return storage._get_local_path(f"{snapshot_id}/audit-report.md")
+    return f"{snapshot_id}/audit-report.md"
 
 
 def main():
     """Main function"""
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
+                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
+    args, _ = parser.parse_known_args()
+
     print("=" * 70)
     print("AUDIT REPORT GENERATOR")
     print("=" * 70)
     print()
     
-    # Load snapshot ID
-    snapshot_id = load_snapshot_id()
+    # Load snapshot ID (Argument hat Priorität)
+    snapshot_id = load_snapshot_id(args.snapshot_id)
     print(f"Snapshot ID: {snapshot_id}")
     print()
     

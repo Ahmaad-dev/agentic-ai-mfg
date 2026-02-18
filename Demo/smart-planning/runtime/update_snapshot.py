@@ -37,6 +37,10 @@ from dotenv import load_dotenv
 import urllib3
 import sys
 
+# Storage Manager (LOCAL / AZURE)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage
+
 # Disable SSL warnings for test environment
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -119,18 +123,18 @@ class SmartPlanningAPI:
         return response.json()
 
 
-def parse_metadata(metadata_file: Path) -> dict:
+def parse_metadata(snapshot_id: str = None, content: str = None) -> dict:
     """
-    Parse metadata.txt to extract snapshot name and comment
-    
-    Args:
-        metadata_file: Path to metadata.txt
-        
-    Returns:
-        Dictionary with 'name' and 'comment'
+    Parse metadata content to extract snapshot name and comment.
+    Accepts either a snapshot_id (loads via StorageManager) or raw content string.
     """
-    with open(metadata_file, 'r', encoding='utf-8') as f:
-        content = f.read()
+    if content is None:
+        if snapshot_id is None:
+            raise ValueError("Either snapshot_id or content must be provided")
+        storage = get_storage()
+        content = storage.load_text(f"{snapshot_id}/metadata.txt")
+        if content is None:
+            raise FileNotFoundError(f"metadata.txt not found for snapshot {snapshot_id}")
     
     # Find the JSON block with snapshot information
     start_marker = "# SNAPSHOT INFORMATIONS\n\n```json\n"
@@ -155,32 +159,19 @@ def parse_metadata(metadata_file: Path) -> dict:
     }
 
 
-def append_upload_to_metadata(snapshot_dir: Path, response_data: dict):
+def append_upload_to_metadata(snapshot_id: str, response_data: dict):
     """
-    Append upload status to metadata.txt for LLM context
-    
-    Args:
-        snapshot_dir: Path to snapshot directory
-        response_data: Server response with validation status
+    Append upload status to metadata.txt for LLM context.
     """
-    metadata_file = snapshot_dir / "metadata.txt"
-    if not metadata_file.exists():
+    storage = get_storage()
+    existing_content = storage.load_text(f"{snapshot_id}/metadata.txt")
+    if existing_content is None:
         return
-    
+
     import re
-    
-    # Read existing content to find iteration number
-    with open(metadata_file, 'r', encoding='utf-8') as f:
-        existing_content = f.read()
-    
-    # Find highest upload iteration
     iteration_pattern = r'## UPLOAD Iteration (\d+)'
     iterations = re.findall(iteration_pattern, existing_content)
-    
-    if iterations:
-        next_iteration = max([int(i) for i in iterations]) + 1
-    else:
-        next_iteration = 1
+    next_iteration = max([int(i) for i in iterations]) + 1 if iterations else 1
     
     # Extract important fields
     is_validated = response_data.get('isSuccessfullyValidated', False)
@@ -193,106 +184,78 @@ def append_upload_to_metadata(snapshot_dir: Path, response_data: dict):
     else:
         status_line = "**SNAPSHOT HAS ERRORS** - Server validation failed."
     
-    with open(metadata_file, 'a', encoding='utf-8') as f:
-        f.write(f"\n\n## UPLOAD Iteration {next_iteration}\n\n")
-        f.write(f"**Uploaded at:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"**Server validated:** {is_validated}\n")
-        f.write(f"**Modified at (server):** {modified_at}\n")
-        f.write(f"**Modified by:** {modified_by}\n")
-        f.write(f"\n{status_line}\n")
-    
-    print(f"Upload status appended to: {metadata_file}")
+    upload_entry = (
+        f"\n\n## UPLOAD Iteration {next_iteration}\n\n"
+        f"**Uploaded at:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"**Server validated:** {is_validated}\n"
+        f"**Modified at (server):** {modified_at}\n"
+        f"**Modified by:** {modified_by}\n"
+        f"\n{status_line}\n"
+    )
+    storage.save_text(f"{snapshot_id}/metadata.txt", existing_content + upload_entry)
+    print(f"Upload status appended to metadata ({storage.mode} mode)")
 
 
-def save_upload_result(snapshot_dir: Path, success: bool, response_data: dict = None, error: str = None):
+def save_upload_result(snapshot_id: str, success: bool, response_data: dict = None, error: str = None):
     """
-    Save upload result to upload-result.json in snapshot folder
-    
-    Args:
-        snapshot_dir: Path to snapshot directory
-        success: Whether upload was successful
-        response_data: Server response data (if success)
-        error: Error message (if failure)
+    Save upload result to upload-result.json in snapshot folder.
     """
-    result = {
-        "uploaded_at": datetime.now().isoformat(),
-        "success": success
-    }
-    
+    result = {"uploaded_at": datetime.now().isoformat(), "success": success}
     if success and response_data:
         result["server_response"] = response_data
-    
     if not success and error:
         result["error"] = error
-    
-    result_file = snapshot_dir / "upload-result.json"
-    with open(result_file, 'w', encoding='utf-8') as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-    
-    print(f"\nUpload result saved to: {result_file}")
+
+    storage = get_storage()
+    storage.save_json(f"{snapshot_id}/upload-result.json", result)
+    print(f"\nUpload result saved ({storage.mode} mode): {snapshot_id}/upload-result.json")
 
 
 def main():
     """Main function to upload corrected snapshot data to server"""
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
+                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
+    args, _ = parser.parse_known_args()
     
     try:
-        # 1. Read current snapshot ID
-        runtime_files_dir = Path(__file__).parent / "runtime-files"
-        current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
-        
-        if not current_snapshot_file.exists():
-            print(f"ERROR: {current_snapshot_file} not found")
-            print("Please run create_snapshot.py first")
-            sys.exit(1)
-        
-        # Parse snapshot ID from file
-        with open(current_snapshot_file, 'r') as f:
-            content = f.read().strip()
-            if "snapshot_id = " in content:
-                snapshot_id = content.split("snapshot_id = ")[1].strip()
-            else:
-                print(f"ERROR: Invalid format in {current_snapshot_file}")
+        # 1. Snapshot-ID bestimmen: Argument hat Priorität, Fallback auf Datei
+        snapshot_id = args.snapshot_id
+        if not snapshot_id:
+            runtime_files_dir = Path(__file__).parent / "runtime-files"
+            current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
+            
+            if not current_snapshot_file.exists():
+                print(f"ERROR: {current_snapshot_file} not found")
+                print("Please run create_snapshot.py first")
                 sys.exit(1)
+            
+            with open(current_snapshot_file, 'r') as f:
+                content = f.read().strip()
+                if "snapshot_id = " in content:
+                    snapshot_id = content.split("snapshot_id = ")[1].strip()
+                else:
+                    print(f"ERROR: Invalid format in {current_snapshot_file}")
+                    sys.exit(1)
         
         print("=" * 70)
         print("UPDATE SNAPSHOT - Upload Corrected Data to Server")
         print("=" * 70)
         print(f"\nSnapshot ID: {snapshot_id}")
-        
-        # 2. Locate snapshot folder
-        snapshots_base = Path(__file__).parent.parent / "Snapshots"
-        snapshot_dir = snapshots_base / snapshot_id
-        
-        if not snapshot_dir.exists():
-            print(f"ERROR: Snapshot directory not found: {snapshot_dir}")
+
+        # 2. Load corrected snapshot data via StorageManager
+        storage = get_storage()
+        snapshot_data = storage.load_json(f"{snapshot_id}/snapshot-data.json")
+        if snapshot_data is None:
+            print(f"ERROR: snapshot-data.json not found for snapshot {snapshot_id}")
             sys.exit(1)
-        
-        # 3. Load corrected snapshot data
-        snapshot_data_file = snapshot_dir / "snapshot-data.json"
-        if not snapshot_data_file.exists():
-            print(f"ERROR: snapshot-data.json not found: {snapshot_data_file}")
-            sys.exit(1)
-        
-        print(f"\nLoading corrected snapshot data from:")
-        print(f"  {snapshot_data_file}")
-        
-        with open(snapshot_data_file, 'r', encoding='utf-8') as f:
-            snapshot_data = json.load(f)
-        
-        # Convert to JSON string for API
+
         data_json = json.dumps(snapshot_data, ensure_ascii=False)
         print(f"  Data loaded ({len(data_json):,} characters)")
-        
-        # 4. Load metadata (name and comment)
-        metadata_file = snapshot_dir / "metadata.txt"
-        if not metadata_file.exists():
-            print(f"ERROR: metadata.txt not found: {metadata_file}")
-            sys.exit(1)
-        
-        print(f"\nLoading snapshot metadata from:")
-        print(f"  {metadata_file}")
-        
-        metadata = parse_metadata(metadata_file)
+
+        # 3. Load metadata (name and comment)
+        metadata = parse_metadata(snapshot_id=snapshot_id)
         print(f"  Name: {metadata['name']}")
         print(f"  Comment: {metadata['comment'] or '(none)'}")
         
@@ -313,10 +276,10 @@ def main():
         print(json.dumps(response_data, indent=2))
         
         # Save upload result
-        save_upload_result(snapshot_dir, success=True, response_data=response_data)
-        
+        save_upload_result(snapshot_id, success=True, response_data=response_data)
+
         # Append to metadata.txt for LLM context
-        append_upload_to_metadata(snapshot_dir, response_data)
+        append_upload_to_metadata(snapshot_id, response_data)
         
         print("\nNext step: Run validate_snapshot.py to verify corrections")
         
@@ -330,8 +293,8 @@ def main():
         print(f"Response: {e.response.text}")
         
         # Save error result
-        if 'snapshot_dir' in locals():
-            save_upload_result(snapshot_dir, success=False, error=str(e))
+        if 'snapshot_id' in locals():
+            save_upload_result(snapshot_id, success=False, error=str(e))
         
         sys.exit(1)
         
@@ -342,8 +305,8 @@ def main():
         print(f"{type(e).__name__}: {str(e)}")
         
         # Save error result
-        if 'snapshot_dir' in locals():
-            save_upload_result(snapshot_dir, success=False, error=str(e))
+        if 'snapshot_id' in locals():
+            save_upload_result(snapshot_id, success=False, error=str(e))
         
         sys.exit(1)
 

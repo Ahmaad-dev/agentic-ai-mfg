@@ -24,6 +24,10 @@ try:
 except ImportError:
     pass
 
+# demo/ zum sys.path hinzufügen damit storage_manager gefunden wird
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage
+
 # SSL-Warnungen deaktivieren (für Test-Umgebung)
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
@@ -133,15 +137,15 @@ class SmartPlanningAPI:
             print(f"   ✓ Snapshot erfolgreich umbenannt!")
             result = response.json()
             
-            # WICHTIG: Aktualisiere auch lokale metadata.txt!
-            snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-            metadata_file = snapshot_dir / "metadata.txt"
+            # WICHTIG: Aktualisiere auch metadata.txt im Storage!
+            storage = get_storage()
+            metadata_path = f"{snapshot_id}/metadata.txt"
             
-            if metadata_file.exists():
-                print(f"\n4. Aktualisiere lokale metadata.txt...")
+            if storage.exists(metadata_path):
+                print(f"\n4. Aktualisiere metadata.txt im Storage...")
                 try:
                     # Lese metadata.txt
-                    content = metadata_file.read_text(encoding='utf-8')
+                    content = storage.load_text(metadata_path)
                     
                     # Finde JSON-Block und aktualisiere Name
                     import re
@@ -151,8 +155,8 @@ class SmartPlanningAPI:
                     updated_content = re.sub(pattern, replacement, content, count=1)
                     
                     # Schreibe zurück
-                    metadata_file.write_text(updated_content, encoding='utf-8')
-                    print(f"   ✓ Lokale metadata.txt aktualisiert")
+                    storage.save_text(metadata_path, updated_content)
+                    print(f"   ✓ metadata.txt aktualisiert")
                 except Exception as e:
                     print(f"   ⚠ Warnung: Konnte metadata.txt nicht aktualisieren: {e}")
             
@@ -169,8 +173,8 @@ def main():
         description="Ändert den Namen eines Snapshots über die Smart Planning API"
     )
     parser.add_argument(
-        "snapshot_id",
-        help="UUID des Snapshots"
+        "--snapshot-id", dest="snapshot_id", default=None,
+        help="UUID des Snapshots (optional, Fallback auf current_snapshot.txt)"
     )
     parser.add_argument(
         "new_name",
@@ -184,6 +188,20 @@ def main():
     
     args = parser.parse_args()
     
+    # Snapshot-ID bestimmen: Argument hat Priorität, Fallback auf Datei
+    snapshot_id = args.snapshot_id
+    if not snapshot_id:
+        current_snapshot_file = Path(__file__).parent / "runtime-files" / "current_snapshot.txt"
+        if not current_snapshot_file.exists():
+            print("✗ FEHLER: --snapshot-id nicht angegeben und runtime-files/current_snapshot.txt nicht gefunden")
+            sys.exit(1)
+        content = current_snapshot_file.read_text().strip()
+        if "snapshot_id = " in content:
+            snapshot_id = content.split("snapshot_id = ")[1].strip()
+        else:
+            print("✗ FEHLER: Ungültiges Format in current_snapshot.txt")
+            sys.exit(1)
+    
     try:
         # API-Client initialisieren
         api = SmartPlanningAPI()
@@ -192,12 +210,12 @@ def main():
         api.authenticate(client_id=args.client_id)
         
         # Snapshot umbenennen
-        result = api.rename_snapshot(args.snapshot_id, args.new_name)
+        result = api.rename_snapshot(snapshot_id, args.new_name)
         
         print("\n" + "="*60)
         print("ZUSAMMENFASSUNG")
         print("="*60)
-        print(f"✓ Snapshot-ID:  {result.get('id', args.snapshot_id)}")
+        print(f"✓ Snapshot-ID:  {result.get('id', snapshot_id)}")
         print(f"✓ Neuer Name:   {result.get('name', args.new_name)}")
         print(f"✓ Status:       Erfolgreich umbenannt")
         print("="*60)

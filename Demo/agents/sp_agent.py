@@ -4,10 +4,17 @@ SP_Agent - Smart Planning Agent
 import json
 import logging
 import subprocess
+import sys as _sys
 from pathlib import Path
 from typing import Dict, List, Optional
 from .base_agent import BaseAgent
 from .sp_tools_config import SP_TOOLS, SP_PIPELINES
+
+# StorageManager über runtime_storage (unterstützt LOCAL + AZURE)
+_runtime_storage_dir = str(Path(__file__).parent.parent / "smart-planning" / "runtime")
+if _runtime_storage_dir not in _sys.path:
+    _sys.path.insert(0, _runtime_storage_dir)
+from runtime_storage import get_storage as _get_storage, get_iteration_folders_with_file as _get_iter_with_file
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +69,19 @@ class SPAgent(BaseAgent):
         if not script_path.exists():
             return {"success": False, "error": f"Script nicht gefunden: {script_path}"}
         
-        # Python-Executable aus venv verwenden
-        python_exe = Path(__file__).parent.parent / ".venv" / "Scripts" / "python.exe"
-        
-        cmd = [str(python_exe), str(script_path)]
+        # sys.executable: Nutze das aktuell laufende Python (venv auf Windows, /usr/local/bin/python in Docker)
+        cmd = [_sys.executable, str(script_path)]
         if args:
-            cmd.extend(args)
+            # download_snapshot nimmt identifier (Name/UUID) als positionales Argument
+            # rename_snapshot: args[0]=snapshot_id → --snapshot-id, args[1]=new_name → positional
+            # identify_snapshot: args[0]=snapshot_id → --snapshot-id, weitere args bleiben positional
+            # Alle anderen Tools: args[0] ist immer snapshot_id → --snapshot-id
+            if tool_name == "download_snapshot":
+                cmd.extend(args)  # positional identifier
+            else:
+                cmd.extend(["--snapshot-id", args[0]])
+                if len(args) > 1:
+                    cmd.extend(args[1:])  # z.B. new_name bei rename_snapshot
         
         logger.info(f"[{self.name}] Führe Tool aus: {tool_name} ({' '.join(cmd)})")
         
@@ -147,18 +161,13 @@ class SPAgent(BaseAgent):
         """Liest metadata.txt + LLM Corrections für eine gegebene Snapshot-ID"""
         try:
             import re
-            import json
-            from pathlib import Path
             
-            snapshot_dir = self.runtime_dir.parent / "Snapshots" / snapshot_id
-            metadata_file = snapshot_dir / "metadata.txt"
+            storage = _get_storage()
             
-            if not metadata_file.exists():
+            # Lese metadata.txt via StorageManager (LOCAL oder AZURE)
+            content = storage.load_text(f"{snapshot_id}/metadata.txt")
+            if content is None:
                 return None
-            
-            # Lese metadata.txt und extrahiere ersten JSON-Block (Snapshot-Informationen)
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                content = f.read()
             
             # Extrahiere JSON-Block zwischen ```json und ```
             json_match = re.search(r'```json\s*(\{.*?\})\s*```', content, re.DOTALL)
@@ -167,28 +176,18 @@ class SPAgent(BaseAgent):
             
             metadata = json.loads(json_match.group(1))
             
-            # SAUBER: Lade LLM Corrections aus iteration-X/llm_correction_proposal.json
+            # Lade LLM Corrections aus allen iteration-X Ordnern via StorageManager
             llm_corrections = []
+            iteration_nums = sorted(_get_iter_with_file(snapshot_id, "llm_correction_proposal.json"))
             
-            # Suche alle iteration-X Ordner
-            iteration_dirs = sorted(
-                [d for d in snapshot_dir.iterdir() if d.is_dir() and d.name.startswith("iteration-")],
-                key=lambda d: int(d.name.split("-")[1])  # Sortiere nach Nummer
-            )
-            
-            for iteration_dir in iteration_dirs:
-                correction_file = iteration_dir / "llm_correction_proposal.json"
-                if correction_file.exists():
+            for iteration_num in iteration_nums:
+                correction_data = storage.load_json(f"{snapshot_id}/iteration-{iteration_num}/llm_correction_proposal.json")
+                if correction_data:
                     try:
-                        with open(correction_file, 'r', encoding='utf-8') as f:
-                            correction_data = json.load(f)
-                        
-                        # Extrahiere relevante Felder aus correction_proposal
                         proposal = correction_data.get("correction_proposal", {})
-                        iteration_num = correction_data.get("iteration", 0)
-                        
+                        iter_n = correction_data.get("iteration", 0)
                         llm_corrections.append({
-                            "iteration": iteration_num,
+                            "iteration": iter_n,
                             "action": proposal.get("action"),
                             "target_path": proposal.get("target_path"),
                             "old_value": proposal.get("current_value"),
@@ -196,7 +195,7 @@ class SPAgent(BaseAgent):
                             "reasoning": proposal.get("reasoning")
                         })
                     except Exception as e:
-                        logger.warning(f"[{self.name}] Fehler beim Lesen von {correction_file}: {e}")
+                        logger.warning(f"[{self.name}] Fehler beim Lesen von iteration-{iteration_num}/llm_correction_proposal.json: {e}")
             
             # Füge Corrections zu Metadata hinzu
             if llm_corrections:
@@ -211,16 +210,12 @@ class SPAgent(BaseAgent):
     def _read_validation_data(self, snapshot_id: str) -> Optional[Dict]:
         """Liest Validierungs-Daten für einen Snapshot (Fehler/Warnings)"""
         try:
-            import json
-            snapshot_dir = self.runtime_dir.parent / "Snapshots" / snapshot_id
-            validation_file = snapshot_dir / "snapshot-validation.json"
-            upload_result_file = snapshot_dir / "upload-result.json"
+            storage = _get_storage()
             
-            if not validation_file.exists():
+            # Lese snapshot-validation.json via StorageManager (LOCAL oder AZURE)
+            validation_data = storage.load_json(f"{snapshot_id}/snapshot-validation.json")
+            if validation_data is None:
                 return None
-            
-            with open(validation_file, 'r', encoding='utf-8') as f:
-                validation_data = json.load(f)
             
             error_count = sum(1 for msg in validation_data if msg.get('level') == 'ERROR')
             warning_count = sum(1 for msg in validation_data if msg.get('level') == 'WARNING')
@@ -230,11 +225,10 @@ class SPAgent(BaseAgent):
             
             # Server-Validierungsstatus (optional - nur wenn uploaded)
             server_is_validated = False
-            if upload_result_file.exists():
-                with open(upload_result_file, 'r', encoding='utf-8') as f:
-                    upload_data = json.load(f)
-                    server_response = upload_data.get("server_response", {})
-                    server_is_validated = server_response.get("isSuccessfullyValidated", False)
+            upload_data = storage.load_json(f"{snapshot_id}/upload-result.json")
+            if upload_data:
+                server_response = upload_data.get("server_response", {})
+                server_is_validated = server_response.get("isSuccessfullyValidated", False)
             
             # WICHTIG: Snapshot ist VALIDE wenn KEINE ERRORS vorhanden sind (Warnings sind OK!)
             # Server-Status ist optional (nur relevant wenn Snapshot hochgeladen wurde)
@@ -343,42 +337,34 @@ class SPAgent(BaseAgent):
         # Bei full_correction oder correction_from_validation: Prüfe finale Validierung
         final_validation_status = None
         if pipeline_name in ["full_correction", "correction_from_validation"] and snapshot_id:
-            # Lese upload-result.json um den Server-Validierungsstatus zu bekommen
-            # WICHTIG: Nutze smart-planning/Snapshots, nicht relatives ../Snapshots
-            snapshot_dir = self.runtime_dir.parent / "Snapshots" / snapshot_id
-            upload_result_file = snapshot_dir / "upload-result.json"
-            
-            if upload_result_file.exists():
-                try:
-                    import json
-                    with open(upload_result_file, 'r', encoding='utf-8') as f:
-                        upload_data = json.load(f)
-                    
+            try:
+                storage = _get_storage()
+                
+                # Lese upload-result.json via StorageManager (LOCAL oder AZURE)
+                upload_data = storage.load_json(f"{snapshot_id}/upload-result.json")
+                is_validated = False
+                if upload_data:
                     server_response = upload_data.get("server_response", {})
                     is_validated = server_response.get("isSuccessfullyValidated", False)
-                    
-                    # Lese auch snapshot-validation.json für Fehler-Details
-                    validation_file = snapshot_dir / "snapshot-validation.json"
-                    error_count = 0
-                    warning_count = 0
-                    
-                    if validation_file.exists():
-                        with open(validation_file, 'r', encoding='utf-8') as f:
-                            validation_data = json.load(f)
-                        
-                        error_count = sum(1 for msg in validation_data if msg.get('level') == 'ERROR')
-                        warning_count = sum(1 for msg in validation_data if msg.get('level') == 'WARNING')
-                    
-                    final_validation_status = {
-                        "errors": error_count,
-                        "warnings": warning_count,
-                        "is_valid": is_validated and error_count == 0
-                    }
-                    
-                    logger.info(f"[{self.name}] Final Validation: is_valid={final_validation_status['is_valid']}, errors={error_count}, warnings={warning_count}")
-                    
-                except Exception as e:
-                    logger.warning(f"[{self.name}] Could not read validation status: {e}")
+                
+                # Lese snapshot-validation.json für Fehler-Details
+                error_count = 0
+                warning_count = 0
+                validation_data = storage.load_json(f"{snapshot_id}/snapshot-validation.json")
+                if validation_data:
+                    error_count = sum(1 for msg in validation_data if msg.get('level') == 'ERROR')
+                    warning_count = sum(1 for msg in validation_data if msg.get('level') == 'WARNING')
+                
+                final_validation_status = {
+                    "errors": error_count,
+                    "warnings": warning_count,
+                    "is_valid": is_validated and error_count == 0
+                }
+                
+                logger.info(f"[{self.name}] Final Validation: is_valid={final_validation_status['is_valid']}, errors={error_count}, warnings={warning_count}")
+                
+            except Exception as e:
+                logger.warning(f"[{self.name}] Could not read validation status: {e}")
         
         return {
             "success": True,

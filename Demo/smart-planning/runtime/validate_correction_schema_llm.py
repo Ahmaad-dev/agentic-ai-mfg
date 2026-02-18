@@ -13,6 +13,11 @@ from pydantic import ValidationError
 from openai import AzureOpenAI
 from dotenv import load_dotenv
 
+# Storage Manager (LOCAL / AZURE)
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage, get_iteration_folders_with_file
+
 from correction_models import LLMCorrectionResponse
 
 # Load environment variables (aus demo-Verzeichnis)
@@ -35,18 +40,17 @@ def retry_llm_with_schema_error(snapshot_id, iteration_number, validation_error,
     print(f"\nWARNING Schema validation failed. Requesting LLM to fix the schema...")
     
     # Load original inputs
-    iteration_folder = Path("..") / "Snapshots" / snapshot_id / f"iteration-{iteration_number}"
-    
+    storage = get_storage()
+
     # Load identify response
-    identify_file = iteration_folder / "llm_identify_response.json"
-    with open(identify_file, 'r', encoding='utf-8') as f:
-        identify_response = json.load(f)
-    
+    identify_response = storage.load_json(f"{snapshot_id}/iteration-{iteration_number}/llm_identify_response.json")
+    if identify_response is None:
+        raise FileNotFoundError(f"llm_identify_response.json not found in iteration-{iteration_number}")
+
     # Load search results
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    search_results_file = snapshot_folder / "last_search_results.json"
-    with open(search_results_file, 'r', encoding='utf-8') as f:
-        search_results = json.load(f)
+    search_results = storage.load_json(f"{snapshot_id}/last_search_results.json")
+    if search_results is None:
+        raise FileNotFoundError(f"last_search_results.json not found for snapshot {snapshot_id}")
     
     # Load fix rules
     fix_rules_file = Path("runtime-files/llm-validation-fix-rules.md")
@@ -144,9 +148,9 @@ def validate_with_retry(snapshot_id, iteration_number, correction_proposal, max_
     valid = False
     validated_proposal = None
     current_proposal = correction_proposal
-    iteration_folder = Path("..") / "Snapshots" / snapshot_id / f"iteration-{iteration_number}"
+    storage = get_storage()
     original_saved = False
-    
+
     while not valid and retry_count <= max_retries:
         if retry_count > 0:
             print(f"\n--- Retry {retry_count}/{max_retries} ---")
@@ -158,9 +162,7 @@ def validate_with_retry(snapshot_id, iteration_number, correction_proposal, max_
             # Success!
             if retry_count > 0:
                 # Retry was successful - OVERWRITE original file
-                proposal_file = iteration_folder / "llm_correction_proposal.json"
-                with open(proposal_file, 'w', encoding='utf-8') as f:
-                    json.dump(current_proposal, f, indent=2, ensure_ascii=False)
+                storage.save_json(f"{snapshot_id}/iteration-{iteration_number}/llm_correction_proposal.json", current_proposal)
                 print(f"OK Retry successful - llm_correction_proposal.json OVERWRITTEN with corrected version")
             else:
                 print(f"OK Schema validation passed")
@@ -168,13 +170,11 @@ def validate_with_retry(snapshot_id, iteration_number, correction_proposal, max_
         else:
             print(f"ERROR Schema validation failed:")
             print(f"   {validation_error}")
-            
+
             # Save original as retry_0.json (only once)
             if not original_saved:
-                retry_0_file = iteration_folder / "llm_correction_proposal_retry_0.json"
-                with open(retry_0_file, 'w', encoding='utf-8') as f:
-                    json.dump(correction_proposal, f, indent=2, ensure_ascii=False)
-                print(f"   Saved original invalid JSON as: {retry_0_file.name}")
+                storage.save_json(f"{snapshot_id}/iteration-{iteration_number}/llm_correction_proposal_retry_0.json", correction_proposal)
+                print(f"   Saved original invalid JSON as: llm_correction_proposal_retry_0.json")
                 original_saved = True
             
             retry_count += 1
@@ -189,10 +189,8 @@ def validate_with_retry(snapshot_id, iteration_number, correction_proposal, max_
                 )
                 
                 # Save retry attempt
-                retry_file = iteration_folder / f"llm_correction_proposal_retry_{retry_count}.json"
-                with open(retry_file, 'w', encoding='utf-8') as f:
-                    json.dump(current_proposal, f, indent=2, ensure_ascii=False)
-                print(f"   Saved as: {retry_file.name}")
+                storage.save_json(f"{snapshot_id}/iteration-{iteration_number}/llm_correction_proposal_retry_{retry_count}.json", current_proposal)
+                print(f"   Saved as: llm_correction_proposal_retry_{retry_count}.json")
             else:
                 print(f"\nERROR Max retries ({max_retries}) reached. Schema validation failed.")
                 print(f"Please check llm_correction_proposal.json manually.")
@@ -203,49 +201,42 @@ def validate_with_retry(snapshot_id, iteration_number, correction_proposal, max_
 
 def main():
     """Main entry point for standalone execution"""
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
+                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
+    args, _ = parser.parse_known_args()
+
     print("=== Correction Proposal Schema Validator ===\n")
     
-    # Load snapshot ID
-    current_snapshot_file = Path("runtime-files/current_snapshot.txt")
-    if not current_snapshot_file.exists():
-        print("ERROR runtime-files/current_snapshot.txt not found")
-        sys.exit(1)
-    
-    snapshot_id = current_snapshot_file.read_text().strip()
-    if snapshot_id.startswith("snapshot_id = "):
-        snapshot_id = snapshot_id.replace("snapshot_id = ", "").strip()
+    # Snapshot-ID bestimmen: Argument hat Priorität, Fallback auf Datei
+    snapshot_id = args.snapshot_id
+    if not snapshot_id:
+        current_snapshot_file = Path("runtime-files/current_snapshot.txt")
+        if not current_snapshot_file.exists():
+            print("ERROR runtime-files/current_snapshot.txt not found")
+            sys.exit(1)
+        snapshot_id = current_snapshot_file.read_text().strip()
+        if snapshot_id.startswith("snapshot_id = "):
+            snapshot_id = snapshot_id.replace("snapshot_id = ", "").strip()
     
     print(f"Snapshot ID: {snapshot_id}")
-    
-    # Get latest iteration number
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    iteration_folders = [
-        d for d in snapshot_folder.iterdir()
-        if d.is_dir() and d.name.startswith("iteration-")
-    ]
-    
-    valid_iterations = [
-        d for d in iteration_folders
-        if (d / "llm_correction_proposal.json").exists()
-    ]
-    
-    if not valid_iterations:
+
+    # Get latest iteration number using storage helper
+    storage = get_storage()
+    valid_nums = get_iteration_folders_with_file(snapshot_id, "llm_correction_proposal.json")
+    if not valid_nums:
         print("ERROR No iteration folders with llm_correction_proposal.json found")
         sys.exit(1)
-    
-    import re
-    iteration_numbers = [
-        int(re.match(r'^iteration-(\d+)$', d.name).group(1))
-        for d in valid_iterations
-    ]
-    iteration_number = max(iteration_numbers)
-    
+    iteration_number = max(valid_nums)
+
     print(f"Using iteration: {iteration_number}\n")
-    
+
     # Load correction proposal
-    proposal_file = Path("..") / "Snapshots" / snapshot_id / f"iteration-{iteration_number}" / "llm_correction_proposal.json"
-    with open(proposal_file, 'r', encoding='utf-8') as f:
-        correction_proposal = json.load(f)
+    correction_proposal = storage.load_json(f"{snapshot_id}/iteration-{iteration_number}/llm_correction_proposal.json")
+    if correction_proposal is None:
+        print("ERROR Could not load llm_correction_proposal.json")
+        sys.exit(1)
     
     # Validate with retry
     validated_proposal = validate_with_retry(snapshot_id, iteration_number, correction_proposal)

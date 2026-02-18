@@ -12,6 +12,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 import urllib3
 
+# Storage Manager (LOCAL / AZURE)
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage
+
 # UTF-8 Encoding für Windows-Terminal
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -68,25 +73,25 @@ class SmartPlanningAPI:
         return response.json()
 
 
-def validate_snapshot():
+def validate_snapshot(snapshot_id: str = None):
     """Main function to validate snapshot and save results"""
     
-    # Read snapshot ID from current_snapshot.txt
-    runtime_files_dir = Path(__file__).parent / "runtime-files"
-    current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
-    
-    if not current_snapshot_file.exists():
-        print(f"Error: {current_snapshot_file} not found")
-        return
-    
-    # Parse snapshot_id from file (format: "snapshot_id = uuid")
-    with open(current_snapshot_file, 'r') as f:
-        content = f.read().strip()
-        if "snapshot_id = " in content:
-            snapshot_id = content.split("snapshot_id = ")[1].strip()
-        else:
-            print(f"Error: Invalid format in {current_snapshot_file}")
+    # 1. Snapshot-ID bestimmen: Argument hat Priorität, Fallback auf Datei
+    if not snapshot_id:
+        runtime_files_dir = Path(__file__).parent / "runtime-files"
+        current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
+        
+        if not current_snapshot_file.exists():
+            print(f"Error: {current_snapshot_file} not found")
             return
+        
+        with open(current_snapshot_file, 'r') as f:
+            content = f.read().strip()
+            if "snapshot_id = " in content:
+                snapshot_id = content.split("snapshot_id = ")[1].strip()
+            else:
+                print(f"Error: Invalid format in {current_snapshot_file}")
+                return
     
     print(f"Snapshot ID: {snapshot_id}")
     
@@ -96,28 +101,17 @@ def validate_snapshot():
     try:
         validation_data = api.get_validation_messages(snapshot_id)
         print(f"Validation data retrieved ({len(validation_data)} messages)")
-        
-        # Save validation data to snapshot directory in original-data folder
-        snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-        original_data_dir = snapshot_dir / "original-data"
-        original_data_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save in original-data folder
-        validation_file_original = original_data_dir / "snapshot-validation.json"
-        with open(validation_file_original, 'w', encoding='utf-8') as f:
-            json.dump(validation_data, f, indent=4, ensure_ascii=False)
-        
-        # Save copy in main folder
-        validation_file_main = snapshot_dir / "snapshot-validation.json"
-        with open(validation_file_main, 'w', encoding='utf-8') as f:
-            json.dump(validation_data, f, indent=4, ensure_ascii=False)
-        
-        print(f"✓ Validation saved to: {validation_file_original}")
-        print(f"✓ Validation copy saved to: {validation_file_main}")
-        
+
+        # Save validation data via StorageManager (LOCAL or AZURE)
+        storage = get_storage()
+        storage.save_json(f"{snapshot_id}/original-data/snapshot-validation.json", validation_data)
+        storage.save_json(f"{snapshot_id}/snapshot-validation.json", validation_data)
+
+        print(f"✓ Validation saved ({storage.mode} mode)")
+
         # Append validation data to metadata.txt
-        metadata_file = snapshot_dir / "metadata.txt"
-        if metadata_file.exists():
+        existing_metadata = storage.load_text(f"{snapshot_id}/metadata.txt")
+        if existing_metadata is not None:
             # Calculate summary
             from datetime import datetime
             import re
@@ -151,9 +145,8 @@ def validate_snapshot():
                 shortened_data.append(msg_copy)
             
             # Check if INITIAL VALIDATION already exists
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                existing_content = f.read()
-            
+            existing_content = existing_metadata
+
             if "INITIAL VALIDATION" in existing_content:
                 # Find highest iteration number
                 iteration_pattern = r'## VALIDATION Iteration (\d+)'
@@ -171,17 +164,17 @@ def validate_snapshot():
                 # First validation ever
                 validation_header = "## INITIAL VALIDATION (First Run)\n\n"
             
-            with open(metadata_file, 'a', encoding='utf-8') as f:
-                f.write(f"\n\n{validation_header}")
-                f.write(f"**Validated at:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"**Total messages:** {len(validation_data)}\n")
-                f.write(f"**Summary:** {summary_text}\n")
-                f.write(f"**Status:** {'Valid' if not validation_data or all(m.get('level') != 'ERROR' for m in validation_data) else 'Has Errors - Not Valid!'}\n")
-                f.write("\n### Detailed validation messages:\n\n")
-                f.write("```json\n")
-                f.write(json.dumps(shortened_data, indent=4, ensure_ascii=False))
-                f.write("\n```\n")
-            print(f"Validation appended to: {metadata_file}")
+            with_validation_entry = (f"\n\n{validation_header}"
+                f"**Validated at:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"**Total messages:** {len(validation_data)}\n"
+                f"**Summary:** {summary_text}\n"
+                f"**Status:** {'Valid' if not validation_data or all(m.get('level') != 'ERROR' for m in validation_data) else 'Has Errors - Not Valid!'}\n"
+                "\n### Detailed validation messages:\n\n"
+                "```json\n"
+                + json.dumps(shortened_data, indent=4, ensure_ascii=False)
+                + "\n```\n")
+            storage.save_text(f"{snapshot_id}/metadata.txt", existing_content + with_validation_entry)
+            print(f"Validation appended to metadata ({storage.mode} mode)")
         
         # Print summary
         if validation_data:
@@ -205,4 +198,10 @@ def validate_snapshot():
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
+                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
+    args, _ = parser.parse_known_args()
+    validate_snapshot(snapshot_id=args.snapshot_id)
     validate_snapshot()

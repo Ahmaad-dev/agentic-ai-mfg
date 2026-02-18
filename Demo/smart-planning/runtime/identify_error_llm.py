@@ -12,6 +12,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
+# Storage Manager (LOCAL / AZURE)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage, get_iteration_folders
+
 # Load environment variables (aus demo-Verzeichnis)
 # Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
 env_path = Path(__file__).parent.parent.parent / ".env"
@@ -55,8 +59,10 @@ def normalize_field_name(field_name):
     return field_name
 
 
-def load_current_snapshot_id():
-    """Load snapshot ID from current_snapshot.txt"""
+def load_current_snapshot_id(snapshot_id: str = None):
+    """Load snapshot ID. Argument hat Priorität, Fallback auf current_snapshot.txt."""
+    if snapshot_id:
+        return snapshot_id
     runtime_files_dir = Path(__file__).parent / "runtime-files"
     current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
     
@@ -75,67 +81,40 @@ def load_current_snapshot_id():
 
 def load_validation_data(snapshot_id):
     """Load validation data from snapshot directory"""
-    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-    validation_file = snapshot_dir / "snapshot-validation.json"
-    
-    if not validation_file.exists():
-        print(f"Error: {validation_file} not found")
-        return None
-    
-    with open(validation_file, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    storage = get_storage()
+    data = storage.load_json(f"{snapshot_id}/snapshot-validation.json")
+    if data is None:
+        print(f"Error: {snapshot_id}/snapshot-validation.json not found")
+    return data
 
 
 def get_next_iteration_number(snapshot_id):
     """Find the highest iteration number and return next number"""
-    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-    
-    if not snapshot_dir.exists():
-        return 1
-    
-    # Find all iteration folders
-    iteration_pattern = re.compile(r'^iteration-(\d+)$')
-    max_iteration = 0
-    
-    for item in snapshot_dir.iterdir():
-        if item.is_dir():
-            match = iteration_pattern.match(item.name)
-            if match:
-                iteration_num = int(match.group(1))
-                max_iteration = max(max_iteration, iteration_num)
-    
-    return max_iteration + 1
+    nums = get_iteration_folders(snapshot_id)
+    return (max(nums) + 1) if nums else 1
 
 
 def save_llm_response(snapshot_id, llm_response, first_error, llm_call_data):
     """Save LLM response and full call data to iteration folder"""
     iteration_number = get_next_iteration_number(snapshot_id)
-    
-    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-    iteration_dir = snapshot_dir / f"iteration-{iteration_number}"
-    iteration_dir.mkdir(parents=True, exist_ok=True)
-    
+    storage = get_storage()
+
     # Prepare data to save
     output_data = {
         "iteration": iteration_number,
         "original_error": first_error,
         "llm_analysis": llm_response
     }
-    
-    # Save to JSON file
-    output_file = iteration_dir / "llm_identify_response.json"
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(output_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"\nLLM response saved to: {output_file}")
-    
-    # Save full LLM call data
-    llm_call_file = iteration_dir / "llm_identify_call.json"
-    with open(llm_call_file, 'w', encoding='utf-8') as f:
-        json.dump(llm_call_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"Full LLM call saved to: {llm_call_file}")
-    
+
+    storage.save_json(f"{snapshot_id}/iteration-{iteration_number}/llm_identify_response.json", output_data)
+    print(f"\nLLM response saved: {snapshot_id}/iteration-{iteration_number}/llm_identify_response.json")
+
+    storage.save_json(f"{snapshot_id}/iteration-{iteration_number}/llm_identify_call.json", llm_call_data)
+    print(f"Full LLM call saved: {snapshot_id}/iteration-{iteration_number}/llm_identify_call.json")
+
+    # Return a local-compatible Path for the iteration dir (needed by caller)
+    from pathlib import Path
+    iteration_dir = storage._get_local_path(f"{snapshot_id}/iteration-{iteration_number}") if storage.mode == "LOCAL" else Path(snapshot_id) / f"iteration-{iteration_number}"
     return iteration_dir, iteration_number
 
 
@@ -252,7 +231,7 @@ Respond in JSON format:
     return llm_response, selected_error, llm_call_data
 
 
-def trigger_identify_tool(search_mode, search_value):
+def trigger_identify_tool(search_mode, search_value, snapshot_id: str = None):
     """Trigger the identify_snapshot.py tool with the given search mode and value"""
     
     # Normalize field names for empty_field mode
@@ -266,11 +245,13 @@ def trigger_identify_tool(search_mode, search_value):
         return False
     
     # Build command based on search mode
+    # Always pass --snapshot-id when available to avoid relying on current_snapshot.txt
+    snapshot_args = ["--snapshot-id", snapshot_id] if snapshot_id else []
     if search_mode == "empty_field":
-        command_args = [sys.executable, str(identify_script), "--empty", search_value]
+        command_args = [sys.executable, str(identify_script)] + snapshot_args + ["--empty", search_value]
         print(f"\nTriggering identify tool in EMPTY FIELD mode for: {search_value}")
     else:
-        command_args = [sys.executable, str(identify_script), search_value]
+        command_args = [sys.executable, str(identify_script)] + snapshot_args + [search_value]
         print(f"\nTriggering identify tool in VALUE mode with: {search_value}")
     
     print("=" * 80)
@@ -304,19 +285,17 @@ def trigger_identify_tool(search_mode, search_value):
 
 def main():
     """Main function"""
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
+                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
+    parser.add_argument("--demo", action="store_true", help="Demo-Modus")
+    args, _ = parser.parse_known_args()
+
     print("Starting LLM-based Error Analysis\n")
     
-    # Check for command-line arguments
-    demo_mode = False
-    snapshot_id = None
-    
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--demo":
-            demo_mode = True
-        else:
-            # First argument is snapshot ID
-            snapshot_id = sys.argv[1]
-            print(f"Using Snapshot ID from command line: {snapshot_id}\n")
+    demo_mode = args.demo
+    snapshot_id = args.snapshot_id
     
     if demo_mode:
         print("DEMO MODE: Using test validation data\n")
@@ -327,14 +306,16 @@ def main():
             }
         ]
         snapshot_id = "demo-snapshot"
-    elif not snapshot_id:
-        # Fallback: Load snapshot ID from current_snapshot.txt
-        snapshot_id = load_current_snapshot_id()
+    else:
+        # Snapshot-ID bestimmen (Argument hat Priorität)
         if not snapshot_id:
-            print("ERROR: No snapshot ID provided")
-            return
-        
-        print(f"Snapshot ID from current_snapshot.txt: {snapshot_id}\n")
+            snapshot_id = load_current_snapshot_id()
+            if not snapshot_id:
+                print("ERROR: No snapshot ID provided")
+                return
+            print(f"Snapshot ID from current_snapshot.txt: {snapshot_id}\n")
+        else:
+            print(f"Using Snapshot ID from argument: {snapshot_id}\n")
     
     # Step 2: Load validation data
     if not demo_mode:
@@ -362,7 +343,7 @@ def main():
         search_value = llm_analysis.get('search_value')
         if search_value:
             if not demo_mode:
-                trigger_identify_tool(search_mode, search_value)
+                trigger_identify_tool(search_mode, search_value, snapshot_id)
             else:
                 print(f"\nDEMO MODE: Would trigger identify tool")
                 print(f"   Mode: {search_mode}")

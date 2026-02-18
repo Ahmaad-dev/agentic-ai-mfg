@@ -11,6 +11,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
 
+# Storage Manager (LOCAL / AZURE)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage
+
 # UTF-8 Encoding für Windows-Terminal
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -166,14 +170,9 @@ def create_and_save_snapshot(snapshots_dir: Optional[Path] = None) -> Dict[str, 
     Returns:
         Dictionary mit snapshot_id, name und file_path
     """
-    # Standard-Verzeichnis bestimmen
-    if snapshots_dir is None:
-        script_dir = Path(__file__).parent
-        snapshots_dir = script_dir.parent / "Snapshots"
-    
-    snapshots_dir = Path(snapshots_dir)
-    snapshots_dir.mkdir(parents=True, exist_ok=True)
-        
+    # Storage-Pfad wird von StorageManager / STORAGE_MODE in .env gesteuert.
+    # snapshots_dir wird für Abwärtskompatibilität behalten, aber nicht mehr direkt verwendet.
+
     # API-Client initialisieren
     api = SmartPlanningAPI()
     
@@ -189,53 +188,40 @@ def create_and_save_snapshot(snapshots_dir: Optional[Path] = None) -> Dict[str, 
     
     # Speichern
     print("\n5. Snapshot wird gespeichert...")
-    snapshot_folder = snapshots_dir / f"{snapshot_id}"
-    snapshot_folder.mkdir(parents=True, exist_ok=True)
-    
+    storage = get_storage()
+
     # Trennung: Metadata und Snapshot-Data
     metadata = {k: v for k, v in snapshot_data.items() if k != 'dataJson'}
     data_json = snapshot_data.get('dataJson', {})
-    
+
     # Ergänze Source-Information (eindeutig für LLM)
     metadata["snapshot_source"] = "created_by_user"
     metadata["user_created_at"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
+
     # Metadata-Datei im Hybrid-Format speichern
-    metadata_file = snapshot_folder / "metadata.txt"
-    with open(metadata_file, 'w', encoding='utf-8') as f:
-        f.write("# SNAPSHOT INFORMATIONS\n\n")
-        f.write("```json\n")
-        f.write(json.dumps(metadata, ensure_ascii=False, indent=2))
-        f.write("\n```\n")
-    
-    # Original-Data Ordner erstellen
-    original_data_folder = snapshot_folder / "original-data"
-    original_data_folder.mkdir(parents=True, exist_ok=True)
-    
+    metadata_content = "# SNAPSHOT INFORMATIONS\n\n```json\n" + json.dumps(metadata, ensure_ascii=False, indent=2) + "\n```\n"
+    metadata_file = storage.save_text(f"{snapshot_id}/metadata.txt", metadata_content)
+
     # Snapshot-Data als reine JSON-Datei speichern (schön formatiert)
     # Parse data_json if it's a string
     if isinstance(data_json, str):
         parsed_data = json.loads(data_json)
     else:
         parsed_data = data_json
-    
+
     # Save in original-data folder
-    snapshot_data_file_original = original_data_folder / "snapshot-data.json"
-    with open(snapshot_data_file_original, 'w', encoding='utf-8') as f:
-        json.dump(parsed_data, f, ensure_ascii=False, indent=4)
-    
+    snapshot_data_file_original = storage.save_json(f"{snapshot_id}/original-data/snapshot-data.json", parsed_data)
+
     # Save copy in main folder
-    snapshot_data_file_main = snapshot_folder / "snapshot-data.json"
-    with open(snapshot_data_file_main, 'w', encoding='utf-8') as f:
-        json.dump(parsed_data, f, ensure_ascii=False, indent=4)
-    
+    snapshot_data_file_main = storage.save_json(f"{snapshot_id}/snapshot-data.json", parsed_data)
+
     print(f"Snapshot erfolgreich gespeichert")
-    print(f"Ordner: {snapshot_folder}")
+    print(f"Storage-Mode:    {storage.mode}")
     print(f"Dateien: metadata.txt, snapshot-data.json, original-data/snapshot-data.json")
-    
+
     print(f"Snapshot-ID:     {snapshot_id}")
     print(f"Name:            {snapshot_info['name']}")
-    print(f"Gespeichert in:  {snapshot_folder}")
+    print(f"Gespeichert als: {snapshot_id}/")
     
     # Runtime-Files aktualisieren
     runtime_files_dir = Path(__file__).parent / "runtime-files"
@@ -258,7 +244,7 @@ def create_and_save_snapshot(snapshots_dir: Optional[Path] = None) -> Dict[str, 
         "metadata_file": str(metadata_file),
         "snapshot_data_file": str(snapshot_data_file_main),
         "snapshot_data_file_original": str(snapshot_data_file_original),
-        "folder": str(snapshot_folder)
+        "storage_mode": storage.mode
     }
 
 

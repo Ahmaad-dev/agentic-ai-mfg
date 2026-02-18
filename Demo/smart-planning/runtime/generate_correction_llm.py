@@ -12,13 +12,20 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
+# Storage Manager (LOCAL / AZURE)
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage, get_iteration_folders_with_file, get_latest_iteration_number
+
 # Load environment variables (aus demo-Verzeichnis)
 # Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
 env_path = Path(__file__).parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-def load_current_snapshot_id():
-    """Load the current snapshot ID from runtime-files/current_snapshot.txt"""
+def load_current_snapshot_id(snapshot_id: str = None):
+    """Load the current snapshot ID. Argument hat Priorität, Fallback auf current_snapshot.txt."""
+    if snapshot_id:
+        return snapshot_id
     current_snapshot_file = Path("runtime-files/current_snapshot.txt")
     if not current_snapshot_file.exists():
         raise FileNotFoundError("runtime-files/current_snapshot.txt not found")
@@ -43,89 +50,37 @@ def load_validation_fix_rules():
 
 def load_search_results(snapshot_id):
     """Load the last_search_results.json from the snapshot folder"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    search_results_file = snapshot_folder / "last_search_results.json"
-    
-    if not search_results_file.exists():
-        raise FileNotFoundError(f"last_search_results.json not found in {snapshot_folder}")
-    
-    with open(search_results_file, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    storage = get_storage()
+    data = storage.load_json(f"{snapshot_id}/last_search_results.json")
+    if data is None:
+        raise FileNotFoundError(f"last_search_results.json not found for snapshot {snapshot_id}")
+    return data
 
 def load_identify_response(snapshot_id):
     """Load llm_identify_response.json from the latest iteration folder"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    
-    # Find highest iteration folder
-    iteration_folders = [
-        d for d in snapshot_folder.iterdir()
-        if d.is_dir() and re.match(r'^iteration-(\d+)$', d.name)
-    ]
-    
-    if not iteration_folders:
-        raise FileNotFoundError(f"No iteration folders found in {snapshot_folder}")
-    
-    # Get latest iteration
-    latest_iteration = max(iteration_folders, 
-                          key=lambda d: int(re.match(r'^iteration-(\d+)$', d.name).group(1)))
-    
-    identify_file = latest_iteration / "llm_identify_response.json"
-    if not identify_file.exists():
-        raise FileNotFoundError(f"llm_identify_response.json not found in {latest_iteration}")
-    
-    with open(identify_file, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    iteration_number = get_latest_iteration_number(snapshot_id, require_file="llm_identify_response.json")
+    if iteration_number is None:
+        raise FileNotFoundError(f"No iteration folders with llm_identify_response.json found for {snapshot_id}")
+    storage = get_storage()
+    data = storage.load_json(f"{snapshot_id}/iteration-{iteration_number}/llm_identify_response.json")
+    if data is None:
+        raise FileNotFoundError(f"llm_identify_response.json not found in iteration-{iteration_number}")
+    return data
 
-def get_latest_iteration_number(snapshot_id):
+def get_latest_iteration_number_local(snapshot_id):
     """Find the highest iteration folder that contains llm_identify_response.json"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    
-    if not snapshot_folder.exists():
-        raise FileNotFoundError(f"Snapshot folder not found: {snapshot_folder}")
-    
-    iteration_folders = [
-        d for d in snapshot_folder.iterdir()
-        if d.is_dir() and re.match(r'^iteration-(\d+)$', d.name)
-    ]
-    
-    if not iteration_folders:
-        raise FileNotFoundError(f"No iteration folders found in {snapshot_folder}")
-    
-    # Filter for folders that contain llm_identify_response.json
-    valid_iterations = [
-        d for d in iteration_folders
-        if (d / "llm_identify_response.json").exists()
-    ]
-    
-    if not valid_iterations:
-        raise FileNotFoundError(f"No iteration folders with llm_identify_response.json found")
-    
-    # Get highest valid iteration number
-    iteration_numbers = [
-        int(re.match(r'^iteration-(\d+)$', d.name).group(1))
-        for d in valid_iterations
-    ]
-    
-    return max(iteration_numbers)
+    num = get_latest_iteration_number(snapshot_id, require_file="llm_identify_response.json")
+    if num is None:
+        raise FileNotFoundError(f"No iteration folders with llm_identify_response.json found for {snapshot_id}")
+    return num
 
 def save_correction_proposal(snapshot_id, iteration_number, proposal_data, llm_call_data):
     """Save the correction proposal and LLM call details to iteration folder"""
-    snapshot_folder = Path("..") / "Snapshots" / snapshot_id
-    iteration_folder = snapshot_folder / f"iteration-{iteration_number}"
-    iteration_folder.mkdir(exist_ok=True)
-    
-    # Save correction proposal
-    proposal_file = iteration_folder / "llm_correction_proposal.json"
-    with open(proposal_file, 'w', encoding='utf-8') as f:
-        json.dump(proposal_data, f, indent=2, ensure_ascii=False)
-    
-    # Save full LLM call details
-    call_file = iteration_folder / "llm_correction_call.json"
-    with open(call_file, 'w', encoding='utf-8') as f:
-        json.dump(llm_call_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"Saved correction proposal to: {proposal_file}")
-    print(f"Saved LLM call details to: {call_file}")
+    storage = get_storage()
+    storage.save_json(f"{snapshot_id}/iteration-{iteration_number}/llm_correction_proposal.json", proposal_data)
+    storage.save_json(f"{snapshot_id}/iteration-{iteration_number}/llm_correction_call.json", llm_call_data)
+    print(f"Saved correction proposal: {snapshot_id}/iteration-{iteration_number}/llm_correction_proposal.json")
+    print(f"Saved LLM call details:   {snapshot_id}/iteration-{iteration_number}/llm_correction_call.json")
 
 def generate_correction_with_llm(fix_rules, identify_response, search_results):
     """Generate correction proposal using Azure OpenAI"""
@@ -259,14 +214,20 @@ OUTPUT FORMAT (JSON):
     return correction_proposal, llm_call_data
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
+                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
+    args, _ = parser.parse_known_args()
+
     print("=== LLM Correction Proposal Generator ===\n")
     
-    # Load snapshot ID
-    snapshot_id = load_current_snapshot_id()
+    # Load snapshot ID (Argument hat Priorität)
+    snapshot_id = load_current_snapshot_id(args.snapshot_id)
     print(f"Snapshot ID: {snapshot_id}\n")
     
     # Get latest iteration number (use existing, don't create new)
-    iteration_number = get_latest_iteration_number(snapshot_id)
+    iteration_number = get_latest_iteration_number_local(snapshot_id)
     print(f"Using existing iteration: {iteration_number}\n")
     
     # Load inputs

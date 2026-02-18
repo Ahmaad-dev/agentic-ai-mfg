@@ -1,10 +1,5 @@
 name: deploy-frontend
 on:
-  push:
-    branches: [main]
-    paths:
-      - "Demo/ui/**"
-      - ".github/workflows/deploy-frontend.yml"
   workflow_dispatch:
 
 permissions:
@@ -29,8 +24,12 @@ jobs:
       - name: Get Container App URL
         id: get-backend-url
         run: |
+          BACKEND_NAME=$(az containerapp list \
+            --resource-group rg-agentic-ai-mfg-environment \
+            --query "[?starts_with(name, 'ca-agentic-ai-backend')].name | [0]" \
+            --output tsv)
           BACKEND_URL=$(az containerapp show \
-            --name ca-agentic-ai-backend-34b7u5 \
+            --name "${BACKEND_NAME}" \
             --resource-group rg-agentic-ai-mfg-environment \
             --query properties.configuration.ingress.fqdn \
             --output tsv)

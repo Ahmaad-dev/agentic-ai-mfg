@@ -612,9 +612,15 @@ class OrchestrationAgent(BaseAgent):
             
             # Führe Action aus
             if intent["action_type"] == "pipeline":
+                # FALLBACK: Snapshot-ID aus Historie wenn LLM keine liefert (identisch zu Tool-Logik)
+                pipeline_snapshot_id = intent.get("snapshot_id")
+                if not pipeline_snapshot_id and snapshot_id_from_history:
+                    pipeline_snapshot_id = snapshot_id_from_history
+                    logger.info(f"[{self.name}] Pipeline Snapshot-ID aus Historie verwendet: {pipeline_snapshot_id}")
+                
                 result = sp_agent.execute_pipeline(
                     pipeline_name=intent["action_name"],
-                    snapshot_id=intent.get("snapshot_id")
+                    snapshot_id=pipeline_snapshot_id
                 )
                 
                 # Interpretiere Pipeline-Ergebnis

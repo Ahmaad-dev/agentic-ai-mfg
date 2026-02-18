@@ -10,20 +10,25 @@ import sys
 from pathlib import Path
 from typing import Any, List, Dict, Tuple
 
+# Storage Manager (LOCAL / AZURE)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from runtime_storage import get_storage, get_latest_iteration_number as _get_latest_num
 
-def load_snapshot_data():
+
+def load_snapshot_data(snapshot_id: str = None):
     """Load snapshot data from current snapshot"""
-    # Read snapshot ID from current_snapshot.txt
-    runtime_files_dir = Path(__file__).parent / "runtime-files"
-    current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
-    
-    if not current_snapshot_file.exists():
-        print(f"Error: {current_snapshot_file} not found")
-        return None, None
-    
-    # Parse snapshot_id from file
-    with open(current_snapshot_file, 'r') as f:
-        content = f.read().strip()
+    # 1. Snapshot-ID bestimmen: Argument hat Priorität, Fallback auf Datei
+    if not snapshot_id:
+        runtime_files_dir = Path(__file__).parent / "runtime-files"
+        current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
+        
+        if not current_snapshot_file.exists():
+            print(f"Error: {current_snapshot_file} not found")
+            return None, None
+        
+        # Parse snapshot_id from file
+        with open(current_snapshot_file, 'r') as f:
+            content = f.read().strip()
         if "snapshot_id = " in content:
             snapshot_id = content.split("snapshot_id = ")[1].strip()
         else:
@@ -31,18 +36,14 @@ def load_snapshot_data():
             return None, None
     
     # Load snapshot-data.json from main folder (NOT from original-data)
-    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-    snapshot_data_file = snapshot_dir / "snapshot-data.json"
-    
-    if not snapshot_data_file.exists():
-        print(f"Error: {snapshot_data_file} not found")
+    storage = get_storage()
+    data = storage.load_json(f"{snapshot_id}/snapshot-data.json")
+
+    if data is None:
+        print(f"Error: {snapshot_id}/snapshot-data.json not found")
         return None, None
-    
+
     print(f"Loading snapshot: {snapshot_id}")
-    
-    with open(snapshot_data_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
     return snapshot_id, data
 
 
@@ -784,25 +785,29 @@ def search_empty_field(obj: Any, field_name: str, path: str = "") -> List[Dict]:
 
 def get_latest_iteration_dir(snapshot_dir: Path) -> Path:
     """Find the iteration folder with the highest number"""
-    iteration_pattern = re.compile(r'^iteration-(\d+)$')
-    max_iteration = 0
-    
-    for item in snapshot_dir.iterdir():
-        if item.is_dir():
-            match = iteration_pattern.match(item.name)
-            if match:
-                iteration_num = int(match.group(1))
-                max_iteration = max(max_iteration, iteration_num)
-    
-    if max_iteration > 0:
-        return snapshot_dir / f"iteration-{max_iteration}"
+    # Derive snapshot_id from path, use storage helper
+    snapshot_id = snapshot_dir.name
+    num = _get_latest_num(snapshot_id)
+    if num is not None:
+        return snapshot_dir / f"iteration-{num}"
     return None
 
 
 def main():
     """Main function"""
+    import argparse
+    # Erst --snapshot-id extrahieren, ohne die restlichen Args zu zerstören
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--snapshot-id", dest="snapshot_id", default=None)
+    pre_args, remaining_argv = pre_parser.parse_known_args()
+    snapshot_id_arg = pre_args.snapshot_id
+
+    # Ersetze sys.argv mit den übrigen Args für die nachfolgende Logik
+    import sys as _sys
+    _sys.argv = [_sys.argv[0]] + remaining_argv
+
     # Check for command line arguments
-    if len(sys.argv) < 2:
+    if len(_sys.argv) < 2:
         print("Usage:")
         print("  Search by value: python identify_snapshot.py <search_value>")
         print("  Search empty fields: python identify_snapshot.py --empty <field_name>")
@@ -823,7 +828,7 @@ def main():
         search_value = field_name
         
         # Load snapshot data
-        snapshot_id, data = load_snapshot_data()
+        snapshot_id, data = load_snapshot_data(snapshot_id_arg)
         if data is None:
             return
         
@@ -900,7 +905,7 @@ def main():
         search_mode = "value"
         
         # Load snapshot data
-        snapshot_id, data = load_snapshot_data()
+        snapshot_id, data = load_snapshot_data(snapshot_id_arg)
         if data is None:
             return
         
@@ -913,9 +918,8 @@ def main():
     display_results(results, search_value)
     
     # WICHTIG: Save results IMMER (auch wenn leer) - generate_correction_llm braucht die Datei!
-    snapshot_dir = Path(__file__).parent.parent / "Snapshots" / snapshot_id
-    output_file = snapshot_dir / "last_search_results.json"
-    
+    storage = get_storage()
+
     # Determine error type based on search mode and results
     if results:
         if search_mode == "empty_field":
@@ -999,48 +1003,37 @@ def main():
         
         # Build enriched context for LLM
         enriched_context = build_enriched_context(data, search_mode, search_value, results)
-        
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                "snapshot_id": snapshot_id,
-                "search_mode": search_mode,
-                "search_value": search_value,
-                "error_type": error_type,
-                "results_count": len(results),
-                "original_structure": original_structure,
-                "results": json_results,
-                "context": context,
-                "enriched_context": enriched_context
-            }, f, indent=2, ensure_ascii=False)
-        
-        print(f"Enhanced results saved to: {output_file}")
-        
+
+        # Build result payload
+        result_data = {
+            "snapshot_id": snapshot_id,
+            "search_mode": search_mode,
+            "search_value": search_value,
+            "error_type": error_type,
+            "results_count": len(results),
+            "original_structure": original_structure,
+            "results": json_results,
+            "context": context,
+            "enriched_context": enriched_context
+        }
+
+        storage.save_json(f"{snapshot_id}/last_search_results.json", result_data)
+        print(f"Enhanced results saved to: {snapshot_id}/last_search_results.json")
+
         # Also save to latest iteration folder if it exists
-        latest_iteration_dir = get_latest_iteration_dir(snapshot_dir)
-        if latest_iteration_dir:
-            iteration_output_file = latest_iteration_dir / "last_search_results.json"
-            with open(iteration_output_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "snapshot_id": snapshot_id,
-                    "search_mode": search_mode,
-                    "search_value": search_value,
-                    "error_type": error_type,
-                    "results_count": len(results),
-                    "original_structure": original_structure,
-                    "results": json_results,
-                    "context": context,
-                    "enriched_context": enriched_context
-                }, f, indent=2, ensure_ascii=False)
-            print(f"Enhanced results also saved to: {iteration_output_file}")
+        latest_num = _get_latest_num(snapshot_id)
+        if latest_num is not None:
+            storage.save_json(f"{snapshot_id}/iteration-{latest_num}/last_search_results.json", result_data)
+            print(f"Enhanced results also saved to: {snapshot_id}/iteration-{latest_num}/last_search_results.json")
         
         print(f"Error Type: {error_type}")
         print(f"Total demands in snapshot: {context['total_demands_count']}")
     
     # Falls KEINE Ergebnisse gefunden wurden UND noch keine Datei erstellt wurde
-    if not results and not output_file.exists():
+    if not results and not storage.exists(f"{snapshot_id}/last_search_results.json"):
         # KEINE ERGEBNISSE → Erstelle trotzdem eine leere Datei für generate_correction_llm!
         print(f"No results found - creating empty last_search_results.json for pipeline compatibility")
-        
+
         context = {
             "total_demands_count": len(data.get("demands", [])) if "demands" in data else 0,
             "total_customer_orders": len(data.get("customerOrderPositions", [])) if "customerOrderPositions" in data else 0,
@@ -1049,24 +1042,23 @@ def main():
                 "successor_must_reference_valid_demand": True
             }
         }
-        
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                "snapshot_id": snapshot_id,
-                "search_mode": search_mode,
-                "search_value": search_value,
-                "error_type": error_type,
-                "results_count": 0,
-                "original_structure": [],
-                "results": [],
-                "context": context,
-                "enriched_context": {
-                    "error_summary": f"No instances of '{search_value}' found in snapshot",
-                    "recommendations": ["Verify search term spelling", "Check if field name is correct", "Data may already be correct"]
-                }
-            }, f, indent=2, ensure_ascii=False)
-        
-        print(f"Empty results file saved to: {output_file}")
+
+        storage.save_json(f"{snapshot_id}/last_search_results.json", {
+            "snapshot_id": snapshot_id,
+            "search_mode": search_mode,
+            "search_value": search_value,
+            "error_type": error_type,
+            "results_count": 0,
+            "original_structure": [],
+            "results": [],
+            "context": context,
+            "enriched_context": {
+                "error_summary": f"No instances of '{search_value}' found in snapshot",
+                "recommendations": ["Verify search term spelling", "Check if field name is correct", "Data may already be correct"]
+            }
+        })
+
+        print(f"Empty results file saved to: {snapshot_id}/last_search_results.json")
 
 
 if __name__ == "__main__":
