@@ -98,6 +98,14 @@ async function sendMessage(retryCount = 0) {
     // Typing Indicator anzeigen
     showTypingIndicator();
 
+    // Cold-Start Hinweis nach 10s (Container App Scale-to-Zero)
+    const coldStartTimer = setTimeout(() => {
+        const indicator = document.getElementById('typingIndicator');
+        if (indicator) {
+            indicator.querySelector('.bubble').innerHTML += '<p style="font-size:0.75rem;opacity:0.6;margin-top:4px">⏳ Backend startet... (Scale-to-Zero, bitte kurz warten)</p>';
+        }
+    }, 10000);
+
     try {
         // API-Aufruf mit Timeout
         const controller = new AbortController();
@@ -116,6 +124,7 @@ async function sendMessage(retryCount = 0) {
         });
 
         clearTimeout(timeoutId);
+        clearTimeout(coldStartTimer);
 
         // Rate Limiting Detection (429 Status)
         if (response.status === 429) {
@@ -140,6 +149,7 @@ async function sendMessage(retryCount = 0) {
         }
 
     } catch (error) {
+        clearTimeout(coldStartTimer);
         hideTypingIndicator();
 
         // Retry logic for network errors
@@ -305,7 +315,7 @@ async function initializeSpeechRecognition() {
 
     // Load credentials from backend
     try {
-        const response = await fetch('/api/speech-config');
+        const response = await fetch(API_CONFIG.baseURL + '/api/speech-config');
         const config = await response.json();
         
         if (!config.configured) {
