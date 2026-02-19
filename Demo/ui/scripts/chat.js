@@ -20,7 +20,7 @@ const CONFIG = {
     MAX_RETRIES: 3,
     RETRY_DELAY: 2000, // ms
     REQUEST_TIMEOUT: 300000, // 5 minutes
-    API_ENDPOINT: '/api/chat',
+    API_ENDPOINT: API_CONFIG.baseURL + '/api/chat',
     // Azure Speech Configuration (wird vom Backend geladen)
     SPEECH_KEY: null,
     SPEECH_REGION: null,
