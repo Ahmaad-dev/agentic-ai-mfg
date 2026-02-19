@@ -9,10 +9,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Requirements installieren
+# Requirements installieren (system-weit, kein --user)
 COPY requirements.txt requirements-azure.txt ./
-RUN pip install --no-cache-dir --user -r requirements.txt && \
-    pip install --no-cache-dir --user -r requirements-azure.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-azure.txt
 
 # Production Stage
 FROM python:3.11-slim
@@ -24,9 +24,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Python packages von builder kopieren
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
+# Python packages von builder kopieren (system-weit in /usr/local)
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Application code kopieren
 COPY . .

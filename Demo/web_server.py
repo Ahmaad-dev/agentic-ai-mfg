@@ -84,6 +84,10 @@ def initialize_system():
     """Initialisiert das gesamte Agent-System"""
     global orchestrator, agents
     
+    if orchestrator is not None:
+        logger.info("Agent-System bereits initialisiert, überspringe")
+        return
+    
     # Clients initialisieren
     aoai_chat = AzureOpenAI(
         azure_endpoint=must_env("AZURE_OPENAI_CHAT_ENDPOINT"),
