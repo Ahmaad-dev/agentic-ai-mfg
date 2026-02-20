@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Agenten Architektur – Smart Planning AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0B1120;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px 60px;
+    min-height: 100vh;
+    color: #E2E8F0;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #F1F5F9;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #CBD5E1;
+    margin-bottom: 40px;
+    text-align: center;
+    letter-spacing: 0.3px;
+  }
+
+  .diagram {
+    width: 960px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* ── LAYER STYLES ─────────────────────────────────────── */
+  .layer-label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #F1F5F9;
+    align-self: flex-start;
+    margin-bottom: 8px;
+    margin-left: 4px;
+  }
+
+  /* ── BOXES ────────────────────────────────────────────── */
+  .box {
+    border-radius: 12px;
+    padding: 16px 22px;
+    position: relative;
+    border: 1px solid transparent;
+    transition: box-shadow 0.2s;
+  }
+  .box-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .box-sub {
+    font-size: 11px;
+    color: #94A3B8;
+    line-height: 1.5;
+  }
+  .box-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-top: 6px;
+    margin-right: 4px;
+    letter-spacing: 0.3px;
+  }
+
+  /* ── BROWSER ──────────────────────────────────────────── */
+  .row-top {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+    margin-bottom: 0;
+  }
+  .box-browser {
+    background: #1E293B;
+    border-color: #334155;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .box-browser .box-title { color: #60A5FA; font-size: 15px; }
+  .box-browser .icon { font-size: 32px; }
+
+  /* ── FLASK ─────────────────────────────────────────────  */
+  .box-flask {
+    background: #1E293B;
+    border-color: #334155;
+    flex: 0 0 240px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .box-flask .box-title { color: #818CF8; font-size: 15px; }
+  .box-flask .icon { font-size: 32px; }
+
+  /* ── ORCHESTRATOR ─────────────────────────────────────── */
+  .box-orchestrator {
+    background: linear-gradient(135deg, #1C1A12 0%, #1F1A0E 100%);
+    border-color: #92400E;
+    width: 100%;
+    border-width: 2px;
+    box-shadow: 0 0 32px rgba(245, 158, 11, 0.15);
+  }
+  .box-orchestrator .box-title { color: #FCD34D; font-size: 16px; }
+  .box-orchestrator .steps {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .step-badge {
+    background: #292115;
+    border: 1px solid #78350F;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 11px;
+    color: #FDE68A;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .step-num {
+    background: #F59E0B;
+    color: #1C1400;
+    font-weight: 800;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  /* ── AGENTS ROW ───────────────────────────────────────── */
+  .agents-row {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .box-chat {
+    background: linear-gradient(135deg, #0E1F18 0%, #0C1A14 100%);
+    border-color: #065F46;
+    border-width: 2px;
+    flex: 1;
+  }
+  .box-chat .box-title { color: #34D399; font-size: 14px; }
+  .box-chat .box-tag { background: #064E3B; color: #6EE7B7; }
+
+  .box-rag {
+    background: linear-gradient(135deg, #0C1A22 0%, #0A1820 100%);
+    border-color: #155E75;
+    border-width: 2px;
+    flex: 1;
+  }
+  .box-rag .box-title { color: #22D3EE; font-size: 14px; }
+  .box-rag .box-tag { background: #0E4C60; color: #67E8F9; }
+
+  .box-sp {
+    background: linear-gradient(135deg, #160D24 0%, #120A20 100%);
+    border-color: #6D28D9;
+    border-width: 2px;
+    flex: 1.4;
+  }
+  .box-sp .box-title { color: #A78BFA; font-size: 14px; }
+  .box-sp .box-tag { background: #3B0764; color: #C4B5FD; }
+
+  /* ── SP TOOLS GRID ────────────────────────────────────── */
+  .tools-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin-top: 10px;
+  }
+  .tool-chip {
+    background: #1E1035;
+    border: 1px solid #4C1D95;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 10px;
+    color: #DDD6FE;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .tool-chip .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-tool   { background: #8B5CF6; }
+  .dot-llm    { background: #F59E0B; }
+  .dot-upload { background: #10B981; }
+
+  /* ── PIPELINE BADGE ────────────────────────────────────  */
+  .pipeline-box {
+    background: #0F0A1F;
+    border: 1px dashed #4C1D95;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 10px;
+    font-size: 10px;
+    color: #C4B5FD;
+  }
+  .pipeline-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: #A78BFA;
+    margin-bottom: 5px;
+  }
+  .pipeline-flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    font-size: 9.5px;
+    color: #DDD6FE;
+  }
+  .pipeline-step {
+    background: #1E1035;
+    border: 1px solid #6D28D9;
+    border-radius: 3px;
+    padding: 2px 5px;
+  }
+  .pipeline-arrow { color: #6D28D9; font-size: 11px; }
+
+  /* ── EXTERNAL SERVICES ROW ────────────────────────────── */
+  .services-row {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+  }
+  .box-aoai {
+    background: #0E1829;
+    border-color: #1D4ED8;
+    border-width: 2px;
+    flex: 1;
+  }
+  .box-aoai .box-title { color: #60A5FA; font-size: 13px; }
+  .box-aoai .box-tag { background: #1E3A5F; color: #93C5FD; }
+
+  .box-search {
+    background: #0E1829;
+    border-color: #0369A1;
+    border-width: 2px;
+    flex: 1;
+  }
+  .box-search .box-title { color: #38BDF8; font-size: 13px; }
+  .box-search .box-tag { background: #0C2E45; color: #7DD3FC; }
+
+  .box-vm {
+    background: #190B0B;
+    border-color: #991B1B;
+    border-width: 2px;
+    flex: 1.4;
+  }
+  .box-vm .box-title { color: #F87171; font-size: 13px; }
+  .box-vm .box-tag { background: #450A0A; color: #FCA5A5; }
+
+  /* ── ARROWS ───────────────────────────────────────────── */
+  .arrow-section {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+  }
+
+  /* Single centered arrow */
+  .arrow-down {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .arrow-line {
+    width: 2px;
+    background: #334155;
+    height: 28px;
+  }
+  .arrow-head {
+    width: 0;
+    height: 0;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 10px solid #334155;
+  }
+  .arrow-label {
+    font-size: 11px;
+    color: #CBD5E1;
+    background: #0B1120;
+    padding: 0 6px;
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  /* Three-way split arrows */
+  .arrow-split {
+    width: 100%;
+    height: 50px;
+    position: relative;
+  }
+  .arrow-split svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Individual downward arrows for services */
+  .arrows-three {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+  }
+  .arrow-col {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .arrow-col-wide { flex: 1.4; }
+  .arrow-col-norm { flex: 1; }
+
+  .arrow-down-sm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .arrow-line-sm {
+    width: 2px;
+    background: #1E293B;
+    height: 22px;
+  }
+  .arrow-head-sm {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid #1E293B;
+  }
+
+  /* ── LEGEND ───────────────────────────────────────────── */
+  .legend {
+    margin-top: 36px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #94A3B8;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+
+<h1>⚙️ Multi-Agenten Architektur</h1>
+<p class="subtitle">Agentic AI für Smart Planning · Azure OpenAI · Azure AI Search · Smart Planning API</p>
+
+<div class="diagram">
+
+  <!-- ── LAYER 1: FRONTEND ──────────────────────────────── -->
+  <div class="layer-label">Frontend</div>
+  <div class="row-top">
+    <div class="box box-browser">
+      <span class="icon">🌐</span>
+      <div>
+        <div class="box-title">Browser · Chat UI</div>
+        <div class="box-sub">Intelligente Chat-Oberfläche · Azure Static Web App</div>
+        <span class="box-tag" style="background:#1E3A5F;color:#93C5FD;">HTTPS</span>
+        <span class="box-tag" style="background:#1E3A5F;color:#93C5FD;">Azure Speech SDK</span>
+        <span class="box-tag" style="background:#1E3A5F;color:#93C5FD;">Server-Sent Events</span>
+      </div>
+    </div>
+    <div class="box box-flask">
+      <span class="icon">🖥️</span>
+      <div>
+        <div class="box-title">Flask · Gunicorn</div>
+        <div class="box-sub">Backend API · Azure Container App</div>
+        <span class="box-tag" style="background:#2D1F6E;color:#C4B5FD;">POST /api/chat</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow ─────────────────────────────────────────────── -->
+  <div class="arrow-section" style="height:40px;">
+    <div class="arrow-down">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+    </div>
+    <span class="arrow-label">Anfrage + Chat-History</span>
+  </div>
+
+  <!-- ── LAYER 2: ORCHESTRATOR ──────────────────────────── -->
+  <div class="layer-label">Intelligente Steuerung</div>
+  <div class="box box-orchestrator" style="width:100%">
+    <div class="box-title">
+      🎯 Orchestration Agent
+    </div>
+    <div class="box-sub" style="margin-bottom:4px;">Versteht die Anfrage, plant die Ausführung und koordiniert alle Sub-Agenten</div>
+    <div class="steps">
+      <div class="step-badge"><span class="step-num">1</span> Anfrage verstehen &amp; Plan erstellen</div>
+      <div class="step-badge"><span class="step-num">2</span> Richtigen Agenten auswählen</div>
+      <div class="step-badge"><span class="step-num">3</span> Agenten koordinieren &amp; verketten</div>
+      <div class="step-badge"><span class="step-num">4</span> Antwort aufbereiten &amp; zurückgeben</div>
+    </div>
+  </div>
+
+  <!-- Three-way split arrow ─────────────────────────────── -->
+  <div class="arrow-split">
+    <svg viewBox="0 0 960 50" preserveAspectRatio="none">
+      <!-- vertical down from center -->
+      <line x1="480" y1="0" x2="480" y2="20" stroke="#334155" stroke-width="2"/>
+      <!-- horizontal bar -->
+      <line x1="160" y1="20" x2="800" y2="20" stroke="#334155" stroke-width="2"/>
+      <!-- left branch -->
+      <line x1="160" y1="20" x2="160" y2="40" stroke="#065F46" stroke-width="2"/>
+      <polygon points="154,40 166,40 160,50" fill="#065F46"/>
+      <!-- center branch -->
+      <line x1="480" y1="20" x2="480" y2="40" stroke="#155E75" stroke-width="2"/>
+      <polygon points="474,40 486,40 480,50" fill="#155E75"/>
+      <!-- right branch -->
+      <line x1="800" y1="20" x2="800" y2="40" stroke="#6D28D9" stroke-width="2"/>
+      <polygon points="794,40 806,40 800,50" fill="#6D28D9"/>
+      <!-- labels -->
+      <text x="95" y="15" fill="#065F46" font-size="10" font-family="Segoe UI,sans-serif">chat</text>
+      <text x="454" y="15" fill="#155E75" font-size="10" font-family="Segoe UI,sans-serif">rag</text>
+      <text x="775" y="15" fill="#6D28D9" font-size="10" font-family="Segoe UI,sans-serif">sp</text>
+    </svg>
+  </div>
+
+  <!-- ── LAYER 3: AGENTS ────────────────────────────────── -->
+  <div class="layer-label">Spezialisierte Agenten</div>
+  <div class="agents-row">
+
+    <!-- Chat Agent -->
+    <div class="box box-chat">
+      <div class="box-title">💬 Chat Agent</div>
+      <div class="box-sub">Allgemeine Konversation &amp; methodische Fragen</div>
+      <span class="box-tag">Gesprächskontext</span>
+      <div style="margin-top:10px;font-size:10px;color:#6EE7B7;">
+        ▸ Versteht Folgefragen im Kontext<br>
+        ▸ Erklärt Ergebnisse verständlich<br>
+        ▸ Beantwortet: "Was bedeutet das?"
+      </div>
+    </div>
+
+    <!-- RAG Agent -->
+    <div class="box box-rag">
+      <div class="box-title">📚 RAG Agent</div>
+      <div class="box-sub">Unternehmensdoku · Regeln · Prozesse</div>
+      <span class="box-tag">Wissensbasis</span>
+      <span class="box-tag">Semantische Suche</span>
+      <div style="margin-top:10px;font-size:10px;color:#67E8F9;">
+        ▸ Durchsucht Unternehmensdokumente<br>
+        ▸ Findet relevante Regeln &amp; Prozessvorgaben<br>
+        ▸ Beantwortet: "Welche Regeln gelten hier?"
+      </div>
+    </div>
+
+    <!-- SP Agent -->
+    <div class="box box-sp">
+      <div class="box-title">🔧 Smart Planning Agent</div>
+      <div class="box-sub">Snapshot-Verwaltung · Validierung · Automatische Fehlerkorrektur</div>
+      <span class="box-tag">11 Tools</span>
+      <span class="box-tag">4 Pipelines</span>
+      <div class="tools-grid">
+        <div class="tool-chip"><span class="dot dot-tool"></span>create_snapshot</div>
+        <div class="tool-chip"><span class="dot dot-tool"></span>download_snapshot</div>
+        <div class="tool-chip"><span class="dot dot-tool"></span>validate_snapshot</div>
+        <div class="tool-chip"><span class="dot dot-tool"></span>identify_snapshot</div>
+        <div class="tool-chip"><span class="dot dot-llm"></span>identify_error_llm</div>
+        <div class="tool-chip"><span class="dot dot-llm"></span>generate_correction_llm</div>
+        <div class="tool-chip"><span class="dot dot-llm"></span>validate_correction_schema</div>
+        <div class="tool-chip"><span class="dot dot-llm"></span>apply_correction</div>
+        <div class="tool-chip"><span class="dot dot-upload"></span>update_snapshot</div>
+        <div class="tool-chip"><span class="dot dot-tool"></span>rename_snapshot</div>
+        <div class="tool-chip"><span class="dot dot-tool"></span>generate_audit_report</div>
+      </div>
+
+      <div class="pipeline-box">
+        <div class="pipeline-title">🔄 Auto-Korrektur Pipelines</div>
+        <div class="pipeline-flow">
+          <span class="pipeline-step">validate</span>
+          <span class="pipeline-arrow">→</span>
+          <span class="pipeline-step">identify_llm</span>
+          <span class="pipeline-arrow">→</span>
+          <span class="pipeline-step">generate_llm</span>
+          <span class="pipeline-arrow">→</span>
+          <span class="pipeline-step">schema_check</span>
+          <span class="pipeline-arrow">→</span>
+          <span class="pipeline-step">apply</span>
+          <span class="pipeline-arrow">→</span>
+          <span class="pipeline-step">upload</span>
+          <span class="pipeline-arrow">→</span>
+          <span class="pipeline-step">re-validate</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /agents-row -->
+
+  <!-- Individual service arrows -->
+  <div class="arrows-three" style="height:30px;margin-top:0;">
+    <div class="arrow-col arrow-col-norm" style="justify-content:center;">
+      <div class="arrow-down-sm"><div class="arrow-line-sm" style="background:#065F46;height:28px;"></div><div class="arrow-head-sm" style="border-top-color:#065F46;"></div></div>
+    </div>
+    <div class="arrow-col arrow-col-norm" style="justify-content:center;">
+      <div class="arrow-down-sm"><div class="arrow-line-sm" style="background:#155E75;height:28px;"></div><div class="arrow-head-sm" style="border-top-color:#155E75;"></div></div>
+    </div>
+    <div class="arrow-col arrow-col-wide" style="justify-content:center;">
+      <div class="arrow-down-sm"><div class="arrow-line-sm" style="background:#6D28D9;height:28px;"></div><div class="arrow-head-sm" style="border-top-color:#6D28D9;"></div></div>
+    </div>
+  </div>
+
+  <!-- ── LAYER 4: EXTERNAL SERVICES ─────────────────────── -->
+  <div class="layer-label">Azure & Externe Dienste</div>
+  <div class="services-row">
+
+    <div class="box box-aoai">
+      <div class="box-title">☁️ Azure OpenAI</div>
+      <div class="box-sub">KI-Sprachmodell für Planung, Analyse &amp; Korrektur</div>
+      <span class="box-tag">GPT-4o</span>
+      <span class="box-tag">Embedding</span>
+    </div>
+
+    <div class="box box-search">
+      <div class="box-title">🔍 Azure AI Search</div>
+      <div class="box-sub">Intelligente Suche in Unternehmensdokumenten</div>
+      <span class="box-tag">Vektordatenbank</span>
+      <span class="box-tag">Semantische Suche</span>
+    </div>
+
+    <div class="box box-vm">
+      <div class="box-title">🏭 Smart Planning API</div>
+      <div class="box-sub">Produktionsplanung · Optimierung · Datenhaltung</div>
+      <span class="box-tag">Snapshots</span>
+      <span class="box-tag">Solver Engine</span>
+    </div>
+
+  </div><!-- /services-row -->
+
+  <!-- ── AOAI shared note ─────────────────────────────────  -->
+  <div style="margin-top:14px;background:#0D1829;border:1px dashed #1E3A5F;border-radius:8px;padding:10px 20px;font-size:11px;color:#94A3B8;width:100%;text-align:center;">
+    <span style="color:#60A5FA;font-weight:600;">Azure OpenAI</span> wird von <span style="color:#34D399;">Chat Agent</span>, <span style="color:#22D3EE;">RAG Agent</span> und dem <span style="color:#FCD34D;">Orchestrator</span> gemeinsam genutzt · Embedding-Modell ausschließlich vom <span style="color:#22D3EE;">RAG Agent</span> für Vektorsuche
+  </div>
+
+</div><!-- /diagram -->
+
+<!-- ── LEGEND ────────────────────────────────────────────── -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#F59E0B;"></div>Orchestrator (Routing + Interpretation)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#34D399;"></div>Chat Agent (Konversation)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22D3EE;"></div>RAG Agent (Wissensbasis)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#A78BFA;"></div>SP Agent (Smart Planning Tools)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6;"></div>Tool (Python Script)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#F59E0B;"></div>LLM-gestütztes Tool</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#10B981;"></div>Upload / Sync</div>
+</div>
+
+</body>
+</html>

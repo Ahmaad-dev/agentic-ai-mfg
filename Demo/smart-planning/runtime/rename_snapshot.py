@@ -60,7 +60,8 @@ class SmartPlanningAPI:
             self.token_uri,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data=data,
-            verify=False
+            verify=False,
+            timeout=10
         )
         response.raise_for_status()
         
@@ -93,7 +94,8 @@ class SmartPlanningAPI:
                 "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json"
             },
-            verify=False
+            verify=False,
+            timeout=15
         )
         
         if response.status_code != 200:
@@ -130,7 +132,8 @@ class SmartPlanningAPI:
                 "Content-Type": "application/json"
             },
             json=payload,
-            verify=False
+            verify=False,
+            timeout=30
         )
         
         if response.status_code == 200:

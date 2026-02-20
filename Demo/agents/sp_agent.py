@@ -91,7 +91,7 @@ class SPAgent(BaseAgent):
                 cwd=str(self.runtime_dir),
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 Minuten Timeout
+                timeout=90  # 90 Sekunden Timeout (bei VPN-Fehler soll schnell ein Fehler kommen)
             )
             
             base_result = {
@@ -358,7 +358,8 @@ class SPAgent(BaseAgent):
                 final_validation_status = {
                     "errors": error_count,
                     "warnings": warning_count,
-                    "is_valid": is_validated and error_count == 0
+                    "is_valid": error_count == 0,  # Valide = keine Errors (Upload-Status separat)
+                    "server_validated": is_validated
                 }
                 
                 logger.info(f"[{self.name}] Final Validation: is_valid={final_validation_status['is_valid']}, errors={error_count}, warnings={warning_count}")
@@ -448,7 +449,9 @@ class SPAgent(BaseAgent):
     
     def execute_pipeline(self, pipeline_name: str, snapshot_id: Optional[str] = None) -> Dict:
         """
-        NEUE HAUPTMETHODE: Führt eine Pipeline aus und gibt strukturiertes Ergebnis zurück
+        NEUE HAUPTMETHODE: Führt eine Pipeline aus und gibt strukturiertes Ergebnis zurück.
+        Bei Korrektur-Pipelines wird automatisch iteriert, bis keine Fehler mehr vorhanden
+        sind oder die maximale Iterationszahl erreicht ist.
         
         Args:
             pipeline_name: Name der Pipeline (z.B. "full_correction")
@@ -460,10 +463,42 @@ class SPAgent(BaseAgent):
             - pipeline: Pipeline-Name
             - completed_steps: List von Step-Ergebnissen
             - final_validation: Dict mit is_valid, errors, warnings (falls vorhanden)
+            - total_iterations: Anzahl durchgeführter Iterationen
         """
-        logger.info(f"[{self.name}] Führe Pipeline aus: {pipeline_name} für Snapshot: {snapshot_id}")
-        
-        result = self._execute_pipeline(pipeline_name, snapshot_id)
-        
-        return result
+        MAX_CORRECTION_ITERATIONS = 5
+        is_correction_pipeline = pipeline_name in ["full_correction", "correction_from_validation"]
+
+        iteration = 0
+        last_result = None
+
+        while True:
+            iteration += 1
+            logger.info(f"[{self.name}] Führe Pipeline aus: {pipeline_name} für Snapshot: {snapshot_id} (Iteration {iteration}/{MAX_CORRECTION_ITERATIONS})")
+
+            last_result = self._execute_pipeline(pipeline_name, snapshot_id)
+
+            # Kein Korrektur-Pipeline oder Pipeline-Schritt fehlgeschlagen → sofort zurückgeben
+            if not is_correction_pipeline or not last_result.get("success"):
+                break
+
+            final_validation = last_result.get("final_validation")
+            if not final_validation:
+                break
+
+            remaining_errors = final_validation.get("errors", 0)
+
+            # Alle Fehler behoben → fertig
+            if remaining_errors == 0:
+                logger.info(f"[{self.name}] ✅ Snapshot valide nach {iteration} Iteration(en)")
+                break
+
+            # Maximale Iterationen erreicht
+            if iteration >= MAX_CORRECTION_ITERATIONS:
+                logger.warning(f"[{self.name}] ⚠ Maximale Iterationen ({MAX_CORRECTION_ITERATIONS}) erreicht – verbleibende Fehler: {remaining_errors}")
+                break
+
+            logger.info(f"[{self.name}] Noch {remaining_errors} Fehler nach Iteration {iteration}, starte neue Iteration...")
+
+        last_result["total_iterations"] = iteration
+        return last_result
 

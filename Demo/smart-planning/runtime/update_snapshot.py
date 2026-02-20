@@ -73,7 +73,7 @@ class SmartPlanningAPI:
             "client_secret": self.client_secret
         }
         
-        response = requests.post(token_url, data=data, verify=False)
+        response = requests.post(token_url, data=data, verify=False, timeout=10)
         response.raise_for_status()
         
         self.token = response.json()["access_token"]
@@ -117,7 +117,7 @@ class SmartPlanningAPI:
         print(f"  Name: {name}")
         print(f"  Data size: {len(data_json):,} characters")
         
-        response = requests.put(url, headers=headers, json=body, verify=False)
+        response = requests.put(url, headers=headers, json=body, verify=False, timeout=60)
         response.raise_for_status()
         
         return response.json()

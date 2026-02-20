@@ -98,13 +98,14 @@ async function sendMessage(retryCount = 0) {
     // Typing Indicator anzeigen
     showTypingIndicator();
 
-    // Cold-Start Hinweis nach 10s (Container App Scale-to-Zero)
-    const coldStartTimer = setTimeout(() => {
+    // Cold-Start Hinweis nach 10s - nur in Production (Container App Scale-to-Zero)
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const coldStartTimer = !isLocal ? setTimeout(() => {
         const indicator = document.getElementById('typingIndicator');
         if (indicator) {
             indicator.querySelector('.bubble').innerHTML += '<p style="font-size:0.75rem;opacity:0.6;margin-top:4px">⏳ Backend startet... (Scale-to-Zero, bitte kurz warten)</p>';
         }
-    }, 10000);
+    }, 10000) : null;
 
     try {
         // API-Aufruf mit Timeout
@@ -143,7 +144,7 @@ async function sendMessage(retryCount = 0) {
         if (!response.ok) {
             let errorBody = '';
             try { errorBody = await response.text(); } catch (_) {}
-            throw new Error(`HTTP ${response.status}: ${errorBody || 'Keine Antwort vom Backend. Bitte deploy-frontend.yml ausführen.'}`);
+            throw new Error(`HTTP ${response.status}: ${errorBody || 'Keine Antwort vom Backend.'}`);
         }
 
         // JSON sicher parsen
@@ -152,7 +153,7 @@ async function sendMessage(retryCount = 0) {
             data = await response.json();
         } catch (parseError) {
             const rawText = '(leer)';
-            throw new Error(`Backend-Antwort ist kein JSON. Backend-URL prüfen (deploy-frontend.yml ausführen). Details: ${parseError.message}`);
+            throw new Error(`Backend-Antwort ist kein JSON. Backend-URL prüfen. Details: ${parseError.message}`);
         }
         hideTypingIndicator();
 
@@ -178,7 +179,7 @@ async function sendMessage(retryCount = 0) {
 
         // Timeout Error
         if (error.name === 'AbortError') {
-            addMessage('Die Anfrage hat zu lange gedauert (Timeout nach 5 Minuten). Bitte versuche es erneut.', 'agent', 'Error');
+            addMessage('Die Anfrage hat zu lange gedauert. Bitte versuche es erneut.', 'agent', 'Error');
         } 
         // Network Error
         else if (error.name === 'TypeError') {

@@ -111,7 +111,7 @@ CHAT_HISTORY_CONFIG = {
 cd demo
 python web_server.py
 ```
-Dann Browser öffnen: [http://localhost:5000](http://localhost:5000)
+Dann Browser öffnen: [http://localhost:8000](http://localhost:8000)
 
 Das ist alles. Du chattest direkt mit dem Agenten – egal ob lokal oder in der Cloud deployed.
 

@@ -275,10 +275,10 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print("  Multi-Agent Chat Server")
     print("="*60)
-    print("\n  Server läuft auf: http://localhost:5000")
+    print("\n  Server läuft auf: http://localhost:8000")
     print("\n  Zum Beenden: Ctrl+C")
     print("\n" + "="*60 + "\n")
     
     # Nutze 'stat' reloader statt 'watchdog' - vermeidet Probleme mit SP Tool Execution
     # 'stat' überwacht nur main files, nicht alle Python-Dateien im Workspace
-    app.run(debug=True, port=5000, use_reloader=True, reloader_type='stat')
+    app.run(debug=True, port=8000, use_reloader=True, reloader_type='stat')

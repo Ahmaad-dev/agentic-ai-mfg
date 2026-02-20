@@ -52,7 +52,7 @@ class SmartPlanningAPI:
             "client_secret": self.client_secret
         }
         
-        response = requests.post(token_url, data=data, verify=False)
+        response = requests.post(token_url, data=data, verify=False, timeout=10)
         response.raise_for_status()
         
         self.token = response.json()["access_token"]
@@ -67,7 +67,7 @@ class SmartPlanningAPI:
         url = f"{self.base_uri}/esarom-be/api/v1/snapshots/{snapshot_id}/validation-messages"
         headers = {"Authorization": f"Bearer {self.token}"}
         
-        response = requests.get(url, headers=headers, verify=False)
+        response = requests.get(url, headers=headers, verify=False, timeout=15)
         response.raise_for_status()
         
         return response.json()
@@ -100,7 +100,19 @@ def validate_snapshot(snapshot_id: str = None):
     
     try:
         validation_data = api.get_validation_messages(snapshot_id)
-        print(f"Validation data retrieved ({len(validation_data)} messages)")
+        print(f"Validation data retrieved ({len(validation_data)} messages, before deduplication)")
+
+        # Deduplicate: API sometimes returns the same message multiple times
+        seen = set()
+        deduplicated = []
+        for msg in validation_data:
+            key = (msg.get('level'), msg.get('message'))
+            if key not in seen:
+                seen.add(key)
+                deduplicated.append(msg)
+        if len(deduplicated) < len(validation_data):
+            print(f"Deduplication: {len(validation_data) - len(deduplicated)} duplicate(s) removed, {len(deduplicated)} unique messages remaining")
+        validation_data = deduplicated
 
         # Save validation data via StorageManager (LOCAL or AZURE)
         storage = get_storage()
@@ -204,4 +216,3 @@ if __name__ == "__main__":
                         help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
     args, _ = parser.parse_known_args()
     validate_snapshot(snapshot_id=args.snapshot_id)
-    validate_snapshot()

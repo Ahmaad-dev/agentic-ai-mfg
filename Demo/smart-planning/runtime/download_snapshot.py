@@ -7,6 +7,7 @@ import requests
 import json
 import warnings
 import os
+import uuid
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -71,7 +72,8 @@ class SmartPlanningAPI:
             self.token_uri,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data=data,
-            verify=False
+            verify=False,
+            timeout=10
         )
         response.raise_for_status()
         
@@ -95,7 +97,8 @@ class SmartPlanningAPI:
                 "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json"
             },
-            verify=False
+            verify=False,
+            timeout=15
         )
         response.raise_for_status()
         
@@ -113,8 +116,14 @@ class SmartPlanningAPI:
         """
         print(f"\n2. Suche nach Snapshot: {identifier}")
         
-        # Prüfe ob identifier eine UUID ist (enthält Bindestriche und ist ca. 36 Zeichen)
-        is_uuid = '-' in identifier and len(identifier) >= 32
+        # Prüfe ob identifier eine valide UUID ist
+        try:
+            # Versuche, den String als UUID zu parsen
+            uuid_obj = uuid.UUID(identifier)
+            # Prüfe zusätzlich, ob die String-Repräsentation übereinstimmt (um 'falsche positive' bei einfachen Hex-Strings zu vermeiden)
+            is_uuid = str(uuid_obj).lower() == identifier.lower()
+        except ValueError:
+            is_uuid = False
         
         if is_uuid:
             # Direkt als ID verwenden
@@ -195,7 +204,8 @@ class SmartPlanningAPI:
                 "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json"
             },
-            verify=False
+            verify=False,
+            timeout=15
         )
         response.raise_for_status()
         

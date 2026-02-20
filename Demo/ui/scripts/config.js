@@ -1,8 +1,11 @@
 ﻿// API Configuration für Frontend
 const API_CONFIG = {
-    // Automatische Erkennung: lokal vs. production
+    // Lokal: Flask dient Frontend + Backend auf dem gleichen Port (5000)
+    //         baseURL leer lassen, damit /api/chat relativ zum aktuellen Server geht
+    // Production: SWA und Container App sind getrennte Hosts
+    //         volle Backend-URL nötig
     baseURL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:8000'  // Local development
+        ? 'http://localhost:8000'  // Lokal: Flask auf Port 8000
         : 'https://' + 'BACKEND_URL_PLACEHOLDER',  // Production - wird von deploy-frontend.yml ersetzt
 };
 

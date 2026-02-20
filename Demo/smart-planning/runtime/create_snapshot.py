@@ -70,7 +70,8 @@ class SmartPlanningAPI:
             self.token_uri,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data=data,
-            verify=False
+            verify=False,
+            timeout=10
         )
         response.raise_for_status()
         
@@ -105,7 +106,8 @@ class SmartPlanningAPI:
                 "Content-Type": "application/json"
             },
             json={"name": name},
-            verify=False
+            verify=False,
+            timeout=30
         )
         response.raise_for_status()
         
@@ -144,7 +146,8 @@ class SmartPlanningAPI:
                         "Authorization": f"Bearer {self.token}",
                         "Content-Type": "application/json"
                     },
-                    verify=False
+                    verify=False,
+                    timeout=15
                 )
                 response.raise_for_status()
                 
