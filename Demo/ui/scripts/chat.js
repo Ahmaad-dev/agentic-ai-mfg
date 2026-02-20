@@ -139,7 +139,21 @@ async function sendMessage(retryCount = 0) {
             throw new Error(`Server-Fehler (${response.status}). Bitte versuche es später erneut.`);
         }
 
-        const data = await response.json();
+        // 4xx Fehler (z.B. 404 wenn Backend-URL falsch oder SWA abfängt)
+        if (!response.ok) {
+            let errorBody = '';
+            try { errorBody = await response.text(); } catch (_) {}
+            throw new Error(`HTTP ${response.status}: ${errorBody || 'Keine Antwort vom Backend. Bitte deploy-frontend.yml ausführen.'}`);
+        }
+
+        // JSON sicher parsen
+        let data;
+        try {
+            data = await response.json();
+        } catch (parseError) {
+            const rawText = '(leer)';
+            throw new Error(`Backend-Antwort ist kein JSON. Backend-URL prüfen (deploy-frontend.yml ausführen). Details: ${parseError.message}`);
+        }
         hideTypingIndicator();
 
         if (data.error) {

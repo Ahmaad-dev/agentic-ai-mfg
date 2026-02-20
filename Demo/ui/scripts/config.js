@@ -10,4 +10,14 @@ const API_CONFIG = {
 if (API_CONFIG.baseURL.includes('BACKEND_URL_PLACEHOLDER')) {
     console.error('[CONFIG] BACKEND_URL_PLACEHOLDER wurde nicht ersetzt! deploy-frontend.yml neu ausführen.');
     API_CONFIG.baseURL = '';
+    // Zeige Fehler im Chat sobald DOM bereit ist
+    window.addEventListener('DOMContentLoaded', () => {
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            chatMessages.innerHTML = `<div style="color:#ff6b6b;padding:1rem;border:1px solid #ff6b6b;border-radius:8px;margin:1rem">
+                ⚠️ <strong>Konfigurationsfehler:</strong> Backend-URL nicht gesetzt.<br>
+                Bitte den Workflow <code>deploy-frontend.yml</code> in GitHub Actions ausführen.
+            </div>`;
+        }
+    });
 }
