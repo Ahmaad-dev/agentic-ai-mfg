@@ -28,17 +28,35 @@ jobs:
             --resource-group rg-agentic-ai-mfg-environment \
             --query "[?starts_with(name, 'ca-agentic-ai-backend')].name | [0]" \
             --output tsv)
+          if [ -z "${BACKEND_NAME}" ]; then
+            echo "::error::Kein Container App mit Prefix 'ca-agentic-ai-backend' in rg-agentic-ai-mfg-environment gefunden!"
+            exit 1
+          fi
+          echo "Container App gefunden: ${BACKEND_NAME}"
           BACKEND_URL=$(az containerapp show \
             --name "${BACKEND_NAME}" \
             --resource-group rg-agentic-ai-mfg-environment \
-            --query properties.configuration.ingress.fqdn \
+            --query "properties.configuration.ingress.fqdn" \
             --output tsv)
+          if [ -z "${BACKEND_URL}" ]; then
+            echo "::error::FQDN fuer Container App '${BACKEND_NAME}' konnte nicht abgerufen werden!"
+            exit 1
+          fi
+          echo "Backend URL: ${BACKEND_URL}"
           echo "backend_url=${BACKEND_URL}" >> $GITHUB_OUTPUT
 
       - name: Update API Config with Backend URL
         run: |
-          sed -i "s|BACKEND_URL_PLACEHOLDER|${{ steps.get-backend-url.outputs.backend_url }}|g" Demo/ui/scripts/config.js
-          echo "Updated config.js with backend URL: ${{ steps.get-backend-url.outputs.backend_url }}"
+          BACKEND_URL="${{ steps.get-backend-url.outputs.backend_url }}"
+          echo "Ersetze BACKEND_URL_PLACEHOLDER mit: ${BACKEND_URL}"
+          sed -i "s|BACKEND_URL_PLACEHOLDER|${BACKEND_URL}|g" Demo/ui/scripts/config.js
+          # Prüfen ob Replacement erfolgreich war
+          if grep -q "BACKEND_URL_PLACEHOLDER" Demo/ui/scripts/config.js; then
+            echo "::error::BACKEND_URL_PLACEHOLDER wurde NICHT ersetzt! sed fehlgeschlagen."
+            exit 1
+          fi
+          echo "config.js erfolgreich aktualisiert:"
+          grep "baseURL" Demo/ui/scripts/config.js
 
       - name: Build And Deploy Static Web App
         uses: Azure/static-web-apps-deploy@v1
