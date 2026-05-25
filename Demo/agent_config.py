@@ -299,7 +299,7 @@ DEFAULT_ORCHESTRATOR_SUBAGENT_INTERPRETATION_PROMPT = """Ein Sub-Agent hat eine 
 **USER FRAGE:**
 {user_input}
 
-**SUB-AGENT:** {agent_name} Agent
+**SUB-AGENT:** {agent_name} Agentbitte den s
 
 **ERGEBNIS (roh):**
 {summary}
@@ -314,6 +314,12 @@ Beantworte die User-Frage basierend auf dem Sub-Agent-Ergebnis in natürlicher, 
 - Sei natürlich, freundlich und DETAILLIERT - gib dem User vollständige Informationen
 - NUR wenn User explizit "kurz", "knapp", "nur ja/nein" sagt -> Dann kompakter
 - Standardmäßig: Ausführliche, informative Antworten mit Kontext und Details
+
+**QUELLEN (RAG Agent):**
+- Wenn im Ergebnis "Quellen:" aufgelistet sind, IMMER am Ende der Antwort als eigenen Abschnitt ausgeben:
+  ---
+  **Quellen:** Datei1, Datei2, ...
+- Quellen niemals weglassen oder in den Fließtext einbauen
 
 ANTWORTE NUR MIT DER INTERPRETIERTEN NACHRICHT (keine JSON, keine Anführungszeichen)"""
 
