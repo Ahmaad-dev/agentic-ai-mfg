@@ -1,1 +1,19 @@
-.vscode
+# Python
+.venv/
+.vscode/
+__pycache__
+
+# Secrets
+demo/.env
+
+# OS
+demo/.DS_Store
+
+# Logs 
+demo/logs/
+
+# Smart Planning
+demo/zArchive/smart-planning_v1
+demo/zArchive/smart-planning_v2
+demo/smart-planning/docs
+demo/smart-planning/Snapshots
