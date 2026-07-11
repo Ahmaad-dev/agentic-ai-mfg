@@ -1,6 +1,13 @@
 """
 Agent Configuration
 """
+import os
+
+# ========== HUMAN-IN-THE-LOOP (PT4) ==========
+# Human-in-the-Loop governance toggle (PT4).
+# True  = correction requests produce a proposal and STOP before applying (default, safe).
+# False = legacy behavior: corrections are auto-applied (for testing/baseline only).
+HUMAN_IN_THE_LOOP = os.getenv("HUMAN_IN_THE_LOOP", "true").lower() == "true"
 
 # ========== AGENT KONFIGURATION ==========
 

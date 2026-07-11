@@ -2,6 +2,7 @@
 Einfacher Web-Server für das Multi-Agent Chat Interface
 """
 import os
+import time
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -28,6 +29,10 @@ load_dotenv()
 # Flask App
 app = Flask(__name__, template_folder='ui', static_folder='ui', static_url_path='')
 CORS(app)
+
+# AP3.1: Register the HitL review blueprint (read-only, /api/review/...)
+from routes.review import review_bp
+app.register_blueprint(review_bp)
 
 # Security Headers
 @app.after_request
@@ -70,6 +75,28 @@ logger = logging.getLogger(__name__)
 orchestrator = None
 agents = None
 chat_sessions = {}
+
+# DB persistence (AP2): map web chat-session-id (str) -> DB session id (int)
+from db import repository as db_repo
+db_session_ids = {}
+
+# AP2.5: Cost estimate per 1K tokens (INPUT assumption only, not model-specific).
+# gpt-4o blended average as of mid-2024 — will be refined per-model in AP6.
+# Adjust via env var COST_PER_1K_TOKENS if needed.
+_COST_PER_1K_TOKENS: float = float(os.getenv("COST_PER_1K_TOKENS", "0.005"))  # USD / 1K tokens (assumption)
+
+
+def _get_db_session_id(chat_session_id, snapshot_id=None):
+    """Lazily create a DB session row for a web chat session. Never breaks chat."""
+    if chat_session_id in db_session_ids:
+        return db_session_ids[chat_session_id]
+    try:
+        db_id = db_repo.create_session(snapshot_id=snapshot_id, user_ref=str(chat_session_id))
+        db_session_ids[chat_session_id] = db_id
+        return db_id
+    except Exception as e:
+        logger.warning(f"DB: could not create session row: {e}")
+        return None
 
 
 def must_env(name: str) -> str:
@@ -214,7 +241,15 @@ def chat():
             return jsonify({'error': 'Keine Nachricht erhalten'}), 400
         
         logger.info(f"Session {session_id} - User: {user_message}")
-        
+
+        # DB (AP2): ensure a session row exists + persist the user message
+        db_sid = _get_db_session_id(session_id)
+        if db_sid is not None:
+            try:
+                db_repo.add_message(db_sid, role="user", content=user_message)
+            except Exception as e:
+                logger.warning(f"DB: could not persist user message: {e}")
+
         # Session-Historie holen
         messages = get_session_history(session_id)
         
@@ -222,8 +257,10 @@ def chat():
         recent_history = get_recent_messages(messages, max_pairs=MAX_HISTORY_MESSAGES // 2)
         context = {"chat_history": recent_history}
         
-        # Orchestrator ausführen
+        # Orchestrator ausführen (mit Zeitmessung für agent_runs)
+        _t0 = time.perf_counter()
         result = orchestrator.execute(user_message, context)
+        duration_ms = int((time.perf_counter() - _t0) * 1000)
         
         # Antwort extrahieren
         response = result["response"]
@@ -235,6 +272,32 @@ def chat():
         
         # Agent-Name extrahieren
         agent_name = metadata.get("agent", "Unknown")
+
+        # DB (AP2/AP2.5): persist assistant message + agent run incl. token/cost telemetry
+        if db_sid is not None:
+            try:
+                db_repo.add_message(db_sid, role="assistant", content=str(response), agent_name=agent_name)
+                _tok_p = metadata.get("tokens_prompt") or None
+                _tok_c = metadata.get("tokens_completion") or None
+                _total = metadata.get("tokens_total") or None
+                _cost = (
+                    round((_total / 1000.0) * _COST_PER_1K_TOKENS, 6)
+                    if _total else None
+                )
+                db_repo.add_agent_run(
+                    db_sid,
+                    agent_name=agent_name,
+                    tool_name=(metadata.get("pipeline") or metadata.get("tool")),
+                    input_summary=user_message[:1000],
+                    output_summary=str(response)[:1000],
+                    status="success" if metadata.get("success", True) else "failed",
+                    duration_ms=duration_ms,
+                    tokens_prompt=_tok_p,
+                    tokens_completion=_tok_c,
+                    cost_estimate=_cost,
+                )
+            except Exception as e:
+                logger.warning(f"DB: could not persist assistant/agent_run: {e}")
         
         logger.info(f"Session {session_id} - Agent {agent_name}: {response[:100]}...")
         

@@ -1,8 +1,8 @@
 """
 Pydantic models for LLM correction proposal validation
 """
-from pydantic import BaseModel, Field
-from typing import List, Optional, Union, Any
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Literal, Optional, Union, Any
 
 
 class AdditionalUpdate(BaseModel):
@@ -23,6 +23,22 @@ class CorrectionProposal(BaseModel):
         default_factory=list,
         description="Optional list of additional updates to apply"
     )
+    confidence_score: Optional[float] = Field(
+        None,
+        description="Confidence score in range [0.0, 1.0] (optional, backward-compatible)"
+    )
+    status: Literal["pending_review", "approved", "rejected", "modified", "applied"] = Field(
+        "pending_review",
+        description="Review status of the proposal (default: pending_review)"
+    )
+
+    @field_validator("confidence_score")
+    @classmethod
+    def _validate_confidence_score(cls, v: Optional[float]) -> Optional[float]:
+        """Ensure confidence_score, if set, lies within [0.0, 1.0]."""
+        if v is not None and not (0.0 <= v <= 1.0):
+            raise ValueError("confidence_score must be between 0.0 and 1.0")
+        return v
 
 
 class OriginalError(BaseModel):

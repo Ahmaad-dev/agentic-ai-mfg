@@ -3,3 +3,5 @@ gunicorn==21.2.0
 azure-storage-blob==12.19.0
 azure-keyvault-secrets==4.7.0
 azure-identity==1.15.0
+# Azure SQL driver (target DB for AP2 persistence layer)
+pyodbc>=5.0,<6.0

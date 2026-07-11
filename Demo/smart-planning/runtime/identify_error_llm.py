@@ -31,6 +31,28 @@ def load_validation_fix_rules():
     return rules_file.read_text(encoding='utf-8')
 
 
+def derive_error_type_from_message(message: str):
+    """
+    AP3.6b-1: Derive a reliable error_type from the leading [validate_*] tag of a
+    validation message.
+
+    Every validator message starts with a tag like '[validate_<name>] <rest>'. That tag
+    is the trustworthy error classifier — unlike the hit-count heuristic in
+    identify_snapshot.py, which mislabels e.g. a missing-field error as DUPLICATE_ID
+    (see AP3.6a). Example:
+        '[validate_work_item_configs_completeness] Article ...' -> 'WORK_ITEM_CONFIGS_COMPLETENESS'
+
+    Returns None (no exception) if no [validate_*] tag is present, so callers get a
+    consistent, defensive fallback.
+    """
+    if not isinstance(message, str):
+        return None
+    match = re.match(r"\s*\[validate_([^\]]+)\]", message)
+    if not match:
+        return None
+    return match.group(1).strip().upper()
+
+
 def normalize_field_name(field_name):
     """Convert common field name variations to camelCase"""
     # Common field name mappings
@@ -196,7 +218,12 @@ Respond in JSON format:
     # Extract the selected error
     selected_index = llm_response.get('selected_error_index', 0)
     selected_error = error_messages[selected_index] if selected_index < len(error_messages) else error_messages[0]
-    
+
+    # AP3.6b-1: additively attach the tag-derived error type (reliable classifier from the
+    # [validate_*] tag). The existing free-text `error_type` stays untouched next to it;
+    # nothing is overwritten. Always written (None if no tag) for a consistent structure.
+    llm_response["tag_error_type"] = derive_error_type_from_message(selected_error.get("message", ""))
+
     # Prepare full LLM call data for logging
     llm_call_data = {
         "request": {

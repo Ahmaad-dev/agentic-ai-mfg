@@ -13,7 +13,8 @@ from agent_config import (
     DEFAULT_ORCHESTRATOR_MULTISTEP_SUMMARY_PROMPT,
     DEFAULT_ORCHESTRATOR_SUBAGENT_INTERPRETATION_PROMPT,
     DEFAULT_ORCHESTRATOR_SP_INTENT_PROMPT,
-    DEFAULT_ORCHESTRATOR_SP_RESULT_INTERPRETATION_PROMPT
+    DEFAULT_ORCHESTRATOR_SP_RESULT_INTERPRETATION_PROMPT,
+    HUMAN_IN_THE_LOOP
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,16 @@ class OrchestrationAgent(BaseAgent):
         )
         self.agentic_mode = True  # Aktiviert Multi-Step Planning
         self.last_snapshot_metadata = None  # Speichert letzte Snapshot-Metadaten für Chat Agent
+        # AP2.5: Request-scoped token accumulator (reset in execute() per call)
+        self._tok_prompt = 0
+        self._tok_completion = 0
+
+    def _track_usage(self, usage) -> None:
+        """AP2.5: Add LLM usage to the per-request accumulator (safe if usage is None)."""
+        if usage is None:
+            return
+        self._tok_prompt += getattr(usage, "prompt_tokens", 0) or 0
+        self._tok_completion += getattr(usage, "completion_tokens", 0) or 0
     
     def _create_execution_plan(self, user_input: str, chat_history: List) -> Dict:
         """Erstellt einen Multi-Step Execution Plan für komplexe Anfragen"""
@@ -105,6 +116,7 @@ class OrchestrationAgent(BaseAgent):
                 temperature=CHAT_HISTORY_CONFIG["planning_temperature"],
                 max_tokens=CHAT_HISTORY_CONFIG["max_planning_tokens"] 
             )
+            self._track_usage(response.usage)  # AP2.5
             
             output = response.choices[0].message.content.strip()
             
@@ -354,6 +366,7 @@ class OrchestrationAgent(BaseAgent):
                 temperature=CHAT_HISTORY_CONFIG["interpretation_temperature"],
                 max_tokens=CHAT_HISTORY_CONFIG["max_interpretation_tokens"]
             )
+            self._track_usage(response.usage)  # AP2.5
             
             return response.choices[0].message.content.strip()
             
@@ -475,6 +488,7 @@ class OrchestrationAgent(BaseAgent):
                 temperature=CHAT_HISTORY_CONFIG["interpretation_temperature"],
                 max_tokens=CHAT_HISTORY_CONFIG["max_interpretation_tokens"]
             )
+            self._track_usage(response.usage)  # AP2.5
             
             interpretation = response.choices[0].message.content.strip()
             logger.info(f"[{self.name}] Interpretierte Antwort: {interpretation[:100]}...")
@@ -489,6 +503,10 @@ class OrchestrationAgent(BaseAgent):
     def execute(self, user_input: str, context: Dict = None) -> Dict:
         """Orchestriert die Anfrage - mit agentic Planning und Adaptive Re-Planning"""
         logger.info(f"[{self.name}] Orchestriere Anfrage: {user_input[:100]}")
+        
+        # AP2.5: Reset per-request token accumulator
+        self._tok_prompt = 0
+        self._tok_completion = 0
         
         chat_history = context.get("chat_history", []) if context else []
         
@@ -523,6 +541,15 @@ class OrchestrationAgent(BaseAgent):
                 
                 if success:
                     logger.info(f"[{self.name}] ✅ Execution erfolgreich nach {attempt} Versuch(en)")
+                    # AP2.5: merge orchestrator-level token totals + sub-agent tokens into metadata
+                    _sub = result.get("metadata", {})
+                    _sub_p = _sub.get("tokens_prompt") or 0
+                    _sub_c = _sub.get("tokens_completion") or 0
+                    result["metadata"]["tokens_prompt"] = self._tok_prompt + _sub_p
+                    result["metadata"]["tokens_completion"] = self._tok_completion + _sub_c
+                    result["metadata"]["tokens_total"] = (
+                        self._tok_prompt + _sub_p + self._tok_completion + _sub_c
+                    )
                     return result
                 
                 # FEHLER → Prüfe ob Re-Planning möglich
@@ -560,6 +587,15 @@ class OrchestrationAgent(BaseAgent):
             
             # Nach allen Versuchen: Gib letztes Ergebnis zurück
             result["metadata"]["replanning_exhausted"] = True
+            # AP2.5: token totals also on exhausted path
+            _sub = result.get("metadata", {})
+            _sub_p = _sub.get("tokens_prompt") or 0
+            _sub_c = _sub.get("tokens_completion") or 0
+            result["metadata"]["tokens_prompt"] = self._tok_prompt + _sub_p
+            result["metadata"]["tokens_completion"] = self._tok_completion + _sub_c
+            result["metadata"]["tokens_total"] = (
+                self._tok_prompt + _sub_p + self._tok_completion + _sub_c
+            )
             return result
         
         return result
@@ -598,7 +634,7 @@ class OrchestrationAgent(BaseAgent):
                 temperature=CHAT_HISTORY_CONFIG["sp_intent_temperature"],
                 max_tokens=CHAT_HISTORY_CONFIG["max_intent_tokens"]
             )
-            
+            self._track_usage(response.usage)  # AP2.5
             output = response.choices[0].message.content.strip()
             if output.startswith("```json"):
                 output = output[7:]
@@ -617,7 +653,39 @@ class OrchestrationAgent(BaseAgent):
                 if not pipeline_snapshot_id and snapshot_id_from_history:
                     pipeline_snapshot_id = snapshot_id_from_history
                     logger.info(f"[{self.name}] Pipeline Snapshot-ID aus Historie verwendet: {pipeline_snapshot_id}")
-                
+
+                # PT4 Human-in-the-Loop: apply_and_upload beginnt direkt mit apply_correction
+                # (KEIN Vorschlags-Schritt) -> nicht auf analyze_only umbiegen, sondern blocken.
+                if HUMAN_IN_THE_LOOP and intent["action_name"] == "apply_and_upload":
+                    logger.info(
+                        f"[{self.name}] HUMAN_IN_THE_LOOP aktiv: Pipeline 'apply_and_upload' blockiert "
+                        f"(Anwenden nur nach Freigabe moeglich, folgt in AP3)"
+                    )
+                    return {
+                        "response": (
+                            "Im Human-in-the-Loop-Modus wird nichts automatisch angewendet. "
+                            "Die Korrektur kann erst nach ausdrücklicher Freigabe übernommen werden "
+                            "(die Freigabe-Funktion folgt in einem späteren Schritt / AP3)."
+                        ),
+                        "metadata": {
+                            "agent": "sp",
+                            "action_type": "pipeline",
+                            "pipeline": "apply_and_upload",
+                            "success": True,
+                            "hitl_blocked": True
+                        }
+                    }
+
+                # PT4 Human-in-the-Loop: Solange der Toggle an ist, niemals automatisch anwenden.
+                # Korrektur-Pipelines (die apply_correction/update_snapshot enthalten) werden auf
+                # analyze_only umgebogen -> es entsteht nur ein Vorschlag, nichts wird geschrieben.
+                if HUMAN_IN_THE_LOOP and intent["action_name"] in ("full_correction", "correction_from_validation"):
+                    logger.info(
+                        f"[{self.name}] HUMAN_IN_THE_LOOP aktiv: Pipeline '{intent['action_name']}' "
+                        f"wird auf 'analyze_only' umgebogen (Vorschlag statt Auto-Anwendung)"
+                    )
+                    intent["action_name"] = "analyze_only"
+
                 result = sp_agent.execute_pipeline(
                     pipeline_name=intent["action_name"],
                     snapshot_id=pipeline_snapshot_id
@@ -644,6 +712,28 @@ class OrchestrationAgent(BaseAgent):
                 }
             
             elif intent["action_type"] == "tool":
+                # PT4 Human-in-the-Loop: Einzel-Tool apply_correction schreibt direkt in
+                # snapshot-data.json -> im HitL-Modus nicht ausführen, sondern blocken.
+                if HUMAN_IN_THE_LOOP and intent["action_name"] == "apply_correction":
+                    logger.info(
+                        f"[{self.name}] HUMAN_IN_THE_LOOP aktiv: Tool 'apply_correction' blockiert "
+                        f"(Anwenden nur nach Freigabe moeglich, folgt in AP3)"
+                    )
+                    return {
+                        "response": (
+                            "Im Human-in-the-Loop-Modus wird nichts automatisch angewendet. "
+                            "Die Korrektur kann erst nach ausdrücklicher Freigabe übernommen werden "
+                            "(die Freigabe-Funktion folgt in einem späteren Schritt / AP3)."
+                        ),
+                        "metadata": {
+                            "agent": "sp",
+                            "action_type": "tool",
+                            "tool": "apply_correction",
+                            "success": True,
+                            "hitl_blocked": True
+                        }
+                    }
+
                 # Baue Argument-Liste mit Historie-Fallbacks
                 args = []
                 snapshot_id = intent.get("snapshot_id")
@@ -887,6 +977,7 @@ class OrchestrationAgent(BaseAgent):
                 temperature=CHAT_HISTORY_CONFIG["sp_result_temperature"],
                 max_tokens=CHAT_HISTORY_CONFIG["max_interpretation_tokens"]
             )
+            self._track_usage(response.usage)  # AP2.5
             
             return response.choices[0].message.content.strip()
             

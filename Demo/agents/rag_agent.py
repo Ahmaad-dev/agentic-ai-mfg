@@ -225,6 +225,10 @@ class RAGAgent(BaseAgent):
                     "relevance_score": relevance_score,
                     "retrieval_success": True,
                     "raw_result": True,  # Signal für Orchestrator
+                    # AP2.5: Token-Nutzung für DB-Persistenz
+                    "tokens_prompt": getattr(response.usage, "prompt_tokens", None),
+                    "tokens_completion": getattr(response.usage, "completion_tokens", None),
+                    "tokens_total": getattr(response.usage, "total_tokens", None),
                     "config": {
                         "temperature": self.temperature,
                         "max_tokens": self.max_tokens,

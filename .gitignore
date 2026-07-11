@@ -17,3 +17,9 @@ demo/zArchive/smart-planning_v1
 demo/zArchive/smart-planning_v2
 demo/smart-planning/docs
 demo/smart-planning/Snapshots
+
+# Local database (AP2 persistence layer) — Alembic migrations ARE tracked
+demo/db/*.sqlite3
+
+
+.github/instructions/
