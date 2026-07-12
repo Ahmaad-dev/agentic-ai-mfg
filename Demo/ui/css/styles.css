@@ -1309,3 +1309,350 @@ body.review-page .app-main {
     .rb-card-body { grid-template-columns: 1fr 1fr; }
     .rb-diff { grid-template-columns: 1fr; }
 }
+
+/* =============================================================================
+   DASHBOARD (AP6.2) — additiv. Nutzt ausschliesslich die vorhandenen Tokens und die
+   Review-Board-Flaechen (--rb-card-bg / --rb-chip-bg); kein neues Farbsystem.
+   Die Seite traegt zusaetzlich .review-page, erbt also deren Scroll-Verhalten.
+
+   Chart-Farben (gegen die Kartenflaeche #171922 nachgerechnet, nicht geschaetzt):
+     Balken  #818cf8 -> 5.87:1   (Marken brauchen >= 3:1)
+     Status  #eab308 -> 9.14:1   (nur fuer "Alt-Label", nie ohne Textmarke)
+     Gitter  #2e3036 -> 1.33:1   (soll zuruecktreten — das ist die Vorgabe)
+   ============================================================================= */
+
+/* --- Belastbarkeits-Block: steht bewusst GANZ OBEN und ausgeklappt ------------ */
+.db-quality {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+}
+.db-section-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 1rem; font-weight: 600; color: var(--text-main); margin: 0 0 4px;
+}
+.db-section-title .material-symbols-outlined { font-size: 20px; color: var(--text-sub); }
+.db-section-sub { color: var(--text-sub); font-size: 0.88rem; margin: 0 0 14px; line-height: 1.5; }
+
+.db-flags { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.db-flag {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+}
+.db-flag .material-symbols-outlined { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.db-flag p { margin: 4px 0 0; font-size: 0.86rem; line-height: 1.55; color: var(--text-main); }
+.db-flag-code {
+    font-family: var(--font-code); font-size: 0.72rem; letter-spacing: 0.03em;
+    color: var(--text-sub);
+}
+.db-flag-warning { border-color: rgba(234, 179, 8, 0.35); background: rgba(234, 179, 8, 0.07); }
+.db-flag-warning .material-symbols-outlined { color: #eab308; }
+.db-flag-info .material-symbols-outlined { color: var(--text-sub); }
+
+.db-flags-more { margin-top: 12px; }
+.db-flags-more summary {
+    cursor: pointer; color: var(--text-sub); font-size: 0.85rem; padding: 4px 0;
+}
+.db-flags-more summary:hover { color: var(--text-main); }
+.db-flags-more .db-flags { margin-top: 10px; }
+
+/* --- Heldenzahl + Meter (AK2 gegen die Zielmarke) ----------------------------- */
+.db-hero {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.db-hero-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 20px; flex-wrap: wrap; margin-bottom: 18px;
+}
+/* Proportionale Ziffern (kein tabular-nums): bei Displaygroessen wirkt eine Zahl
+   mit Gleichlaufziffern locker und auseinandergerissen. */
+.db-hero-value {
+    font-family: var(--font-body);
+    font-size: 3rem; font-weight: 600; line-height: 1.1;
+    color: var(--text-main); margin: 6px 0 6px;
+}
+.db-hero-target {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border-radius: 999px;
+    font-size: 0.82rem; white-space: nowrap;
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+    color: var(--text-sub);
+}
+.db-hero-target .material-symbols-outlined { font-size: 17px; }
+.db-hero-target strong { color: var(--text-main); font-weight: 600; }
+.db-hero-target.ok { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.10); }
+.db-hero-target.ok .material-symbols-outlined { color: #22c55e; }
+.db-hero-target.below { border-color: rgba(234, 179, 8, 0.35); background: rgba(234, 179, 8, 0.07); }
+.db-hero-target.below .material-symbols-outlined { color: #eab308; }
+
+/* Der Meter: ungefuellte Bahn = hellere Stufe derselben Flaeche, damit der Zustand
+   ueber die ganze Breite lesbar bleibt. Die Zielmarke ist eine echte Marke, kein Gitter. */
+.db-meter {
+    position: relative; height: 12px; border-radius: 999px;
+    background: var(--rb-chip-bg); border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+.db-meter-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.db-meter-fill.ok { background: linear-gradient(90deg, #06b6d4, #84cc16); }
+.db-meter-fill.below { background: #818cf8; }
+.db-meter-target {
+    position: absolute; top: -2px; bottom: -2px; width: 2px;
+    background: var(--text-main); opacity: 0.85;
+}
+.db-meter-legend {
+    display: flex; justify-content: space-between;
+    margin-top: 7px; font-size: 0.72rem; color: var(--text-sub);
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- KPI-Kacheln -------------------------------------------------------------- */
+.db-tiles {
+    display: grid; gap: 14px; margin-bottom: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.db-tile {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+}
+.db-tile-label {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-sub); font-weight: 500;
+}
+.db-tile-value {
+    font-size: 1.7rem; font-weight: 600; color: var(--text-main);
+    margin: 8px 0 6px; line-height: 1.15;
+}
+.db-tile-note { font-size: 0.78rem; color: var(--text-sub); line-height: 1.5; }
+
+/* --- Chart-Karten ------------------------------------------------------------- */
+.db-card {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+/* Die Karte waechst mit dem SVG mit (feste Hoehe wuerde die Achsenbeschriftung
+   abschneiden und der Karte einen eigenen Mini-Scrollbalken verpassen). */
+.db-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.db-cat, .db-val { font-family: var(--font-body); }
+.db-tick { font-family: var(--font-body); font-variant-numeric: tabular-nums; }
+.db-legacy-tag { fill: #eab308; font-size: 10px; }
+/* Trefferflaeche: die ganze Gruppe reagiert, nicht nur der schmale Balken. */
+.db-bar-g { cursor: default; }
+.db-bar-g:hover path { opacity: 0.82; }
+
+.db-rates { display: flex; gap: 28px; flex-wrap: wrap; }
+.db-rate { display: flex; flex-direction: column; gap: 2px; }
+.db-rate-val { font-size: 1.5rem; font-weight: 600; color: var(--text-main); }
+.db-rate-lbl { font-size: 0.8rem; color: var(--text-sub); }
+
+.db-callout {
+    display: flex; gap: 10px; align-items: flex-start;
+    margin: 16px 0 0; padding: 12px 14px; border-radius: 8px;
+    font-size: 0.86rem; line-height: 1.6; color: var(--text-main);
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+}
+.db-callout .material-symbols-outlined { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.db-callout code { font-family: var(--font-code); font-size: 0.85em; }
+.db-callout.warn { border-color: rgba(234, 179, 8, 0.35); background: rgba(234, 179, 8, 0.07); }
+.db-callout.warn .material-symbols-outlined { color: #eab308; }
+.db-callout.error { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.10); }
+.db-callout.error .material-symbols-outlined { color: #ef4444; }
+
+/* --- Tabelle offener Reviews -------------------------------------------------- */
+.db-table-wrap { overflow-x: auto; }   /* breite Tabelle scrollt in sich, nie die Seite */
+.db-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.db-table th {
+    text-align: left; padding: 10px 12px;
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-sub); font-weight: 500;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+.db-table td {
+    padding: 12px; border-bottom: 1px solid var(--border-color);
+    color: var(--text-main); vertical-align: middle;
+}
+.db-table tr:last-child td { border-bottom: none; }
+.db-table tr:hover td { background: rgba(99, 102, 241, 0.05); }
+.db-num { text-align: right; font-variant-numeric: tabular-nums; }
+.db-ellipsis { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.db-grounded {
+    display: inline-block; padding: 3px 9px; border-radius: 999px;
+    font-size: 0.72rem; white-space: nowrap;
+}
+.db-grounded.ok { background: rgba(34, 197, 94, 0.12); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+.db-grounded.warn { background: rgba(234, 179, 8, 0.12); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.3); }
+
+.db-link {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: #818cf8; text-decoration: none; white-space: nowrap;
+}
+.db-link:hover { text-decoration: underline; }
+.db-link .material-symbols-outlined { font-size: 16px; }
+
+.db-generated { color: var(--text-sub); font-size: 0.78rem; text-align: right; margin: 0 0 20px; }
+
+/* Nachladen ohne Layout-Sprung: alten Stand gedimmt halten statt Skeleton zu zeigen. */
+.db-loading { opacity: 0.55; transition: opacity 0.15s ease; }
+
+@media (max-width: 600px) {
+    .db-hero-value { font-size: 2.2rem; }
+    .db-rates { gap: 18px; }
+    .db-tiles { grid-template-columns: 1fr 1fr; }
+}
+
+/* =============================================================================
+   DASHBOARD AP6.4b — Filterleiste, Vorbehalte an der Kennzahl, Legende.
+   Ergaenzt den AP6.2-Block; die Reihenfolge der Seite hat sich geaendert
+   (Zahlen zuerst, Belastbarkeits-Block ans Ende und eingeklappt).
+   ============================================================================= */
+
+/* --- Filterleiste: EINE Reihe ueber allem, was sie einschraenkt --------------- */
+.db-filter {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+}
+.db-filter-nav { display: flex; align-items: center; gap: 6px; }
+.db-filter-range {
+    font-size: 0.88rem; color: var(--text-main); white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    min-width: 190px; text-align: center;
+}
+.db-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0;
+    border-radius: 8px; cursor: pointer;
+    background: transparent; color: var(--text-sub);
+    border: 1px solid var(--border-color);
+}
+.db-icon-btn:hover { color: var(--text-main); border-color: var(--accent-primary); }
+.db-icon-btn .material-symbols-outlined { font-size: 18px; }
+
+.db-filter-presets { display: flex; gap: 6px; }
+.db-chip {
+    padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    font-size: 0.82rem;
+    background: var(--rb-chip-bg); color: var(--text-sub);
+    border: 1px solid var(--border-color);
+}
+.db-chip:hover { color: var(--text-main); }
+.db-chip.active {
+    background: rgba(99, 102, 241, 0.14);
+    border-color: rgba(99, 102, 241, 0.5);
+    color: var(--text-main);
+}
+
+.db-filter-gran {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 8px;
+    background: var(--rb-chip-bg); border: 1px solid var(--border-color);
+    color: var(--text-sub);
+}
+.db-filter-gran .material-symbols-outlined { font-size: 17px; }
+.db-filter-gran select {
+    background: transparent; border: none; outline: none; cursor: pointer;
+    color: var(--text-main); font-family: var(--font-body); font-size: 0.82rem;
+}
+.db-filter-gran select option { background: var(--input-bg); color: var(--text-main); }
+
+.db-filter-note {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-left: auto;
+    font-size: 0.76rem; color: var(--text-sub);
+}
+.db-filter-note .material-symbols-outlined { font-size: 15px; }
+
+/* --- Vorbehalt AN der Kennzahl (statt Textblock oben) ------------------------ */
+.db-tile-head, .db-card-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+.db-card-head { align-items: center; margin-bottom: 4px; }
+.db-card-head .db-section-title { margin: 0; }
+
+/* Das Symbol ist der Klickpunkt; der Klartext klappt direkt darunter auf. Damit steht
+   die Warnung genau dort, wo die Zahl gelesen wird. */
+.db-caveat { position: relative; flex-shrink: 0; }
+.db-caveat > summary {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px 2px 5px; border-radius: 999px;
+    cursor: pointer; list-style: none;
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+    color: var(--text-sub);
+}
+.db-caveat > summary::-webkit-details-marker { display: none; }
+.db-caveat > summary:hover { border-color: var(--accent-primary); }
+.db-caveat .material-symbols-outlined { font-size: 15px; }
+.db-caveat-count { font-size: 0.7rem; font-weight: 600; }
+.db-caveat-warning > summary {
+    border-color: rgba(234, 179, 8, 0.4); background: rgba(234, 179, 8, 0.10);
+}
+.db-caveat-warning > summary .material-symbols-outlined { color: #eab308; }
+.db-caveat-body {
+    margin-top: 8px; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+}
+.db-caveat-body p {
+    margin: 0 0 8px; font-size: 0.8rem; line-height: 1.55; color: var(--text-main);
+}
+.db-caveat-body p:last-child { margin-bottom: 0; }
+.db-caveat-body code {
+    display: block; font-family: var(--font-code); font-size: 0.68rem;
+    letter-spacing: 0.03em; color: var(--text-sub); margin-bottom: 2px;
+}
+/* In der Kachel darf der aufgeklappte Text die Kachelbreite nicht sprengen. */
+.db-tile .db-caveat[open] .db-caveat-body {
+    position: absolute; right: 0; top: 100%; z-index: 20;
+    width: 300px; max-width: 78vw;
+    background: var(--input-bg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* --- Legende (Pflicht ab 2 Serien) ------------------------------------------- */
+.db-legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin: 4px 0 12px;
+    font-size: 0.8rem; color: var(--text-sub);
+}
+.db-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.db-legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* --- Belastbarkeits-Block: jetzt UNTEN und eingeklappt ------------------------ */
+details.db-quality { padding: 0; margin: 4px 0 20px; }
+details.db-quality > summary {
+    display: flex; align-items: center; gap: 8px;
+    padding: 14px 20px; cursor: pointer;
+    font-size: 0.9rem; color: var(--text-sub);
+}
+details.db-quality > summary:hover { color: var(--text-main); }
+details.db-quality > summary .material-symbols-outlined { font-size: 19px; }
+details.db-quality[open] > summary { border-bottom: 1px solid var(--border-color); }
+details.db-quality .db-section-sub { padding: 14px 20px 0; margin-bottom: 12px; }
+details.db-quality .db-flags { padding: 0 20px 18px; }
+
+/* Nur fuer Screenreader — der Zaehler am Warnsymbol braucht einen Klartext. */
+.sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (max-width: 700px) {
+    .db-filter { gap: 10px; }
+    .db-filter-range { min-width: 0; font-size: 0.8rem; }
+    .db-filter-note { margin-left: 0; }
+}

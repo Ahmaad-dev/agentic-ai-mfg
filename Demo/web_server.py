@@ -34,6 +34,10 @@ CORS(app)
 from routes.review import review_bp
 app.register_blueprint(review_bp)
 
+# AP6.1: Register the dashboard metrics blueprint (read-only, /api/dashboard/...)
+from routes.dashboard import dashboard_bp
+app.register_blueprint(dashboard_bp)
+
 # Security Headers
 @app.after_request
 def add_security_headers(response):
@@ -78,12 +82,8 @@ chat_sessions = {}
 
 # DB persistence (AP2): map web chat-session-id (str) -> DB session id (int)
 from db import repository as db_repo
+from cost_model import estimate_cost
 db_session_ids = {}
-
-# AP2.5: Cost estimate per 1K tokens (INPUT assumption only, not model-specific).
-# gpt-4o blended average as of mid-2024 — will be refined per-model in AP6.
-# Adjust via env var COST_PER_1K_TOKENS if needed.
-_COST_PER_1K_TOKENS: float = float(os.getenv("COST_PER_1K_TOKENS", "0.005"))  # USD / 1K tokens (assumption)
 
 
 def _get_db_session_id(chat_session_id, snapshot_id=None):
@@ -321,11 +321,8 @@ def chat():
                 db_repo.add_message(db_sid, role="assistant", content=str(response), agent_name=agent_name)
                 _tok_p = metadata.get("tokens_prompt") or None
                 _tok_c = metadata.get("tokens_completion") or None
-                _total = metadata.get("tokens_total") or None
-                _cost = (
-                    round((_total / 1000.0) * _COST_PER_1K_TOKENS, 6)
-                    if _total else None
-                )
+                # AP6.3: input and output are billed at their own rates (see cost_model.py).
+                _cost = estimate_cost(_tok_p, _tok_c)
                 db_repo.add_agent_run(
                     db_sid,
                     agent_name=agent_name,

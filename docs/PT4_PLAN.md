@@ -121,12 +121,34 @@ Outlook/email notification with deep link on new pending review. Prototype adapt
 acceptable. DoD: pending review triggers a notification with working link; tools callable.
 
 ## AP6 — Dashboard  (M6)
+Kurzbeschreibung:
 `demo/routes/dashboard.py` → GET /api/dashboard/metrics. Plus `demo/ui/dashboard.html`.
 KPIs: validations, proposals, approval/reject/modify rate, avg confidence,
 confidence-vs-human-decision (calibration), top error types, revalidation success rate,
 avg handling time, est. tokens/cost, open reviews. All derived from existing tables.
 DoD: dashboard shows live KPIs incl. approval rate and calibration.
+Langbeschreibung: 
+AP6 — Dashboard
+Langform. Eine neue Section in der bestehenden UI, die Kennzahlen aus der Datenbank berechnet und darstellt. Backend liefert eine Metrik-API, Frontend zeigt KPI-Karten und ein bis zwei Diagramme.
+Technik.
+Backend – demo/routes/dashboard.py:
 
+GET /api/dashboard/metrics
+Vorgeschlagene Kennzahlen (du entscheidest final beim Start des Pakets):
+Anzahl Validierungen, Anzahl Vorschläge
+Approval / Reject / Modify Rate
+Ø Confidence Score
+Confidence vs. tatsächliche menschliche Entscheidung (Kalibrierung) – wichtigste Qualitätskennzahl
+Häufigste Fehlerarten
+Revalidation Success Rate
+Ø Bearbeitungszeit
+Geschätzte Token/Kosten
+Anzahl offener Reviews
+Alle berechenbar aus proposals, reviews, agent_runs, snapshots_meta – keine neuen Datenquellen nötig.
+Frontend – ui/dashboard.html + ui/scripts/dashboard.js:
+KPI-Karten oben, darunter Balkendiagramm „Fehlerarten" und Confidence-Verteilung (Chart.js).
+Tabelle offener Reviews mit Link in die Review-UI.
+Definition of Done. Dashboard zeigt Live-Zahlen aus echten Durchläufen inkl. Approval-Rate und Confidence-Kalibrierung. → M6
 ## AP7 — Memory System  (M7) — LAST
 `demo/memory/{short_term,long_term,retrieval}.py`, optional consolidate_job.py.
 Short-term: current session context. Long-term: historical cases from `memory_items`

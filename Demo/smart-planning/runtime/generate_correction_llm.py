@@ -142,8 +142,10 @@ def save_central_proposal_record(snapshot_id, iteration_number, output_data):
 
         # AP2.5: Read token usage from the already-saved llm_correction_call.json
         # (runtime tool NOT changed — we read the file it already wrote)
-        # Cost constant mirrors web_server.py assumption; will be refined in AP6.
-        _COST_PER_1K_TOKENS = 0.005  # USD / 1K tokens — assumption, not model-specific (AP6 refines this)
+        # AP6.3: cost now comes from the shared cost model (input and output billed at their
+        # own rates). This tool is the input-heaviest caller in the system — it ships whole
+        # snapshot excerpts into the prompt — so a blended rate distorted it the most.
+        from cost_model import estimate_cost as _estimate_cost
         call_data = storage.load_json(
             f"{snapshot_id}/iteration-{iteration_number}/llm_correction_call.json"
         )
@@ -151,8 +153,7 @@ def save_central_proposal_record(snapshot_id, iteration_number, output_data):
             usage = (call_data.get("response") or {}).get("usage") or {}
             tok_p = usage.get("prompt_tokens")
             tok_c = usage.get("completion_tokens")
-            tok_t = usage.get("total_tokens")
-            cost = round((tok_t / 1000.0) * _COST_PER_1K_TOKENS, 6) if tok_t else None
+            cost = _estimate_cost(tok_p, tok_c)
             # Write a synthetic session to anchor the agent_run (subprocess has no web session)
             try:
                 _sess_id = _db_repo.create_session(

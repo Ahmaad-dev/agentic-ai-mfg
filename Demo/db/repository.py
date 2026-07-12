@@ -580,3 +580,77 @@ def decide_proposal(
             "reviewer_ref": reviewer_ref,
             "review_id": review.id,
         }
+
+
+# --------------------------------------------------------------------------- #
+# dashboard (AP6.1)
+# --------------------------------------------------------------------------- #
+def fetch_metrics_data() -> dict:
+    """
+    AP6.1: Pull everything the dashboard aggregates, in ONE session scope.
+
+    This is deliberately a data pull, not a metric computation: the repository stays a
+    thin DB layer, and every KPI definition (and every honesty caveat attached to it)
+    lives in `routes/dashboard.py` where it can be read in one place.
+
+    Rows are materialised to plain dicts inside the scope, so callers never touch a
+    detached ORM object (same pattern as `list_open_proposals_as_dicts`).
+
+    Only the LATEST review per proposal is returned. `decide_proposal()` already refuses a
+    second decision, so today this is a 1:1 join — but a metric that silently double-counts
+    if that ever changes would be a bad metric.
+    """
+    with session_scope() as db:
+        proposals = [
+            {
+                "proposal_id": p.proposal_id,
+                "snapshot_id": p.snapshot_id,
+                "error_type": p.error_type,
+                "target_path": p.target_path,
+                "status": p.status,
+                "confidence_score": p.confidence_score,
+                "value_grounded": p.value_grounded,
+                "created_at": p.created_at,
+            }
+            for p in db.query(models.Proposal).all()
+        ]
+
+        # Latest review per proposal (see docstring).
+        latest: dict[str, models.Review] = {}
+        for rv in (
+            db.query(models.Review)
+            .order_by(models.Review.decided_at.asc(), models.Review.id.asc())
+            .all()
+        ):
+            latest[rv.proposal_id] = rv
+        reviews = [
+            {
+                "review_id": rv.id,
+                "proposal_id": rv.proposal_id,
+                "decision": rv.decision,
+                "decided_at": rv.decided_at,
+                "revalidation_result": rv.revalidation_result,
+            }
+            for rv in latest.values()
+        ]
+
+        runs = [
+            {
+                "agent_name": r.agent_name,
+                "tool_name": r.tool_name,
+                "status": r.status,
+                "tokens_prompt": r.tokens_prompt,
+                "tokens_completion": r.tokens_completion,
+                "cost_estimate": r.cost_estimate,
+                "duration_ms": r.duration_ms,
+                "created_at": r.created_at,   # AP6.4: the dashboard's time filter needs it
+            }
+            for r in db.query(models.AgentRun).all()
+        ]
+
+        return {
+            "proposals": proposals,
+            "reviews": reviews,
+            "agent_runs": runs,
+            "snapshot_count": db.query(models.SnapshotMeta).count(),
+        }

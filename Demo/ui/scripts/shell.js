@@ -15,7 +15,10 @@
  */
 (function () {
     const API = (typeof API_CONFIG !== 'undefined' ? API_CONFIG.baseURL : '');
-    const PAGE = window.location.pathname.toLowerCase().includes('review.html') ? 'review' : 'chat';
+    const PATH = window.location.pathname.toLowerCase();
+    const PAGE = PATH.includes('review.html') ? 'review'
+               : PATH.includes('dashboard.html') ? 'dashboard'
+               : 'chat';
 
     const LOGO = `
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -72,11 +75,10 @@
                     Review Board
                     <span class="sb-badge" id="sbPending" hidden></span>
                 </a>
-                <span class="sb-nav-item disabled" title="Kommt mit AP6">
+                <a class="sb-nav-item ${PAGE === 'dashboard' ? 'active' : ''}" href="dashboard.html">
                     <span class="material-symbols-outlined" aria-hidden="true">monitoring</span>
                     Dashboard
-                    <span class="sb-soon">bald</span>
-                </span>
+                </a>
             </nav>
 
             <div class="sb-section-label">Verlauf</div>

@@ -6,6 +6,11 @@
       "statusCode": 200
     },
     {
+      "route": "/dashboard.html",
+      "serve": "/dashboard.html",
+      "statusCode": 200
+    },
+    {
       "route": "/*",
       "serve": "/index.html",
       "statusCode": 200
@@ -15,6 +20,7 @@
     "rewrite": "/index.html",
     "exclude": [
       "/review.html",
+      "/dashboard.html",
       "/css/*",
       "/scripts/*"
     ]
