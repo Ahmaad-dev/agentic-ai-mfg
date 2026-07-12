@@ -57,7 +57,25 @@
 
     <!-- Input Area -->
     <div class="input-area" role="region" aria-label="Nachricht eingeben">
+        <div class="selected-tool" id="selectedToolChip" hidden>
+            <span class="material-symbols-outlined" aria-hidden="true">mail</span>
+            <span>E-Mail</span>
+            <button id="clearSelectedTool" type="button" aria-label="E-Mail-Werkzeug abwählen">×</button>
+        </div>
         <div class="input-wrapper">
+            <div class="tool-picker">
+                <button class="tool-picker-btn" id="toolPickerBtn" type="button"
+                        aria-label="Werkzeug hinzufügen" aria-expanded="false"
+                        aria-controls="toolPickerMenu" data-tooltip="Hinzufügen">
+                    <span class="material-symbols-outlined" aria-hidden="true">add</span>
+                </button>
+                <div class="tool-picker-menu" id="toolPickerMenu" role="menu" hidden>
+                    <button type="button" role="menuitem" data-tool="email">
+                        <span class="material-symbols-outlined" aria-hidden="true">mail</span>
+                        <span><strong>E-Mail</strong><small>Entwerfen, überarbeiten und senden</small></span>
+                    </button>
+                </div>
+            </div>
             <textarea 
                 id="userInput" 
                 placeholder="Frage etwas..." 

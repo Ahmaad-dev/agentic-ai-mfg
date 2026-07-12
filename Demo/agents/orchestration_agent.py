@@ -3,6 +3,7 @@ OrchestrationAgent - Koordiniert alle Sub-Agenten
 """
 import json
 import logging
+import re
 from typing import Dict, List, Optional
 from .base_agent import BaseAgent
 from agent_config import (
@@ -18,6 +19,13 @@ from agent_config import (
 )
 
 logger = logging.getLogger(__name__)
+
+_EMAIL_FOLLOWUP_RE = re.compile(
+    r"\b(absenden|versenden|senden|abbrechen|verwerfen|ändern|aendern|anpassen|"
+    r"ergänzen|ergaenzen|kürzer|kuerzer|länger|laenger|betreff|empfänger|empfaenger|"
+    r"formeller|lockerer|passt|okay|ok|in ordnung)\b",
+    re.IGNORECASE,
+)
 
 
 class OrchestrationAgent(BaseAgent):
@@ -145,7 +153,9 @@ class OrchestrationAgent(BaseAgent):
                 "reasoning": f"Planning-Fehler, Fallback zu Chat: {str(e)}"
             }
     
-    def _execute_plan(self, plan: Dict, user_input: str, chat_history: List) -> Dict:
+    def _execute_plan(
+        self, plan: Dict, user_input: str, chat_history: List, request_context: Dict = None
+    ) -> Dict:
         """Führt einen Multi-Step Execution Plan aus"""
         
         plan_type = plan.get("type")
@@ -162,13 +172,16 @@ class OrchestrationAgent(BaseAgent):
             # SP_Agent → NEUE direkte Execution
             if agent_key == "sp":
                 logger.info(f"[{self.name}] Single-Step Execution mit SP_Agent (NEUE Methode)")
-                return self._execute_sp_agent(user_input, chat_history, {"chat_history": chat_history})
+                sp_context = dict(request_context or {})
+                sp_context["chat_history"] = chat_history
+                return self._execute_sp_agent(user_input, chat_history, sp_context)
             
             # Chat/RAG → Alte Methode (behält execute())
             agent = self.agents[agent_key]
             
             # Erweitere Kontext mit letzten Snapshot-Metadaten (für Chat Agent)
-            enhanced_context = {"chat_history": chat_history}
+            enhanced_context = dict(request_context or {})
+            enhanced_context["chat_history"] = chat_history
             if agent_key == "chat" and self.last_snapshot_metadata:
                 enhanced_context["last_snapshot_metadata"] = self.last_snapshot_metadata
                 logger.info(f"[{self.name}] Snapshot-Metadaten an Chat Agent weitergegeben")
@@ -186,6 +199,12 @@ class OrchestrationAgent(BaseAgent):
 
 
             result = agent.execute(user_input, enhanced_context)
+
+            # Email previews are approval artefacts: the orchestrator must not paraphrase or
+            # silently change recipient, subject, body, draft id, or confirmation wording.
+            if agent_key == "email":
+                result.setdefault("metadata", {})["execution_plan"] = plan
+                return result
             
             # WICHTIG: Extrahiere recovery_suggestion BEVOR Interpretation (sonst geht sie verloren!)
             recovery_hint = None
@@ -215,7 +234,8 @@ class OrchestrationAgent(BaseAgent):
         if plan_type == "multi_step":
             steps = plan.get("steps", [])
             step_results = []
-            accumulated_context = {"chat_history": chat_history, "step_outputs": {}}
+            accumulated_context = dict(request_context or {})
+            accumulated_context.update({"chat_history": chat_history, "step_outputs": {}})
             
             logger.info(f"[{self.name}] Starte Multi-Step Execution mit {len(steps)} Schritten")
             
@@ -532,11 +552,30 @@ class OrchestrationAgent(BaseAgent):
                 attempt += 1
                 logger.info(f"[{self.name}] Agentic Mode: Planning-Versuch {attempt}/{max_replanning_attempts + 1}")
                 
-                # Erstelle Execution Plan
-                plan = self._create_execution_plan(user_input, chat_history)
+                # A UI-selected capability is an explicit user routing instruction. Natural
+                # language without a selection still goes through the normal planner.
+                force_email = bool(
+                    context
+                    and "email" in self.agents
+                    and (
+                        context.get("selected_tool") == "email"
+                        or (
+                            context.get("active_email_draft")
+                            and _EMAIL_FOLLOWUP_RE.search(user_input)
+                        )
+                    )
+                )
+                if force_email:
+                    plan = {
+                        "type": "single_step",
+                        "agent": "email",
+                        "reasoning": "User selected the Email capability",
+                    }
+                else:
+                    plan = self._create_execution_plan(user_input, chat_history)
                 
                 # Plan ausführen
-                result = self._execute_plan(plan, user_input, chat_history)
+                result = self._execute_plan(plan, user_input, chat_history, context)
                 
                 # Metadata erweitern
                 if "metadata" not in result:

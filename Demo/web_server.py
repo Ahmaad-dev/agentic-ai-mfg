@@ -14,10 +14,11 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
 # Agent-Imports
-from agents import ChatAgent, RAGAgent, SPAgent, OrchestrationAgent
+from agents import ChatAgent, EmailAgent, RAGAgent, SPAgent, OrchestrationAgent
 import agent_config
 from agent_config import (
     CHAT_AGENT_CONFIG,
+    EMAIL_AGENT_CONFIG,
     RAG_AGENT_CONFIG,
     ORCHESTRATOR_CONFIG,
     SP_AGENT_CONFIG,
@@ -186,11 +187,18 @@ def initialize_system():
         runtime_dir=Path(__file__).parent / "smart-planning" / "runtime",
         routing_description=agent_config.SP_AGENT_CONFIG["routing_description"]
     )
+
+    email_agent = EmailAgent(
+        aoai_client=aoai_chat,
+        model_name=chat_model,
+        **EMAIL_AGENT_CONFIG,
+    )
     
     agents = {
         "chat": chat_agent,
         "rag": rag_agent,
-        "sp": sp_agent
+        "sp": sp_agent,
+        "email": email_agent,
     }
     
     orchestrator = OrchestrationAgent(
@@ -278,6 +286,7 @@ def chat():
         data = request.json
         user_message = data.get('message', '')
         session_id = data.get('session_id', 'default')
+        selected_tool = data.get('selected_tool')
         
         if not user_message:
             return jsonify({'error': 'Keine Nachricht erhalten'}), 400
@@ -297,7 +306,20 @@ def chat():
         
         # Kontext vorbereiten
         recent_history = get_recent_messages(messages, max_pairs=MAX_HISTORY_MESSAGES // 2)
-        context = {"chat_history": recent_history}
+        active_email_draft = None
+        if db_sid is not None:
+            try:
+                active_email_draft = db_repo.get_latest_email_draft_for_session(
+                    db_sid, status="draft"
+                )
+            except Exception as e:
+                logger.warning(f"DB: could not load active email draft: {e}")
+        context = {
+            "chat_history": recent_history,
+            "db_session_id": db_sid,
+            "selected_tool": selected_tool,
+            "active_email_draft": active_email_draft,
+        }
         
         # Orchestrator ausführen (mit Zeitmessung für agent_runs)
         _t0 = time.perf_counter()

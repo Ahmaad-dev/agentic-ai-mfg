@@ -5,7 +5,8 @@ Backbone for Human-in-the-Loop, dashboard and memory. Stores user requests,
 agent answers and the FULL HitL decision (incl. the "why"), not just a boolean.
 
 Core tables:
-    sessions, messages, agent_runs, snapshots_meta, proposals, reviews, memory_items
+    sessions, messages, agent_runs, snapshots_meta, proposals, reviews, memory_items,
+    email_drafts
 
 Local default DB is SQLite; the Azure SQL target uses the same models
 (generic types like JSON map to NVARCHAR(max) on Azure SQL).
@@ -50,6 +51,9 @@ class Session(Base):
         back_populates="session", cascade="all, delete-orphan"
     )
     agent_runs: Mapped[List["AgentRun"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
+    email_drafts: Mapped[List["EmailDraft"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
 
@@ -157,6 +161,31 @@ class Review(Base):
     revalidation_result: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
     proposal: Mapped["Proposal"] = relationship(back_populates="reviews")
+
+
+class EmailDraft(Base):
+    """A previewed email that may be revised and explicitly sent by the user."""
+    __tablename__ = "email_drafts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), index=True)
+    recipient: Mapped[str] = mapped_column(String(320))
+    subject: Mapped[str] = mapped_column(String(500))
+    body_plain: Mapped[str] = mapped_column(Text)
+    body_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="draft", index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    provider_message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[_dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    sent_at: Mapped[Optional[_dt.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    session: Mapped["Session"] = relationship(back_populates="email_drafts")
 
 
 class MemoryItem(Base):

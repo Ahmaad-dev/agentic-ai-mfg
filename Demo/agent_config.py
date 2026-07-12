@@ -69,6 +69,14 @@ FORMATIERUNG:
   * > Blockquotes für wichtige Hinweise oder Zitate
 """
 
+DEFAULT_EMAIL_SYSTEM_PROMPT = """
+Du bist ein spezialisierter E-Mail-Assistent. Du formulierst präzise, professionelle und
+kontextgerechte E-Mail-Entwürfe in der Sprache des Nutzers. Verwende nur Informationen aus der
+Anfrage, dem Gesprächsverlauf und dem ausdrücklich bereitgestellten strukturierten Kontext.
+Erfinde keine Empfänger, Fakten, Entscheidungen, Werte oder Links. Du erstellst und überarbeitest
+nur Entwürfe; der Versand erfolgt ausschließlich über ein separates, bestätigungspflichtiges Tool.
+"""
+
 # Default System Prompt für RAG Agent
 # HINWEIS: Ton kommen vom Orchestrator, hier nur RAG-Logik
 DEFAULT_RAG_SYSTEM_PROMPT = """
@@ -110,6 +118,7 @@ Du bist der Orchestration Agent eines Multi-Agent-Systems für Produktionsplanun
 - **Chat Agent**: Allgemeine Konversation, Erklärungen, Smalltalk
 - **RAG Agent**: Fragen zu internen Firmendokumenten, Richtlinien, technischen Spezifikationen
 - **SP Agent**: SMART PLANNING Operationen (Snapshots, Validierung, Fehlerkorrektur, Audit-Reports, Pipelines)
+- **Email Agent**: E-Mail entwerfen, überarbeiten, anzeigen und nach expliziter Freigabe senden
 
 Entscheide klug, transparent und nutze die Stärken jedes Agenten optimal.
 """
@@ -133,6 +142,7 @@ DEFAULT_ORCHESTRATOR_PLANNING_PROMPT = """Du bist ein Execution Planner für ein
 - chat: Info-Fragen (Daten aus Kontext/Historie), Erklärungen, allgemeine Fragen
 - rag: Suche in Dokumenten/Wissensbasis
 - sp: ALLE Snapshot-Operationen (erstellen, validieren, korrigieren, umbenennen)
+- email: ALLE E-Mail-Anfragen; immer zuerst Entwurf, Versand erst nach expliziter Folgefreigabe
 
 **KRITISCH: ERROR/WARNING DETAILS**
 - Warning/Error-Details (Messages, Beschreibungen) sind NIEMALS im Kontext verfügbar
@@ -189,6 +199,8 @@ DEFAULT_ORCHESTRATOR_PLANNING_PROMPT = """Du bist ein Execution Planner für ein
 "was sind denn die 4?" (Kontext: "4 Warnungen") -> {{"type": "single_step", "agent": "sp", "action": "validate_snapshot", "reasoning": "Details nur in validate_snapshot"}}
 
 "Korrigiere Snapshot X" -> {{"type": "single_step", "agent": "sp", "action": "full_correction Pipeline", "reasoning": "Komplette Korrektur"}}
+
+"Schreibe eine E-Mail an max@example.com" -> {{"type": "single_step", "agent": "email", "reasoning": "E-Mail-Entwurf und Freigabeprozess"}}
 
 "Behebe die Fehler" (Kontext: validiert, 4 Fehler) -> {{"type": "single_step", "agent": "sp", "action": "correction_from_validation", "reasoning": "Bereits validiert"}}
 
@@ -551,4 +563,19 @@ Intelligentes Validierungs- und Korrektursystem für Produktionsplanungs-Snapsho
 - full_correction: Kompletter Workflow (Validierung -> Korrektur -> Upload)
 - correction_from_validation: Korrektur bei existierenden Validierungsdaten
 - analyze_only: Nur Analyse ohne Änderungen"""
+}
+
+EMAIL_AGENT_CONFIG = {
+    "temperature": 0.2,
+    "max_tokens": 1800,
+    "max_history_pairs": CHAT_HISTORY_CONFIG["max_history_pairs"],
+    "system_prompt": DEFAULT_EMAIL_SYSTEM_PROMPT,
+    "description": "Email drafting and explicitly confirmed sending agent",
+    "routing_description": """
+Use for every request to write, revise, preview, cancel, or send an email.
+Use for both general emails and emails about snapshots, validation errors, proposals, or reviews.
+The agent creates a preview first and sends only after a later explicit command such as
+'Bitte absenden'. Route short follow-ups about an active email draft here as well.
+Do NOT route ordinary explanations or Smart Planning operations here.
+""",
 }

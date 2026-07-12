@@ -501,6 +501,9 @@ body {
     top: 55%;
     transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
     z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
 }
 
 .input-wrapper {
@@ -514,6 +517,71 @@ body {
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    position: relative;
+}
+
+.tool-picker { position: relative; align-self: flex-end; margin-right: 12px; }
+.tool-picker-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-sub);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.tool-picker-btn:hover, .tool-picker-btn[aria-expanded="true"] {
+    color: var(--text-main);
+    border-color: var(--accent-primary);
+    background: rgba(99,102,241,0.12);
+}
+.tool-picker-menu {
+    position: absolute;
+    left: 0;
+    bottom: 46px;
+    width: 280px;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: #20222a;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+    z-index: 20;
+}
+.tool-picker-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    color: var(--text-main);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    text-align: left;
+    cursor: pointer;
+}
+.tool-picker-menu button:hover { background: rgba(99,102,241,0.12); }
+.tool-picker-menu button span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.tool-picker-menu small { color: var(--text-sub); font-size: 0.75rem; }
+.selected-tool {
+    width: min(850px, 100%);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #c7d2fe;
+    font-size: 0.8rem;
+}
+.selected-tool[hidden] { display: none; }
+.selected-tool > span:first-child { font-size: 17px; }
+.selected-tool button {
+    color: var(--text-sub);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-size: 1rem;
 }
 
 .input-wrapper:focus-within {

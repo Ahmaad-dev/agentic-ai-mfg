@@ -1106,6 +1106,7 @@ refreshBtn.addEventListener('click', loadProposals);
  */
 document.addEventListener('DOMContentLoaded', () => {
     loadProposals();
-    const wanted = new URLSearchParams(window.location.search).get('proposal');
+    const params = new URLSearchParams(window.location.search);
+    const wanted = params.get('proposal') || params.get('id'); // AP5 email uses ?id=
     if (wanted) openProposal(wanted);
 });

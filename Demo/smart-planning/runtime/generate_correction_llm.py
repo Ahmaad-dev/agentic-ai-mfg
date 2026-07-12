@@ -137,8 +137,24 @@ def save_central_proposal_record(snapshot_id, iteration_number, output_data):
     # AP2: also persist the proposal into the relational store (defensive; never break generation)
     try:
         from db import repository as _db_repo
+        _is_new_proposal = _db_repo.get_proposal_as_dict(proposal_id) is None
         _db_repo.save_proposal(record)
         print(f"Saved proposal to DB: {proposal_id}")
+
+        # AP5.2: best-effort enterprise notification. The deterministic proposal id makes
+        # generation idempotent, so notify only for the first DB insert, never for a re-run.
+        if _is_new_proposal and record["status"] == "pending_review":
+            try:
+                from mcp_connections.notifier import send_proposal_notification
+                _notification = send_proposal_notification(
+                    proposal_id,
+                    snapshot_id,
+                    (output_data.get("error_analyzed") or {}).get("error_type") or "UNKNOWN",
+                )
+                if _notification.get("sent"):
+                    print(f"Notification sent: {proposal_id} ({_notification.get('channel')})")
+            except Exception as _notif_err:
+                print(f"WARN: notification failed: {_notif_err}")
 
         # AP2.5: Read token usage from the already-saved llm_correction_call.json
         # (runtime tool NOT changed — we read the file it already wrote)

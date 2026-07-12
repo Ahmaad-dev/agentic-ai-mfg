@@ -24,7 +24,7 @@ Status legend: [ ] open · [~] in progress · [x] done
 - [x] M2  Persistence Layer (AP2)
 - [x] M3  HitL Backend (AP3)
 - [ ] M4  HitL Frontend (AP4)
-- [ ] M5  MCP Integration (AP5)
+- [x] M5  MCP Integration (AP5)
 - [ ] M6  Dashboard (AP6)
 - [ ] M7  Memory System (AP7)
 - [ ] M8  Evaluation & Demo (AP-E)
@@ -118,7 +118,11 @@ DoD: full loop demoable in UI. **First point the whole chain is demo-ready.**
 get_review_details, approve_correction, reject_correction, modify_correction,
 get_snapshot_status, get_dashboard_metrics. One end-to-end enterprise case:
 Outlook/email notification with deep link on new pending review. Prototype adapter is
-acceptable. DoD: pending review triggers a notification with working link; tools callable.
+acceptable. In addition, the chat plus menu exposes a dedicated email agent: it creates a
+persistent preview from the user's requested context, supports conversational revisions and sends
+through the configured provider only after an explicit `Bitte absenden`. Snapshot/review facts and
+the deep link are included only when requested. DoD: pending review triggers a notification with
+working link; tools callable; conversational draft/revise/confirm/send flow callable.
 
 ## AP6 — Dashboard  (M6)
 Kurzbeschreibung:

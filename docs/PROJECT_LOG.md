@@ -975,3 +975,48 @@ Tech-Debt (tracken, nicht blockierend) oder Phase 2 (AP5–AP7 + Evaluation).
 - **[später]** AP5 MCP, AP6 Dashboard, AP7 Memory, AP-E Evaluation — nach dem Phase-1-Abschluss (frische Vorschläge + Baseline).
 - **[später, nach Baseline]** `llm-validation-fix-rules.md` überarbeiten. Bekannte Schwächen: PACKAGING-EQUIPMENT-Block ~3× dupliziert (~Z.124–203); keine Struktur-Hierarchie (Identifikation / array_context / Actions vermischt); keine Regel für „workItemConfigs vollständig, einzelnes Feld nicht ableitbar → nächstem belegbaren Nachbarn folgen" (aus 124211-Fall). NICHT vor der Baseline ändern (verschiebt sonst die AK2-Grundlinie). Als messbares Vorher/Nachher gegen Baseline durchführen.
 - **[später, nach AP6]** Reload-Historie in der Review-Detailansicht. Aktuell liefert `get_proposal_as_dict()` keine `reviews`-Daten — nach einem Reload zeigt das Detail nur den Proposal-Status, nicht *was* entschieden wurde. Fix: `reviews` additiv in den Detail-Endpunkt joinen (analog AP4.1). Gehört zur Audit-/Historien-Sicht (AP6). Kein Loop-Breaker: Ergebnis ist nach dem Klick inline sichtbar.
+
+---
+
+### 2026-07-12 — AP5.1 MCP-Tool-Schicht über bestehender Review-Logik
+- **Status:** done
+- **Changed files:** `demo/mcp_connections/__init__.py`, `demo/mcp_connections/tools.py`, `demo/mcp_connections/server.py`, `demo/mcp_connections/README.md`, `demo/requirements.txt`, `docs/PROJECT_LOG.md`
+- **What was done:** Sieben Repository-gestützte Tools (`get_pending_reviews`, Details, drei Entscheidungen, Snapshot-Status, Dashboard-Kennzahlen) als direkt aufrufbarer Adapter und als registrierte FastMCP-Tools umgesetzt. Entscheidungen verwenden nach Nutzerfreigabe `decide_proposal()` statt des ungeeigneten `create_review()` (dieses würde nur eine Review-Zeile schreiben und den Proposal-Status offen lassen); die MCP-Entscheidung zeichnet bewusst nur die Entscheidung auf und startet nicht die bestehende Apply-Pipeline. Snapshot-Status aggregiert die vorhandenen Repository-Reads `list_open_proposals_as_dicts()` und `get_decisions_for_snapshot()`; kein neuer DB-Code. Token-Validierung ist konzeptionell dokumentiert und für PT4 out-of-scope.
+- **Verification:** Python MCP SDK 1.28.1 installiert/importiert; alle sieben erwarteten Toolnamen im FastMCP-Server registriert. Isolierte Temp-DB: Pending/Details/Approve/Reject/Modify/Snapshot/Metriken durchgestochen, danach restlos gelöscht. Read-only gegen die reale DB: `get_pending_reviews()` liefert die drei bestehenden offenen Vorschläge (`7ab03beb`, `1d45ddff`, `1ef11903`).
+- **Open / next:** Kein produktiver MCP-Client und keine Tool-Authentifizierung in PT4; der Server nutzt lokal stdio. M5 hängt noch am echten ACS-Zustellnachweis aus AP5.2.
+
+---
+
+### 2026-07-12 — AP5.2 ACS-Notification mit Review-Deep-Link
+- **Status:** partial (Implementierung und Provider-Grenze verifiziert; echter ACS-Versand mangels Konfiguration noch offen)
+- **Changed files:** `demo/mcp_connections/notifier.py`, `demo/mcp_connections/README.md`, `demo/smart-planning/runtime/generate_correction_llm.py`, `demo/ui/scripts/review.js`, `demo/requirements-azure.txt`, `docs/PROJECT_LOG.md`
+- **What was done:** `send_proposal_notification()` unterstützt ACS und SendGrid per lazy import; ausgewählt ist ACS. Secrets/Adressen kommen ausschließlich aus Environment/`.env`; ohne `NOTIFICATION_CHANNEL` wird mit der geforderten Info-Meldung übersprungen. `save_central_proposal_record()` ruft den Notifier direkt nach dem ersten erfolgreichen DB-Insert eines neuen `pending_review`-Proposals defensiv auf; Fehler können die Speicherung nicht abbrechen, eine idempotente Regeneration sendet nicht erneut. Mail enthält Plaintext + HTML, geforderten Betreff und `{APP_BASE_URL}/review.html?id={proposal_id}`. Die UI akzeptiert `?id=` additiv neben dem bereits vorhandenen `?proposal=`-Deep-Link.
+- **Verification:** (a) echter Generator-Speicherpfad mit unset Channel: Proposal in isolierter DB gespeichert, Log `Notification skipped: NOTIFICATION_CHANNEL not set`, kein Fehler. (b) Generator-Speicherpfad mit `NOTIFICATION_CHANNEL=acs` und ACS-Testdouble: Output `Notification sent`, Empfänger/Betreff/Plaintext/HTML/Deep-Link exakt geprüft; zweiter Lauf derselben Proposal-ID erzeugt keinen zweiten Versand. (c) `?id=` lädt und rendert den angeforderten Review im echten `review.js`. Alle DB-/Datei-Fixtures gelöscht; ACS SDK 1.1.0 installiert/importiert.
+- **Open / next:** Für den bindenden End-to-End-Zustellnachweis fehlen lokal noch `NOTIFICATION_CHANNEL=acs`, `ACS_CONNECTION_STRING`, `ACS_SENDER_EMAIL` und `NOTIFICATION_RECIPIENT_EMAIL` in `demo/.env` (optional `APP_BASE_URL`). Erst nach einer real zugestellten Mail mit geöffnetem Link ist AP5.2 `done` und M5 erreicht.
+
+---
+
+### 2026-07-12 — AP5.2-Ergänzung: realer ACS-Versand
+- **Status:** partial (ACS hat den Versand erfolgreich abgeschlossen; Empfängerbestätigung des Mail-/Link-Eingangs noch offen)
+- **Changed files:** `docs/PROJECT_LOG.md` (Konfiguration nur lokal in `demo/.env`, keine Secrets protokolliert)
+- **What was done:** Nach vollständigem read-only Konfigurationscheck wurde genau eine reale ACS-Benachrichtigung für den weiterhin offenen Vorschlag `1ef11903-…__iteration-1` (`WORK_ITEM_CONFIGS_COMPLETENESS`) gesendet. Es wurde keine Review-Entscheidung geschrieben und kein Snapshot verändert.
+- **Verification:** Der ACS-Poller endete erfolgreich mit `sent=true`, Channel `acs` und vorhandener Message-ID. Danach weiterhin 3 offene Reviews; der benachrichtigte Vorschlag bleibt `pending_review`. `ec96832c`-`snapshot-data.json` SHA-256 weiterhin `62279f61…`, iteration-5 bytegleich.
+- **Open / next:** Empfänger bestätigt, dass die Mail angekommen ist und der Deep-Link den Review `1ef11903-…__iteration-1` öffnet; danach AP5.2 auf `done` und M5 auf erreicht setzen.
+
+---
+
+### 2026-07-12 — AP5.2 abgeschlossen / M5 erreicht
+- **Status:** done
+- **Changed files:** `docs/PT4_PLAN.md`, `docs/PROJECT_LOG.md`
+- **What was done:** Der Nutzer hat den Eingang der real über Azure Communication Services versendeten E-Mail und den funktionierenden Deep-Link bestätigt. Der Link öffnete direkt den benachrichtigten Vorschlag `1ef11903-…__iteration-1` im Review Board; damit ist der bindende Enterprise-Fall von neuem offenen Review bis zur erreichbaren menschlichen Detailansicht end-to-end belegt. M5 wurde im Referenzplan als abgeschlossen markiert.
+- **Verification:** Sichtnachweis des Nutzers: korrekter Betreff `Offener Review: 1ef11903-… / WORK_ITEM_CONFIGS_COMPLETENESS`, Snapshot und Fehlertyp im Mail-Body sowie geöffnete Review-Detailansicht mit Status `PENDING_REVIEW` und passendem Snapshot/Zielpfad. Zuvor hatte der ACS-Poller den Versand mit vorhandener Message-ID erfolgreich abgeschlossen.
+- **Open / next:** AP5 ist abgeschlossen. Produktiver MCP-Client und Token-Validierung bleiben wie geplant außerhalb des PT4-Scopes.
+
+---
+
+### 2026-07-12 — AP5.3 Konversationeller E-Mail-Agent
+- **Status:** done
+- **Changed files:** `demo/agent_config.py`, `demo/agents/__init__.py`, `demo/agents/email_agent.py`, `demo/agents/orchestration_agent.py`, `demo/alembic/versions/7c4e2d9a8f10_ap5_3_add_email_drafts.py`, `demo/db/__init__.py`, `demo/db/models.py`, `demo/db/repository.py`, `demo/mcp_connections/notifier.py`, `demo/mcp_connections/server.py`, `demo/mcp_connections/tools.py`, `demo/mcp_connections/README.md`, `demo/ui/index.html`, `demo/ui/scripts/chat.js`, `demo/ui/css/styles.css`, `demo/web_server.py`, `docs/PT4_PLAN.md`, `docs/PROJECT_LOG.md`
+- **What was done:** Ein dedizierter E-Mail-Agent ist als vierter Orchestrator-Agent integriert. Das Plus-Menü kann ihn explizit auswählen; natürliche E-Mail-Aufträge werden ebenfalls geroutet. Der Agent erstellt einen persistenten, sichtbaren Entwurf, übernimmt allgemeine Chat-Inhalte oder auf ausdrücklichen Fallbezug verifizierte Review-/Snapshot-Fakten samt Deep-Link, verarbeitet Änderungswünsche versioniert und sendet den exakt angezeigten Stand erst bei `Bitte absenden`. Fünf MCP-Tools kapseln Create/Get/Revise/Send/Cancel; der Versand nutzt den bestehenden ACS-/SendGrid-Adapter für einen frei angegebenen Empfänger. Freigabe-Gate, Negativbefehl und Idempotenz verhindern unbeabsichtigten bzw. doppelten Versand. Token-Validierung bleibt wie geplant out-of-scope.
+- **Verification:** Alembic-Migration isoliert und anschließend lokal bis Head `7c4e2d9a8f10` erfolgreich; reale DB danach `email_drafts=0`, bestehend `proposals=9`, `reviews=6`. Wegwerf-DB mit Fake-LLM/ACS: Entwurf v1 → `Ja, passt` ohne Versand → Änderung v2 → explizites Absenden übergibt exakt v2 → zweiter Send idempotent; `Bitte nicht absenden` verwirft und sendet nicht. UI-VM-Test: Plus-Auswahl setzt `selected_tool=email`, hält den Modus während des Entwurfs und löscht ihn erst nach `sent`. Snapshot-Kontext wurde separat mit Wegwerf-Proposal auf Problem, Begründung, Vorschlag und funktionalen Review-Link geprüft; alle Fixtures gelöscht.
+- **Open / next:** Ein realer manueller Chat-Dialog mit frei gewähltem Empfänger ist der verbleibende Abnahmeschritt; die technische Versandgrenze ist mit dem bereits real bestätigten ACS-Kanal verbunden.

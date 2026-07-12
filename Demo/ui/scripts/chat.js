@@ -7,6 +7,10 @@ const chatContainer = document.getElementById('chatContainer');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const micBtn = document.getElementById('micBtn');
+const toolPickerBtn = document.getElementById('toolPickerBtn');
+const toolPickerMenu = document.getElementById('toolPickerMenu');
+const selectedToolChip = document.getElementById('selectedToolChip');
+const clearSelectedToolBtn = document.getElementById('clearSelectedTool');
 
 /**
  * AP4.6 — Chat-Sessions.
@@ -25,6 +29,7 @@ let isRecording = false;
 let recognizer = null;
 let recognizedText = ''; // Speichert den bisher erkannten Text
 let silenceTimer = null; // Timer für automatisches Senden nach Pause
+let selectedTool = null;
 const AUTO_SEND_DELAY = 5000; // 5 Sekunden Stille = Auto-Send
 
 // Configuration
@@ -85,6 +90,35 @@ sendBtn.addEventListener('click', () => {
     sendMessage();
 });
 
+function setSelectedTool(tool) {
+    selectedTool = tool || null;
+    selectedToolChip.hidden = selectedTool !== 'email';
+    toolPickerMenu.hidden = true;
+    toolPickerBtn.setAttribute('aria-expanded', 'false');
+    userInput.placeholder = selectedTool === 'email'
+        ? 'Beschreibe Empfänger und Inhalt der E-Mail…'
+        : 'Frage etwas...';
+    userInput.focus();
+}
+
+toolPickerBtn.addEventListener('click', () => {
+    const opening = toolPickerMenu.hidden;
+    toolPickerMenu.hidden = !opening;
+    toolPickerBtn.setAttribute('aria-expanded', String(opening));
+});
+
+toolPickerMenu.addEventListener('click', (event) => {
+    const item = event.target.closest('[data-tool]');
+    if (item) setSelectedTool(item.dataset.tool);
+});
+clearSelectedToolBtn.addEventListener('click', () => setSelectedTool(null));
+document.addEventListener('click', (event) => {
+    if (!event.target.closest('.tool-picker')) {
+        toolPickerMenu.hidden = true;
+        toolPickerBtn.setAttribute('aria-expanded', 'false');
+    }
+});
+
 /**
  * Utility: Sleep/Delay function
  */
@@ -139,7 +173,8 @@ async function sendMessage(retryCount = 0) {
             },
             body: JSON.stringify({
                 message: text,
-                session_id: sessionId
+                session_id: sessionId,
+                selected_tool: selectedTool
             }),
             signal: controller.signal
         });
@@ -181,6 +216,10 @@ async function sendMessage(retryCount = 0) {
             addMessage('Fehler: ' + data.error, 'agent', 'Error');
         } else {
             addMessage(data.response, 'agent', data.agent);
+        }
+
+        if (data.metadata && ['sent', 'cancelled'].includes(data.metadata.email_status)) {
+            setSelectedTool(null);
         }
 
         // Sidebar auffrischen: ein frischer Chat bekommt jetzt erst seinen Titel (= erste
@@ -576,6 +615,7 @@ async function startNewSession() {
     const data = await res.json();
     setActiveSession(data.session_id);
     resetChatView();
+    setSelectedTool(null);
     if (window.AppShell) window.AppShell.refreshSessions(data.session_id);
     userInput.focus();
     return data.session_id;
@@ -620,6 +660,7 @@ async function switchToSession(id) {
     try {
         const ok = await loadSessionMessages(id);
         if (!ok) return;
+        setSelectedTool(null);
         setActiveSession(id);
     } catch (err) {
         console.error('[Sessions] Wechsel fehlgeschlagen:', err);

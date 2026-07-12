@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
+import uuid
 from contextlib import contextmanager
 from typing import Any, Optional
 
@@ -654,3 +655,140 @@ def fetch_metrics_data() -> dict:
             "agent_runs": runs,
             "snapshot_count": db.query(models.SnapshotMeta).count(),
         }
+
+
+# --------------------------------------------------------------------------- #
+# conversational email drafts (AP5.3)
+# --------------------------------------------------------------------------- #
+def _email_draft_dict(row: models.EmailDraft) -> dict:
+    """Materialise an email draft while its ORM session is still open."""
+    return {
+        "draft_id": row.id,
+        "session_id": row.session_id,
+        "recipient": row.recipient,
+        "subject": row.subject,
+        "body_plain": row.body_plain,
+        "body_html": row.body_html,
+        "context_summary": row.context_summary,
+        "status": row.status,
+        "version": row.version,
+        "provider_message_id": row.provider_message_id,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "sent_at": row.sent_at.isoformat() if row.sent_at else None,
+    }
+
+
+def create_email_draft(
+    session_id: int,
+    recipient: str,
+    subject: str,
+    body_plain: str,
+    body_html: Optional[str] = None,
+    context_summary: Optional[str] = None,
+) -> dict:
+    """Persist a new, unsent email draft for one chat session."""
+    with session_scope() as db:
+        if db.get(models.Session, session_id) is None:
+            raise ValueError(f"Unknown session_id {session_id}")
+        row = models.EmailDraft(
+            id=str(uuid.uuid4()),
+            session_id=session_id,
+            recipient=recipient,
+            subject=subject,
+            body_plain=body_plain,
+            body_html=body_html,
+            context_summary=context_summary,
+            status="draft",
+            version=1,
+        )
+        db.add(row)
+        db.flush()
+        return _email_draft_dict(row)
+
+
+def get_email_draft(draft_id: str) -> Optional[dict]:
+    """Return one email draft, or None if it does not exist."""
+    with session_scope() as db:
+        row = db.get(models.EmailDraft, draft_id)
+        return _email_draft_dict(row) if row is not None else None
+
+
+def get_latest_email_draft_for_session(
+    session_id: int,
+    status: Optional[str] = "draft",
+) -> Optional[dict]:
+    """Return the newest draft in a session, optionally filtered by status."""
+    with session_scope() as db:
+        query = db.query(models.EmailDraft).filter(models.EmailDraft.session_id == session_id)
+        if status is not None:
+            query = query.filter(models.EmailDraft.status == status)
+        row = query.order_by(
+            models.EmailDraft.updated_at.desc(), models.EmailDraft.created_at.desc()
+        ).first()
+        return _email_draft_dict(row) if row is not None else None
+
+
+def update_email_draft(
+    draft_id: str,
+    *,
+    recipient: Optional[str] = None,
+    subject: Optional[str] = None,
+    body_plain: Optional[str] = None,
+    body_html: Optional[str] = None,
+    context_summary: Optional[str] = None,
+) -> Optional[dict]:
+    """Revise an unsent draft and increment its visible version."""
+    with session_scope() as db:
+        row = db.get(models.EmailDraft, draft_id)
+        if row is None:
+            return None
+        if row.status != "draft":
+            raise ValueError(f"Email draft {draft_id} is {row.status!r}, not editable")
+        updates = {
+            "recipient": recipient,
+            "subject": subject,
+            "body_plain": body_plain,
+            "body_html": body_html,
+            "context_summary": context_summary,
+        }
+        for field, value in updates.items():
+            if value is not None:
+                setattr(row, field, value)
+        row.version += 1
+        row.updated_at = _dt.datetime.now(_dt.timezone.utc)
+        db.flush()
+        return _email_draft_dict(row)
+
+
+def mark_email_draft_sent(draft_id: str, provider_message_id: Optional[str]) -> Optional[dict]:
+    """Mark a successfully delivered-to-provider draft as sent."""
+    with session_scope() as db:
+        row = db.get(models.EmailDraft, draft_id)
+        if row is None:
+            return None
+        if row.status == "sent":
+            return _email_draft_dict(row)
+        if row.status != "draft":
+            raise ValueError(f"Email draft {draft_id} cannot be sent from status {row.status!r}")
+        now = _dt.datetime.now(_dt.timezone.utc)
+        row.status = "sent"
+        row.provider_message_id = provider_message_id
+        row.sent_at = now
+        row.updated_at = now
+        db.flush()
+        return _email_draft_dict(row)
+
+
+def cancel_email_draft(draft_id: str) -> Optional[dict]:
+    """Cancel an unsent draft without deleting its audit trail."""
+    with session_scope() as db:
+        row = db.get(models.EmailDraft, draft_id)
+        if row is None:
+            return None
+        if row.status != "draft":
+            raise ValueError(f"Email draft {draft_id} cannot be cancelled from {row.status!r}")
+        row.status = "cancelled"
+        row.updated_at = _dt.datetime.now(_dt.timezone.utc)
+        db.flush()
+        return _email_draft_dict(row)
