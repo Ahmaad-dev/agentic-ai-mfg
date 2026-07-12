@@ -1240,7 +1240,77 @@ body.review-page .app-main {
 .rb-grounded.ok .material-symbols-outlined { color: #22c55e; }
 .rb-grounded.warn { border-color: rgba(234, 179, 8, 0.45); background: rgba(234, 179, 8, 0.10); }
 .rb-grounded.warn .material-symbols-outlined { color: #eab308; }
+/* AP7.2 — memory_support = 0 means a missing or NEGATIVE precedent; that must read as a
+   warning, not as a neutral state. Stacked blocks in the confidence section need air. */
+.rb-grounded.err { border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.09); }
+.rb-grounded.err .material-symbols-outlined { color: #ef4444; }
+.rb-grounded + .rb-grounded { margin-top: 10px; }
 .rb-conf-rationale { margin-top: 10px; font-size: 0.84rem; line-height: 1.5; }
+
+/* Memory — past human decisions on the same kind of error (AP7.3) */
+.rb-mem-summary { margin-bottom: 10px; font-size: 0.86rem; }
+.rb-mem-summary code {
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--rb-chip-bg);
+    font-size: 0.82rem;
+}
+.rb-mem-list { display: flex; flex-direction: column; gap: 10px; }
+.rb-mem-case {
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    border-left-width: 3px;
+    background: var(--rb-card-bg);
+}
+.rb-mem-case.ok   { border-left-color: #22c55e; }
+.rb-mem-case.warn { border-left-color: #eab308; }
+.rb-mem-case.err  { border-left-color: #ef4444; }
+.rb-mem-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.rb-mem-decision {
+    margin-left: auto;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--rb-chip-bg);
+}
+.rb-mem-decision.ok   { color: #22c55e; }
+.rb-mem-decision.warn { color: #eab308; }
+.rb-mem-decision.err  { color: #ef4444; }
+.rb-mem-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 2px 0;
+    font-size: 0.86rem;
+}
+.rb-mem-row .rb-label { flex: 0 0 108px; }
+.rb-mem-why {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.84rem;
+    line-height: 1.5;
+    font-style: italic;
+}
+
+/* The recorded human decision, shown after a reload (status alone says nothing). */
+.rb-decided {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--rb-card-bg);
+}
+.rb-decided .rb-mem-decision { margin-left: 0; }
 
 /* Snapshot filter (AP4.4) */
 .rb-filter-bar {

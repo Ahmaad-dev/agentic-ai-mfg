@@ -46,6 +46,8 @@ from flask import Blueprint, jsonify, request
 from requests.exceptions import ConnectionError, Timeout
 
 from db import repository as repo
+from memory import long_term  # AP7.1: every completed review becomes an episodic case
+from memory import retrieval  # AP7.3: show the reviewer the past cases behind memory_support
 from routes.apply_prep import (
     ProposalApplyBlockedError,
     check_identity_guard,
@@ -211,6 +213,40 @@ def get_proposal_context(proposal_id: str):
         ],
         "truncated": truncated,
         "total_lines": len(original_lines),
+    }), 200
+
+
+@review_bp.get("/proposals/<proposal_id>/memory")
+def get_proposal_memory(proposal_id: str):
+    """
+    AP7.3: What did humans decide on THIS kind of error before?
+
+    Without this, the memory effect is only a number (`memory_support`) inside the confidence
+    score — the reviewer cannot see what the system learned from. Here it becomes evidence he
+    can check: the past cases, what the AI proposed then, what the human made of it, and why.
+
+    Matched by entity pattern, not error_type — see memory/retrieval.py for the reason.
+    """
+    proposal = repo.get_proposal_as_dict(proposal_id)
+    if proposal is None:
+        return jsonify({"error": "Proposal not found", "proposal_id": proposal_id}), 404
+
+    cases = retrieval.find_similar_cases(
+        proposal.get("target_path"), proposal.get("error_type"), top_k=5
+    )
+    # A case built from THIS proposal is not evidence for it — hide the self-reference.
+    cases = [c for c in cases if c.get("source_proposal_id") != proposal_id]
+
+    return jsonify({
+        "proposal_id": proposal_id,
+        "pattern": retrieval.entity_pattern(proposal.get("target_path")),
+        "count": len(cases),
+        "approved": sum(1 for c in cases if c.get("decision") == "approve"),
+        "modified": sum(1 for c in cases if c.get("decision") == "modify"),
+        "rejected": sum(1 for c in cases if c.get("decision") == "reject"),
+        "memory_support": proposal.get("memory_support"),
+        "memory_support_reason": proposal.get("memory_support_reason"),
+        "cases": cases,
     }), 200
 
 
@@ -497,14 +533,19 @@ def _decide(proposal_id: str, decision: str, final_value=None, comment=None):
     body = {k: v for k, v in result.items() if k != "outcome"}
 
     if decision == "reject":
-        # A rejection is final and applies nothing.
+        # A rejection is final and applies nothing. It is still a case worth remembering:
+        # "the AI proposed X and a human threw it out" (AP7.1).
         body["applied"] = False
+        long_term.record_case_safe(proposal_id)
         return jsonify(body), 200
 
     # approve / modify: the decision is committed; now actually apply it. If the apply
     # fails or is blocked, the decision stands and the proposal keeps its decided status.
     apply_result, apply_status = _apply_after_review(proposal_id, decision, final_value, comment)
     body.update(apply_result)
+    # AP7.1: record the case AFTER the apply, so the revalidation outcome is already on the
+    # review row. record_case_safe never raises — memory must not break a human decision.
+    long_term.record_case_safe(proposal_id)
     return jsonify(body), apply_status
 
 

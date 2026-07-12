@@ -18,6 +18,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from runtime_storage import get_storage, get_iteration_folders_with_file
 
+# AP7.0: rulebook loader (monolith vs. error-type cards, switched via RULEBOOK_MODE)
+from rulebook_loader import load_rulebook
+
 from correction_models import LLMCorrectionResponse
 
 # Load environment variables (aus demo-Verzeichnis)
@@ -52,9 +55,8 @@ def retry_llm_with_schema_error(snapshot_id, iteration_number, validation_error,
     if search_results is None:
         raise FileNotFoundError(f"last_search_results.json not found for snapshot {snapshot_id}")
     
-    # Load fix rules
-    fix_rules_file = Path("runtime-files/llm-validation-fix-rules.md")
-    fix_rules = fix_rules_file.read_text(encoding='utf-8')
+    # Load fix rules (AP7.0: monolith, or _core.md + the card for this error's [validate_*] tag)
+    fix_rules = load_rulebook((identify_response.get("llm_analysis") or {}).get("tag_error_type"))
     
     # Build retry prompt
     retry_prompt = f"""Your previous response had JSON schema validation errors.

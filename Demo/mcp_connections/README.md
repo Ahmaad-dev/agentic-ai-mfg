@@ -3,27 +3,22 @@
 ## Implemented prototype
 
 `tools.py` is the small internal adapter: every tool delegates database access to existing
-functions in `db/repository.py`. `notifier.py` adds the enterprise workflow. A newly inserted
-`pending_review` proposal invokes the configured provider and includes this deep link:
+functions in `db/repository.py`. Automatic mail on a new `pending_review` proposal was used for the
+original AP5.2 acceptance proof, then deliberately disabled: proposal generation never sends mail.
+Email delivery now happens only through the conversational draft flow after the user explicitly
+confirms the visible draft with a command such as `Bitte absenden`.
 
-`{APP_BASE_URL}/review.html?id={proposal_id}`
-
-The generator treats notification as best-effort: a provider/configuration failure is reported but
-never rolls back or interrupts proposal persistence. Re-generating the same deterministic proposal
-ID does not send another notification.
-
-Azure Communication Services configuration in `demo/.env`:
+Azure Communication Services configuration for explicitly confirmed chat email in `demo/.env`:
 
 ```dotenv
 NOTIFICATION_CHANNEL=acs
 ACS_CONNECTION_STRING=<secret>
 ACS_SENDER_EMAIL=<verified MailFrom address>
-NOTIFICATION_RECIPIENT_EMAIL=<reviewer address>
 APP_BASE_URL=http://localhost:8000
 ```
 
-Provider imports are lazy. An unset `NOTIFICATION_CHANNEL` skips silently. Secrets are read only
-from environment variables / `.env`; none are stored in source code.
+Provider imports are lazy. An unset `NOTIFICATION_CHANNEL` skips explicitly requested delivery.
+Secrets are read only from environment variables / `.env`; none are stored in source code.
 
 ## Full MCP-server variant
 

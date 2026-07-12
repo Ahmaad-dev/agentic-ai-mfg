@@ -1,11 +1,9 @@
-"""AP5.2 proposal notification adapter with lazy provider imports."""
+"""Email provider adapter; delivery occurs only after explicit chat confirmation."""
 from __future__ import annotations
 
-import html
 import logging
 import os
 from pathlib import Path
-from urllib.parse import quote
 
 from dotenv import load_dotenv
 
@@ -19,25 +17,6 @@ def _required_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"{name} is required for the selected notification channel")
     return value
-
-
-def _message(proposal_id: str, snapshot_id: str, error_type: str) -> tuple[str, str, str]:
-    base_url = (os.getenv("APP_BASE_URL") or "http://localhost:8000").rstrip("/")
-    link = f"{base_url}/review.html?id={quote(proposal_id, safe='')}"
-    subject = f"Offener Review: {snapshot_id} / {error_type}"
-    plain = (
-        "Ein neuer Korrekturvorschlag wartet auf eine menschliche Entscheidung.\n\n"
-        f"Snapshot: {snapshot_id}\n"
-        f"Fehlertyp: {error_type}\n"
-        f"Review öffnen: {link}\n"
-    )
-    html_body = (
-        "<p>Ein neuer Korrekturvorschlag wartet auf eine menschliche Entscheidung.</p>"
-        f"<p><strong>Snapshot:</strong> {html.escape(snapshot_id)}<br>"
-        f"<strong>Fehlertyp:</strong> {html.escape(error_type)}</p>"
-        f'<p><a href="{html.escape(link, quote=True)}">Review öffnen</a></p>'
-    )
-    return subject, plain, html_body
 
 
 def _send_acs(
@@ -105,13 +84,19 @@ def send_proposal_notification(
     snapshot_id: str,
     error_type: str,
 ) -> dict:
-    """Send one pending-review notification, or quietly skip when no channel is configured."""
-    if not (os.getenv("NOTIFICATION_CHANNEL") or "").strip():
-        logger.info("Notification skipped: NOTIFICATION_CHANNEL not set")
-        return {"sent": False, "skipped": True, "reason": "NOTIFICATION_CHANNEL not set"}
-    recipient = _required_env("NOTIFICATION_RECIPIENT_EMAIL")
-    subject, plain, html_body = _message(proposal_id, snapshot_id, error_type)
-    result = send_email_message(recipient, subject, plain, html_body)
-    if result.get("sent"):
-        logger.info("Notification sent for proposal %s", proposal_id)
-    return {**result, "proposal_id": proposal_id}
+    """Keep the former hook compatible, but never send mail from proposal generation.
+
+    Email delivery is user-triggered exclusively through the conversational draft flow and
+    ``send_email_draft(..., confirmed=True)``.  The runtime hook intentionally remains callable
+    so the runtime tool does not need to be changed.
+    """
+    logger.info(
+        "Automatic review notification skipped for proposal %s: email requires explicit chat confirmation",
+        proposal_id,
+    )
+    return {
+        "sent": False,
+        "skipped": True,
+        "reason": "automatic review notifications disabled; explicit chat confirmation required",
+        "proposal_id": proposal_id,
+    }

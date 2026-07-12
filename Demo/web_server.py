@@ -79,46 +79,14 @@ logger = logging.getLogger(__name__)
 # Globale Variablen für Agenten
 orchestrator = None
 agents = None
-chat_sessions = {}
 
 # DB persistence (AP2): map web chat-session-id (str) -> DB session id (int)
 from db import repository as db_repo
 from cost_model import estimate_cost
-db_session_ids = {}
 
-
-def _get_db_session_id(chat_session_id, snapshot_id=None):
-    """
-    Resolve the web chat-session id to a DB session id. Never breaks chat.
-
-    AP4.6: the frontend now sends the DB session id itself (an integer as string), so a chat
-    survives a page reload and a server restart. A numeric id that exists in the DB is used
-    as-is. Anything else keeps the old lazy-create behaviour (backwards compatible with
-    'default' and the old 'session_<timestamp>' ids).
-    """
-    if chat_session_id in db_session_ids:
-        return db_session_ids[chat_session_id]
-
-    # Numeric id -> an existing DB session (the AP4.6 case).
-    try:
-        numeric = int(str(chat_session_id))
-    except (TypeError, ValueError):
-        numeric = None
-    if numeric is not None:
-        try:
-            if db_repo.session_exists(numeric):
-                db_session_ids[chat_session_id] = numeric
-                return numeric
-        except Exception as e:
-            logger.warning(f"DB: could not look up session {numeric}: {e}")
-
-    try:
-        db_id = db_repo.create_session(snapshot_id=snapshot_id, user_ref=str(chat_session_id))
-        db_session_ids[chat_session_id] = db_id
-        return db_id
-    except Exception as e:
-        logger.warning(f"DB: could not create session row: {e}")
-        return None
+# AP7.4: session context (short-term memory) now has ONE owner. Same behaviour as before —
+# same sliding window, same DB reload, same defensive error swallowing; it just had no name.
+from memory import short_term
 
 
 def must_env(name: str) -> str:
@@ -211,40 +179,10 @@ def initialize_system():
     logger.info("Multi-Agent System initialisiert")
 
 
-def get_session_history(session_id: str):
-    """
-    Hole oder erstelle Chat-Historie für eine Session.
-
-    AP4.6: Der In-Memory-Cache ist nicht mehr die Quelle der Wahrheit. Ist eine Session dort
-    nicht bekannt (Serverneustart, oder der Nutzer wechselt zurück in einen alten Chat), wird
-    die Historie aus der DB nachgeladen — sonst antwortet der Agent ohne jeden Kontext,
-    obwohl der Verlauf längst persistiert ist. DB-Fehler brechen den Chat nie.
-    """
-    if session_id not in chat_sessions:
-        history = []
-        db_sid = _get_db_session_id(session_id)
-        if db_sid is not None:
-            try:
-                history = [
-                    {"role": m["role"], "content": m["content"]}
-                    for m in db_repo.get_messages_as_dicts(db_sid)
-                ]
-                if history:
-                    logger.info(
-                        f"Session {session_id}: {len(history)} Nachrichten aus der DB geladen"
-                    )
-            except Exception as e:
-                logger.warning(f"DB: could not load history for session {session_id}: {e}")
-        chat_sessions[session_id] = history
-    return chat_sessions[session_id]
-
-
-def get_recent_messages(messages, max_pairs: int = 5):
-    """Behält nur die letzten N Nachrichten-Paare"""
-    max_messages = max_pairs * 2
-    if len(messages) <= max_messages:
-        return messages
-    return messages[-max_messages:]
+# AP7.4: session context lives in memory.short_term now — see the module docstring for what
+# short-term memory is and what it deliberately is NOT.
+get_session_history = short_term.get_history
+get_recent_messages = short_term.get_recent_messages
 
 
 @app.route('/')
@@ -294,7 +232,7 @@ def chat():
         logger.info(f"Session {session_id} - User: {user_message}")
 
         # DB (AP2): ensure a session row exists + persist the user message
-        db_sid = _get_db_session_id(session_id)
+        db_sid = short_term.get_db_session_id(session_id)
         if db_sid is not None:
             try:
                 db_repo.add_message(db_sid, role="user", content=user_message)
@@ -380,10 +318,9 @@ def clear_session():
         data = request.json
         session_id = data.get('session_id', 'default')
         
-        if session_id in chat_sessions:
-            chat_sessions[session_id] = []
+        if short_term.clear(session_id):
             logger.info(f"Session {session_id} - Historie gelöscht")
-        
+
         return jsonify({'status': 'success'})
         
     except Exception as e:
@@ -411,8 +348,7 @@ def create_chat_session():
     """Neue Chat-Session anlegen und ihre DB-Id zurueckgeben."""
     try:
         new_id = db_repo.create_session(user_ref="web")
-        chat_sessions[str(new_id)] = []
-        db_session_ids[str(new_id)] = new_id
+        short_term.register(new_id, new_id)
         logger.info(f"Neue Chat-Session angelegt: {new_id}")
         return jsonify({'session_id': new_id}), 201
     except Exception as e:

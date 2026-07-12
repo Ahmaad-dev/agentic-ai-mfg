@@ -398,12 +398,21 @@ def compute_metrics(data: dict, rng: dict) -> dict:
             }
         )
 
-    # A calibration curve built on rows whose confidence was a near-constant (pre-AP4.5)
-    # cannot discriminate — it is flat by construction, not by finding.
+    # AP7.2: `formula_version` is now the EXACT discriminator (v0/v1/v2); the old
+    # `value_grounded IS NULL` heuristic only ever separated v0. Three generations exist:
+    #   v0 — middle term `schema_valid` (always 1) -> score a near-constant ~0.775
+    #   v1 — AP4.5: `value_grounded` real, but `memory_support` hard-wired to 0 -> capped at 0.8
+    #   v2 — AP7.2: `memory_support` graded from the episodic case base -> full 0..1 range
+    # Mixing them in ONE calibration curve compares scores that are not on the same scale.
+    decided_by_version: dict[str, int] = {}
+    for rv in reviews:
+        p = by_id.get(rv["proposal_id"])
+        if p is not None:
+            v = p.get("formula_version") or "unknown"
+            decided_by_version[v] = decided_by_version.get(v, 0) + 1
+
     legacy_confidence_decided = sum(
-        1
-        for rv in reviews
-        if (p := by_id.get(rv["proposal_id"])) is not None and p["value_grounded"] is None
+        n for v, n in decided_by_version.items() if v in ("v0", "unknown")
     )
     if legacy_confidence_decided:
         flags.append(
@@ -417,6 +426,26 @@ def compute_metrics(data: dict, rng: dict) -> dict:
                     "`schema_valid` = immer 1). Ihr Score ist praktisch konstant (~0.775) und "
                     "trägt keine Information — die Kalibrierungskurve ist deshalb flach, "
                     "und zwar konstruktionsbedingt, nicht als Messergebnis."
+                ),
+            }
+        )
+
+    if len([v for v in decided_by_version if v != "unknown"]) > 1 or (
+        decided_by_version.get("unknown") and len(decided_by_version) > 1
+    ):
+        spread = ", ".join(f"{v}: {n}" for v, n in sorted(decided_by_version.items()))
+        flags.append(
+            {
+                "code": "CONFIDENCE_MIXED_FORMULA_VERSIONS",
+                "severity": "warning",
+                "affects": ["calibration", "avg_confidence", "confidence_distribution"],
+                "message": (
+                    f"Die entschiedenen Vorschläge stammen aus MEHREREN Konfidenz-Generationen "
+                    f"({spread}). Die Scores liegen damit nicht auf derselben Skala: v0 ist "
+                    "quasi-konstant, v1 ist bei 0.8 gedeckelt (memory_support fest 0), erst v2 "
+                    "nutzt den vollen Bereich 0..1. Eine gemeinsame Kalibrierungskurve über "
+                    "diese Generationen vergleicht Ungleiches — vor der Auswertung nach "
+                    "`formula_version` filtern (?formula_version=v2)."
                 ),
             }
         )
@@ -712,16 +741,38 @@ def get_metrics():
         preset=week|month|year|all      — relative window; default `month` (last 30 days)
         from=YYYY-MM-DD&to=YYYY-MM-DD   — explicit window (`to` inclusive); overrides preset
         granularity=day|week|month      — timeline bucket size; auto-coarsened if too fine
+        formula_version=v0|v1|v2        — AP7.2: restrict to ONE confidence generation
 
     The window scopes every FLOW metric. It deliberately does NOT scope `open_reviews` /
     `proposals_open` — see the FLOW vs STOCK block above.
+
+    `formula_version` exists because the three generations are not on the same scale (v0 is
+    quasi-constant, v1 is capped at 0.8, only v2 uses the full range). For a calibration
+    curve that means something, pin ONE generation — `?formula_version=v2`.
     """
     try:
         data = repo.fetch_metrics_data()
+
+        # AP7.2: pin one confidence generation. Reviews of filtered-out proposals go too,
+        # otherwise a decision would be counted whose proposal no longer exists in the set.
+        wanted = (request.args.get("formula_version") or "").strip().lower()
+        if wanted:
+            keep = {
+                p["proposal_id"] for p in data["proposals"]
+                if (p.get("formula_version") or "unknown") == wanted
+            }
+            data = {
+                **data,
+                "proposals": [p for p in data["proposals"] if p["proposal_id"] in keep],
+                "reviews": [r for r in data["reviews"] if r["proposal_id"] in keep],
+            }
+
         # The data is pulled BEFORE the range is resolved, because `preset=all` can only be
         # answered by the data itself (see resolve_range).
         rng = resolve_range(request.args, earliest_record=earliest_timestamp(data))
-        return jsonify(compute_metrics(data, rng)), 200
+        payload = compute_metrics(data, rng)
+        payload["formula_version_filter"] = wanted or None
+        return jsonify(payload), 200
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Dashboard metrics failed")
         return jsonify({"error": "Metrics could not be computed", "detail": str(exc)}), 500

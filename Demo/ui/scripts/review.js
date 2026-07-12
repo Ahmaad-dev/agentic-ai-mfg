@@ -431,6 +431,11 @@ function renderDetail(p) {
 
         ${renderConfidenceBreakdown(p)}
 
+        <div class="rb-detail-section" id="memorySection" hidden>
+            <h3>Was wurde bei ähnlichen Fehlern früher entschieden?</h3>
+            <div id="memoryCases"></div>
+        </div>
+
         <div class="rb-detail-section" id="codeContextSection" hidden>
             <h3>Fehlerstelle im Original (<code>snapshot-data.json</code>)</h3>
             <div id="codeContext"></div>
@@ -456,7 +461,76 @@ function renderDetail(p) {
     document.getElementById('backBtn').addEventListener('click', showList);
     wireDecisionPanel(p);
     loadCodeContext(p.proposal_id);   // asynchron nachladen, blockiert die Ansicht nicht
+    loadMemoryCases(p.proposal_id);   // AP7.3 — ebenso asynchron
     showDetail();
+}
+
+/**
+ * AP7.3 — die früheren MENSCHLICHEN Entscheidungen zu genau dieser Fehlerart.
+ *
+ * `memory_support` allein ist nur eine Zahl in der Konfidenz. Damit sie überprüfbar wird, muss
+ * der Reviewer die Fälle SEHEN, aus denen sie stammt: was die KI damals vorschlug, was der
+ * Mensch daraus machte und warum. Genau das ist der Unterschied zwischen „das System behauptet,
+ * es habe gelernt" und „hier ist der Beleg".
+ *
+ * Kein Fall im Gedächtnis -> die Sektion bleibt aus (kein leerer Kasten).
+ */
+async function loadMemoryCases(proposalId) {
+    const section = document.getElementById('memorySection');
+    const host = document.getElementById('memoryCases');
+    if (!section || !host) return;
+
+    try {
+        const res = await fetch(
+            `${REVIEW_CONFIG.API_ENDPOINT}/${encodeURIComponent(proposalId)}/memory`,
+            { headers: { Accept: 'application/json' } }
+        );
+        if (!res.ok) return;
+        const mem = await res.json();
+        if (!mem.count) return;
+
+        const summary = [
+            `${mem.count} ähnliche(r) Fall/Fälle`,
+            mem.approved ? `${mem.approved}× bestätigt` : '',
+            mem.modified ? `${mem.modified}× korrigiert` : '',
+            mem.rejected ? `${mem.rejected}× verworfen` : '',
+        ].filter(Boolean).join(' · ');
+
+        const cards = mem.cases.map(c => {
+            const decisionCls = { approve: 'ok', modify: 'warn', reject: 'err' }[c.decision] || '';
+            const applied = c.decision === 'reject'
+                ? ''
+                : `<div class="rb-mem-row">
+                       <span class="rb-label">Angewendet</span>
+                       <span class="rb-value rb-mono">${escapeHtml(JSON.stringify(c.final_value))}</span>
+                   </div>`;
+            const why = c.comment
+                ? `<p class="rb-muted rb-mem-why">„${escapeHtml(c.comment)}"</p>`
+                : '';
+            return `
+                <div class="rb-mem-case ${decisionCls}">
+                    <div class="rb-mem-head">
+                        <span class="rb-chip rb-chip-error">${escapeHtml(c.error_type || '—')}</span>
+                        <span class="rb-mem-decision ${decisionCls}">${escapeHtml(c.decision)}</span>
+                    </div>
+                    <div class="rb-mem-row">
+                        <span class="rb-label">KI schlug vor</span>
+                        <span class="rb-value rb-mono">${escapeHtml(JSON.stringify(c.suggested_value))}</span>
+                    </div>
+                    ${applied}
+                    ${why}
+                </div>`;
+        }).join('');
+
+        host.innerHTML = `
+            <p class="rb-muted rb-mem-summary">
+                ${escapeHtml(summary)} für <code>${escapeHtml(mem.pattern || '—')}</code>
+            </p>
+            <div class="rb-mem-list">${cards}</div>`;
+        section.hidden = false;
+    } catch (err) {
+        console.warn('Memory-Fälle nicht ladbar:', err);
+    }
 }
 
 /**
@@ -527,6 +601,30 @@ function renderConfidenceBreakdown(p) {
              ${escapeHtml(p.confidence_rationale)}</p>`
         : '';
 
+    // AP7.2 — der dritte Term. Er wird nur gezeigt, wenn er tatsächlich berechnet wurde
+    // (formula v2); ältere Vorschläge kannten ihn nicht und würden sonst "0" suggerieren,
+    // was ein Messwert wäre statt einer Leerstelle.
+    const support = p.memory_support;
+    const memoryBlock = (support === null || support === undefined)
+        ? ''
+        : (() => {
+            const memCls = support >= 1 ? 'ok' : (support > 0 ? 'warn' : 'err');
+            const memIcon = support >= 1 ? 'verified' : (support > 0 ? 'history' : 'warning');
+            const memTitle = support >= 1
+                ? 'Ein Mensch hat genau diesen Wert schon einmal bestätigt'
+                : (support > 0
+                    ? 'Es gibt Präzedenzfälle für diese Fehlerart'
+                    : 'Kein stützender Präzedenzfall');
+            return `
+                <div class="rb-grounded ${memCls}">
+                    <span class="material-symbols-outlined" aria-hidden="true">${memIcon}</span>
+                    <div>
+                        <strong>${escapeHtml(memTitle)}</strong>
+                        <p class="rb-muted">${escapeHtml(p.memory_support_reason || '—')}</p>
+                    </div>
+                </div>`;
+        })();
+
     return `
         <div class="rb-detail-section">
             <h3>Woher kommt die Konfidenz?</h3>
@@ -537,6 +635,7 @@ function renderConfidenceBreakdown(p) {
                     <p class="rb-muted">${escapeHtml(p.value_grounded_reason || '—')}</p>
                 </div>
             </div>
+            ${memoryBlock}
             ${rationale}
         </div>`;
 }
@@ -551,6 +650,37 @@ function renderConfidenceBreakdown(p) {
  */
 function renderDecisionPanel(p) {
     if (p.status !== 'pending_review') {
+        // Der Status allein ("approved") sagt nicht, WAS entschieden wurde. Nach einem Reload
+        // war die eigentliche Entscheidung — finaler Wert und Begründung des Menschen —
+        // unsichtbar. Das ist ein Loch in der Audit-Sicht: der ganze Sinn von HitL ist, dass
+        // die menschliche Entscheidung festgehalten ist.
+        const d = p.decision;
+        const details = !d ? '' : `
+            <div class="rb-decided">
+                <div class="rb-mem-row">
+                    <span class="rb-label">Entscheidung</span>
+                    <span class="rb-mem-decision ${
+                        { approve: 'ok', modify: 'warn', reject: 'err' }[d.decision] || ''
+                    }">${escapeHtml(d.decision || '—')}</span>
+                </div>
+                ${d.decision === 'reject' ? '' : `
+                <div class="rb-mem-row">
+                    <span class="rb-label">Finaler Wert</span>
+                    <span class="rb-value rb-mono">${escapeHtml(JSON.stringify(d.final_value))}</span>
+                </div>`}
+                ${d.comment ? `
+                <div class="rb-mem-row">
+                    <span class="rb-label">Begründung</span>
+                    <span class="rb-value">${escapeHtml(d.comment)}</span>
+                </div>` : ''}
+                <div class="rb-mem-row">
+                    <span class="rb-label">Entschieden am</span>
+                    <span class="rb-value rb-muted">${escapeHtml(
+                        (d.decided_at || '').replace('T', ' ').slice(0, 19) || '—'
+                    )}${d.reviewer_ref ? ' · ' + escapeHtml(d.reviewer_ref) : ''}</span>
+                </div>
+            </div>`;
+
         return `
             <div class="rb-detail-section rb-actions">
                 <h3>Entscheidung</h3>
@@ -559,6 +689,7 @@ function renderDecisionPanel(p) {
                     <strong>${escapeHtml(p.status || '—')}</strong>) und kann nicht erneut
                     entschieden werden.
                 </div>
+                ${details}
             </div>`;
     }
 
@@ -957,6 +1088,21 @@ async function submitDecision(proposalId, decision, finalValue) {
                  <strong>fehlgeschlagen</strong>${data.failed_at ? ` bei Schritt
                  <code>${escapeHtml(data.failed_at)}</code>` : ''}:
                  ${escapeHtml(data.detail || data.error || 'Unbekannter Fehler.')}`);
+            return;
+        }
+
+        // --- 422: the action guard refused BEFORE anything was written -------------------
+        // Modify is only defined for update_field / add_to_array. For remove_from_array or
+        // manual_intervention_required the backend blocks with 422 and applies nothing — the
+        // human's value would otherwise vanish silently, or `applied=true` would be a lie.
+        // Nothing was written, so the panel stays open and the reviewer can pick another action.
+        if (response.status === 422) {
+            showDecisionStatus('error',
+                `Diese Aktion ist für den Vorschlag nicht zulässig
+                 (<code>${escapeHtml(data.action || 'unbekannt')}</code>):
+                 ${escapeHtml(data.error || 'Modify ist nur für update_field und add_to_array definiert.')}
+                 <br><strong>Es wurde nichts gespeichert und nichts angewendet.</strong>`);
+            setDecisionBusy(false, decision);
             return;
         }
 

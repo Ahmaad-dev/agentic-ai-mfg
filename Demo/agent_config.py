@@ -9,6 +9,23 @@ import os
 # False = legacy behavior: corrections are auto-applied (for testing/baseline only).
 HUMAN_IN_THE_LOOP = os.getenv("HUMAN_IN_THE_LOOP", "true").lower() == "true"
 
+# ========== RULEBOOK (PT4 / AP7) ==========
+# Which rulebook the correction pipeline feeds to the LLM.
+# "cards"    = demo/skills/_core.md + the card(s) for this error (DEFAULT since 2026-07-12).
+# "monolith" = the single 936-line llm-validation-fix-rules.md, loaded in full (fallback).
+#
+# Why cards is the default: measured over 3 snapshots, cards produces IDENTICAL proposals at
+# -16% prompt tokens. More importantly, the skills folder is only effective in this mode — with
+# "monolith" every rule card a domain expert writes is inert. The monolith file stays in the repo
+# untouched and remains one env var away, so the A/B evaluation for AP-E is always possible.
+RULEBOOK_MODE = os.getenv("RULEBOOK_MODE", "cards").lower()
+
+# NOTE: there is deliberately NO card mapping here any more.
+# The cards in demo/skills/ describe THEMSELVES (YAML frontmatter `applies_to`, or by
+# convention their filename). A new rule = a new .md file in that folder — no code change.
+# Keeping a central list here would mean a domain expert needs a developer to add a rule,
+# which defeats the entire purpose of the skills folder. See rulebook_loader.py.
+
 # ========== AGENT KONFIGURATION ==========
 
 # CHAT-HISTORIE KONFIGURATION

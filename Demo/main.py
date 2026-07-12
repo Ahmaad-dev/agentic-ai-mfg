@@ -60,12 +60,9 @@ def must_env(name: str) -> str:
     return v
 
 
-def get_recent_messages(messages: List, max_pairs: int = 5) -> List:
-    """Behält nur die letzten N Nachrichten-Paare"""
-    max_messages = max_pairs * 2
-    if len(messages) <= max_messages:
-        return messages
-    return messages[-max_messages:]
+# AP7.4: the sliding window used to be implemented here AND in web_server.py, byte-identical.
+# One owner now: memory.short_term.
+from memory.short_term import get_recent_messages  # noqa: E402
 
 
 def initialize_clients():

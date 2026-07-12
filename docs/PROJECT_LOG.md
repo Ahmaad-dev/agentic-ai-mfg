@@ -1020,3 +1020,284 @@ Tech-Debt (tracken, nicht blockierend) oder Phase 2 (AP5–AP7 + Evaluation).
 - **What was done:** Ein dedizierter E-Mail-Agent ist als vierter Orchestrator-Agent integriert. Das Plus-Menü kann ihn explizit auswählen; natürliche E-Mail-Aufträge werden ebenfalls geroutet. Der Agent erstellt einen persistenten, sichtbaren Entwurf, übernimmt allgemeine Chat-Inhalte oder auf ausdrücklichen Fallbezug verifizierte Review-/Snapshot-Fakten samt Deep-Link, verarbeitet Änderungswünsche versioniert und sendet den exakt angezeigten Stand erst bei `Bitte absenden`. Fünf MCP-Tools kapseln Create/Get/Revise/Send/Cancel; der Versand nutzt den bestehenden ACS-/SendGrid-Adapter für einen frei angegebenen Empfänger. Freigabe-Gate, Negativbefehl und Idempotenz verhindern unbeabsichtigten bzw. doppelten Versand. Token-Validierung bleibt wie geplant out-of-scope.
 - **Verification:** Alembic-Migration isoliert und anschließend lokal bis Head `7c4e2d9a8f10` erfolgreich; reale DB danach `email_drafts=0`, bestehend `proposals=9`, `reviews=6`. Wegwerf-DB mit Fake-LLM/ACS: Entwurf v1 → `Ja, passt` ohne Versand → Änderung v2 → explizites Absenden übergibt exakt v2 → zweiter Send idempotent; `Bitte nicht absenden` verwirft und sendet nicht. UI-VM-Test: Plus-Auswahl setzt `selected_tool=email`, hält den Modus während des Entwurfs und löscht ihn erst nach `sent`. Snapshot-Kontext wurde separat mit Wegwerf-Proposal auf Problem, Begründung, Vorschlag und funktionalen Review-Link geprüft; alle Fixtures gelöscht.
 - **Open / next:** Ein realer manueller Chat-Dialog mit frei gewähltem Empfänger ist der verbleibende Abnahmeschritt; die technische Versandgrenze ist mit dem bereits real bestätigten ACS-Kanal verbunden.
+
+---
+
+### 2026-07-12 — AP7 Redefinition + AP7.0 Rulebook-Split & A/B-Schalter
+- **Status:** done
+- **Changed files:** `docs/PT4_PLAN.md` (AP7 neu definiert), `docs/AP7-0_rule_inventory.md` (neu), `demo/skills/_core.md`, `demo/skills/unique-ids.md`, `demo/skills/references.md`, `demo/skills/work-item-configs.md`, `demo/skills/density-values.md` (alle neu), `demo/rulebook_loader.py` (neu), `demo/agent_config.py`, `demo/smart-planning/runtime/{identify_error_llm,generate_correction_llm,validate_correction_schema_llm}.py`. Der Monolith `llm-validation-fix-rules.md` ist **unverändert**.
+- **What was done:** **(1) AP7 neu definiert.** Auslöser waren drei Befunde: Short-term Memory existiert bereits seit AP2 (Session-Historie in `messages`, DB-Reload, Sliding Window, `chat_history` in jedem Agent-Call) und wird nicht neu gebaut; episodisches Gedächtnis allein hat ein Kaltstart-Problem (gemessen: `proposals=9`, `reviews=6`, `memory_items=0`); und die Review-Kommentare enthalten fertige Domänenregeln (Review #5 ist eine vollständige Regel in Prosa). AP7 baut daher Long-term Memory in **zwei Schichten** — Rulebook-Karten (bessere Vorschläge, AK2 ≥80 %) und episodische Fälle (ehrliche Confidence). `memory_support` ist verbindlich **nur** aus der episodischen Schicht abzuleiten und abgestuft (0 / 0.5 / 1.0); aus den Karten abgeleitet wäre er konstant 1 und würde jeden Score um +0.2 anheben (0.775 → 0.975) — derselbe Fehler wie `schema_valid`. Ein **Scope Guard** schließt Graphen, neue Metrikdimensionen und eine Markdown-Auflösung von `agent_config.py` explizit aus (Graph-vs-Monolith ist Gegenstand einer separaten Bachelorarbeit). **(2) AP7.0 gebaut.** Regel-Inventar (22 Regeln R1–R22) VOR dem Split erstellt. Dabei ein Konstruktionsfehler der ersten AP7-Fassung gefunden: der maßgebliche `error_type` ist `tag_error_type` (der `[validate_*]`-Tag, seit AP3.6b-1), also der **Validator-Name** — `validate_unique_ids` feuert denselben Tag `UNIQUE_IDS` für Duplikate *und* leere Felder. Der geplante Schnitt `empty-field.md` / `duplicate-id.md` wäre zur Laufzeit nicht auswählbar gewesen. Karten keyen daher 1:1 auf den Validator-Tag. 13 Validator-Tags existieren, der Monolith deckt 5 davon ab; Tags ohne Karte fallen auf `_core.md` zurück (verlustfrei — der Monolith hat für sie ebenfalls keine spezifischen Regeln). `RULEBOOK_MODE = os.getenv("RULEBOOK_MODE", "monolith")` in `agent_config.py`, Muster wie `HUMAN_IN_THE_LOOP`; Tag→Karte über `RULEBOOK_CARDS`. Die dreifach duplizierte Ladefunktion wurde zu einem gemeinsamen `rulebook_loader.py` zusammengeführt.
+- **Verification:** **(a) Kein Regelverlust:** 22/22 Regeln über charakteristische Textmarker in genau der Zielkarte nachgewiesen (Marker musste zusätzlich im Original existieren). Die beiden wortgleich duplizierten Packaging-Blöcke (Zeilen 124–158 ⊂ 160–203) sind entfernt, der Inhalt existiert genau einmal. **(b) Monolith-Modus byte-identisch** zur Originaldatei (Assertion). **(c) Live-A/B auf Snapshot `7ab03beb` (1 Fehler, `[validate_demand_article_ids]`), beide Modi vollständig durch identify → generate → schema-validate:** monolith 34.899 Zeichen Regeln / **14.310 Prompt-Tokens** / 0,0381 $ — cards 22.783 Zeichen / **10.570 Prompt-Tokens** / 0,0289 $ (**−26 % Tokens, −24 % Kosten**). **Beide Modi erzeugen denselben Vorschlag** (`update_field`, `demands[386].articleId` → `122873`, confidence 0.775) und bestehen die Schema-Validierung. Keine Qualitätsregression in diesem Fall. Größter Einzelgewinn: `identify_error_llm` lädt im cards-Modus nur noch `_core.md` (9.870 statt 34.899 Zeichen, −72 %) — dieser Schritt *wählt* den Fehler erst aus, der Tag existiert dort noch nicht, und er las bisher 936 Zeilen Korrekturstrategien, die er nie brauchte.
+- **Open / next:** AP7.1 — episodischer Schreibpfad: jeder abgeschlossene Review wird als Fall in `memory_items` geschrieben (Fehlersignatur, KI-Vorschlag, menschliche Entscheidung, finaler Wert, Kommentar), inkl. einmaligem Backfill der 6 bestehenden Reviews. Hinweis: Ein einzelner A/B-Fall zeigt die Mechanik, keine Statistik — vor AP-E ist ein Seeding-Lauf nötig.
+
+---
+
+### 2026-07-12 — AP7.1 Episodischer Schreibpfad (memory_items aus reviews)
+- **Status:** done
+- **Changed files:** `demo/memory/__init__.py`, `demo/memory/long_term.py` (beide neu), `demo/db/repository.py` (additiv: `get_latest_review_as_dict`, `memory_item_exists`, `list_reviewed_proposal_ids`, `count_memory_items`, `list_memory_items_as_dicts`, `set_memory_item_error_type`), `demo/routes/review.py` (Hook in `_decide`).
+- **What was done:** Jeder abgeschlossene Review wird zu **genau einem** Fall in `memory_items`: Fehlersignatur (`error_type`, `affected_entity_pattern`), KI-Vorschlag, menschliche Entscheidung, finaler Wert, Kommentar, `revalidation_ok`. Der Hook sitzt in `_decide()` — dem einzigen Commit-Pfad — und feuert für approve/modify **nach** dem Apply (damit das Revalidierungsergebnis schon auf der Review-Zeile steht) und für reject sofort. `record_case_safe()` wirft nie: ein Memory-Fehler darf eine menschliche Entscheidung niemals blockieren (gleiches defensives Muster wie die DB-Writes in `web_server.chat()`). Idempotent über `source_proposal_id` — ein Fall pro Proposal. **Retrieval-Schlüssel:** `affected_entity_pattern` normalisiert den Array-Index weg (`demands[386].articleId` → `demands[].articleId`), denn der konkrete Index eines Snapshots ist Rauschen; erst dadurch wird ein Altfall gegen einen neuen Fehler matchbar. **Gelernt wird ausschließlich aus `reviews`, nie aus dem Chat** — approve/reject/modify und die Begründung stehen dort; die Chat-Historie enthält nur den KI-*Vorschlag* (genau deshalb existiert der `_get_review_decisions()`-Workaround). Aus Proposals zu lernen hieße, dem System die eigenen Halluzinationen beizubringen.
+- **Verification:** **(a) Backfill:** 6 bestehende Reviews → 6 Fälle; zweiter Lauf schreibt 0 und überspringt 6 (Idempotenz bewiesen). **(b) Live-Hook:** echter `POST /api/review/proposals/{id}/reject` über den Flask-Testclient auf das Proposal aus dem AP7.0-A/B-Lauf: HTTP 200, `applied=false` (keine Snapshot-Daten verändert), `memory_items` 6 → **7**, neuer Fall korrekt mit `error_type=DEMAND_ARTICLE_IDS`, `affected_entity_pattern=demands[].articleId`, `decision=reject`, `suggested_value=122873`, `final_value=None`. **(c) Datenqualitäts-Fund + Reparatur:** Die Altbestände tragen einen **Mix aus alten Heuristik-Labels und neuen Tags**, weil sie vor AP3.6b-2 entstanden. `repair_legacy_error_types()` leitet den maßgeblichen Tag **deterministisch aus dem Lauf-Artefakt** (`llm_identify_response.json` → `selected_error.message` → `[validate_*]`) neu ab, statt zu raten. Ergebnis: Fall #2 `DUPLICATE_ID` → **`DENSITY_VALUES`** korrigiert — damit ist der AP3.6a-Fehlklassifizierungsbug erstmals in echten Daten nachgewiesen (Heuristik: value-Modus + >1 Treffer → fälschlich DUPLICATE_ID).
+- **Open / next:** **(1) Drei Fälle (#3–#5) behalten das Legacy-Label `EMPTY_FIELD`** — ihre Iterationen (`ec96832c` iteration-1/2/3) besitzen **gar kein** `llm_identify_response.json` (synthetische AP3-Testfixtures, Kommentare „AI guessed wrong." o.ä.). Der echte Tag ist nicht rekonstruierbar; es wurde bewusst **nichts geraten**. **(2) Konsequenz für AP7.2:** Retrieval darf **nicht primär auf `error_type`** keyen — ein neuer leerer `demandId` bekommt heute `UNIQUE_IDS` und würde die drei `EMPTY_FIELD`-Fälle verfehlen, die genau davon handeln. `affected_entity_pattern` ist der robuste Schlüssel: `demands[].demandId` vereint #1, #3, #4, #5 korrekt, **unabhängig** vom Label-Chaos. Empfehlung: Pattern primär, `error_type` als sekundäres Signal. **(3)** Die `proposals`-Tabelle trägt weiterhin die Legacy-Labels (nur `memory_items` wurde repariert) — Hinweis für AP6 (Fehlerarten-Diagramm).
+
+---
+
+### 2026-07-12 — AP7.2 Retrieval + ehrliche Confidence (memory_support)
+- **Status:** done
+- **Changed files:** `demo/memory/retrieval.py` (neu), `demo/smart-planning/runtime/generate_correction_llm.py`, `demo/db/models.py` (+`memory_support`, `memory_support_reason`, `formula_version` auf `proposals`), `demo/db/repository.py` (persistiert sie), `demo/alembic/versions/2f47c4554ece_*.py` (neu). `correction_models.py` bewusst **nicht** angefasst: abgeleitete Felder liegen dort schon seit AP4.5 (`value_grounded`) außerhalb des Pydantic-Modells, das Modell ist nicht `extra="forbid"`.
+- **What was done:** Bei einem neuen Fehler werden vergangene, **von Menschen entschiedene** Fälle abgerufen und als Evidenz in den Korrektur-Prompt gegeben; daraus wird `memory_support` abgeleitet. **Retrieval-Schlüssel ist `affected_entity_pattern`, NICHT `error_type`** — begründet in AP7.1: die Fallbasis mischt Legacy-Labels (`EMPTY_FIELD`) mit Tags (`UNIQUE_IDS`), ein Retrieval über `error_type` würde genau die relevanten Altfälle verfehlen. Der Zielpfad ist bereits vor der Generierung bekannt (`last_search_results.results[0].path`), der Schlüssel also zur Retrieval-Zeit verfügbar. Ranking: Pattern-Match (Pflicht) + gleicher `error_type` (Bonus) + Revalidierung bestanden (Bonus). **`memory_support` ist abgestuft und deterministisch** (wie `value_grounded`, nie eine Modell-Meinung): `0.0` kein Fall · `0.0` **negativer Präzedenzfall** (genau dieser Wert wurde schon vorgeschlagen und von einem Menschen verworfen/wegkorrigiert → die KI wiederholt einen bekannten Fehler) · `0.5` Präzedenz für die Fehler**art**, aber kein Wert-Präzedenzfall · `1.0` ein Mensch hat genau diesen Wert bestätigt. Jeder Score trägt zusätzlich `memory_support_reason` im Klartext, damit ein Reviewer sieht, **warum** das Gedächtnis die Confidence gehoben oder gesenkt hat. `formula_version` ("v2") wird auf jedes Proposal gestempelt; "v1" war die Generation mit hart verdrahtetem `memory_support=0` (Score bei 0.8 gedeckelt). Alle Memory-Zugriffe sind defensiv: ein Ausfall degradiert zu „keine Evidenz", die Pipeline bricht nie.
+- **Verification:** **(a) Alle drei Stufen deterministisch geprüft:** kein Fall → 0.0 · Fall ohne Wert-Präzedenz → 0.5 · Mensch bestätigte den Wert → 1.0 · Mensch verwarf/korrigierte den Wert weg → 0.0 mit Warnung. **(b) Retrieval gegen die echte DB:** `demands[].demandId` → **3 Fälle (#1, #4, #5)**. Fall #1 trägt `UNIQUE_IDS`, #4/#5 tragen `EMPTY_FIELD` — der Pattern-Schlüssel vereint sie **trotz** des Label-Chaos. Das ist der empirische Beleg für die Schlüsselwahl; ein `error_type`-Retrieval hätte 2 von 3 verfehlt. **(c) Live-Lauf** auf Snapshot `7ab03beb` (cards-Modus, echtes Azure OpenAI): Gedächtnis fand Fall #7, die KI schlug denselben Wert `122873` erneut vor, der **negative Präzedenzfall feuerte** → `memory_support=0.0` mit Klartext-Warnung, `confidence_score` **0.75** statt bisher konstant 0.775, gestempelt `formula v2`. **Der Score bewegt sich erstmals aufgrund des Gedächtnisses.** Alembic-Migration `7c4e2d9a8f10 → 2f47c4554ece` sauber angewendet; `proposals=11`, `memory_items=7`.
+- **Open / next:** **(1) WICHTIG — Testdaten im Gedächtnis:** Fall #7 stammt aus dem AP7.1-Hook-Test, in dem ich den Wert `122873` künstlich per `reject` verworfen habe. Der Wert ist aber **nachweislich korrekt** (`value_grounded=1.0`, `articles.articleId=122873` existiert). Das Gedächtnis unterdrückt damit dauerhaft einen richtigen Vorschlag. Empfehlung: Review + Fall #7 löschen, bevor Kennzahlen erhoben werden. **Genereller Befund für die Ausarbeitung: das Gedächtnis verstärkt jede menschliche Entscheidung — auch eine falsche.** Das ist korrektes HitL-Verhalten (der Mensch hat Vorrang), aber es heißt, dass Fehlentscheidungen des Reviewers persistent werden. **(2)** Die 9 Altproposals tragen `formula_version=NULL` (Generation v1, Deckel 0.8) — AP6 muss danach filtern oder neu berechnen, sonst mischt die Kalibrierungskurve zwei Formelgenerationen. **(3)** Nächstes Paket: AP7.3 (ähnliche Fälle im Review-UI sichtbar machen).
+
+---
+
+### 2026-07-12 — AP7.3 Gedächtnis im Review-UI + Bereinigung (Testfall, formula_version)
+- **Status:** done
+- **Changed files:** `demo/routes/review.py` (neuer Endpunkt `GET /api/review/proposals/<id>/memory`), `demo/db/repository.py` (`get_proposal_as_dict` liefert `memory_support`, `memory_support_reason`, `formula_version`), `demo/ui/scripts/review.js` (Memory-Sektion + `memory_support` in der Konfidenz-Aufschlüsselung), `demo/ui/css/styles.css`.
+- **What was done:** **(1) AP7.3.** Der Reviewer sieht in der Detailansicht jetzt „Was wurde bei ähnlichen Fehlern früher entschieden?": Anzahl ähnlicher Fälle mit Aufschlüsselung (bestätigt / korrigiert / verworfen), und je Fall was die KI damals vorschlug, was der Mensch daraus machte **und dessen Begründung im Klartext**. Damit ist `memory_support` nicht länger eine Zahl, die man glauben muss, sondern ein **überprüfbarer Beleg**. Geladen wird asynchron nach dem Muster von `loadCodeContext` (AP4.7); gibt es keinen Fall, bleibt die Sektion aus (kein leerer Kasten). Zusätzlich zeigt „Woher kommt die Konfidenz?" jetzt den dritten Term — aber **nur wenn er berechnet wurde**: bei v0/v1-Vorschlägen ist `memory_support` NULL und der Block bleibt weg, denn eine angezeigte „0" wäre ein Messwert statt einer Leerstelle. `memory_support = 0` wird rot dargestellt (fehlender ODER negativer Präzedenzfall ist eine Warnung, kein neutraler Zustand). **(2) Bereinigung Testfall:** Review + Memory-Fall #7 gelöscht und Proposal-Status auf `pending_review` zurückgesetzt. Begründung siehe AP7.2: der Wert `122873` war per `reject` künstlich verworfen worden, ist aber nachweislich korrekt (`value_grounded=1.0`) — das Gedächtnis hätte einen richtigen Vorschlag dauerhaft unterdrückt. Zurück auf `reviews=6`, `memory_items=6`. **(3) `formula_version` rückwirkend gestempelt** — und zwar **nach dem tatsächlichen Dateninhalt statt pauschal:** Die Prüfung ergab **drei** Generationen, nicht zwei. `v0` = 6 Proposals ohne `value_grounded` (alte `schema_valid`-Formel), `v1` = 5 Proposals mit `value_grounded`, aber `memory_support` hart 0 (AP4.5-Formel, Deckel 0.8), `v2` = AP7.2. Keine Confidence wurde neu berechnet — Vergangenheit wird nicht umgeschrieben, nur korrekt etikettiert.
+- **Verification:** Endpunkt gegen echte Daten: `1ef11903__iteration-1` (offener `WORK_ITEM_CONFIGS_COMPLETENESS`-Fehler) → **1 ähnlicher Fall** (`articles[].workItemConfigs`, 1× korrigiert), nämlich Fall #6 mit der vollständigen menschlichen Begründung („BA01 rampUpTime=30 … 124211 ist ein Himbeer-Grundstoff …"). `memory_support` bleibt dort korrekt `None` (v1-Proposal) → Konfidenz-Block wird nicht gezeigt, Fall-Liste schon. **Konsistenzfehler gefunden und behoben:** Das Proposal `7ab03beb__iteration-4` trug nach der Löschung von Fall #7 noch die eingefrorene Begründung „WARNUNG … Fall #7", während die Live-Fallliste 0 zeigte — das UI hätte sich selbst widersprochen. Neu generiert gegen das bereinigte Gedächtnis: jetzt konsistent `0 Fälle` / `memory_support=0.0` („Kein vergleichbarer Fall") / `confidence 0.775` / `formula v2`. **Merke:** `memory_support` ist wie `confidence_score` ein **Generierungszeit-Wert**; ändert sich die Fallbasis, wird er stale. Für AP-E relevant.
+- **Open / next:** AP7.4 (Short-term Memory nur benennen, nicht neu bauen; `_get_review_decisions()`-Workaround entfernen). Vor Kennzahlen: Seeding-Lauf. Offen aus AP7.1: die drei Fälle #3–#5 tragen weiterhin das Legacy-Label `EMPTY_FIELD` (Artefakte fehlen, bewusst nicht geraten) — für das Retrieval unschädlich, da über `affected_entity_pattern` gematcht wird.
+
+---
+
+### 2026-07-12 — AP7.4 Short-term Memory: benannt, nicht neu gebaut
+- **Status:** done
+- **Changed files:** `demo/memory/short_term.py` (neu), `demo/web_server.py`, `demo/main.py`, `docs/PT4_PLAN.md` (AP7.4-Korrektur). `demo/agents/orchestration_agent.py` **bewusst NICHT angefasst** — siehe unten.
+- **What was done:** Der Session-Kontext hat jetzt **einen** Besitzer. Bisher lag er verstreut: `chat_sessions`, `db_session_ids`, `_get_db_session_id`, `get_session_history`, `get_recent_messages` in `web_server.py` — und `get_recent_messages` zusätzlich **byte-identisch dupliziert** in `main.py` (dasselbe Muster wie beim dreifachen Rulebook-Loader in AP7.0). Alles nach `memory/short_term.py` gezogen: In-Memory-Cache, DB-Reload bei kaltem Cache (AP4.6), Sliding Window, Session-Id-Mapping. `web_server` delegiert, `main` importiert. **Keine neue Fähigkeit, kein Verhaltenswechsel** — Short-term Memory existierte seit AP2 vollständig, sie hatte nur keinen Namen. Das Modul dokumentiert außerdem explizit, was Short-term Memory NICHT ist (die Review-Entscheidungen), damit die Abgrenzung zur episodischen Schicht im Code steht und nicht nur im Plan.
+- **Verification:** **(a)** `main.get_recent_messages is web_server.get_recent_messages is short_term.get_recent_messages` → True (Duplikat eliminiert). **(b)** Sliding-Window-Verhalten gegen die alte Implementierung für `max_pairs` 0..11 durchgeprüft → identisch. **(c)** Kein Alt-Zustand mehr in `web_server` (`chat_sessions`, `db_session_ids`, `_get_db_session_id` entfernt, kein toter Code). **(d)** **Live-Chat gegen Azure OpenAI:** neue Session → „Merke dir bitte die Zahl 47." → „Welche Zahl hast du dir gemerkt?" (die Zahl steht NICHT in der zweiten Frage) → der Agent antwortet mit **„die Zahl 47"**; er kann sie nur aus der Historie haben. 4 Nachrichten in `short_term`, 4 in der DB. Der Kontext fließt korrekt durch die neue Fassade.
+- **WICHTIGE KORREKTUR am eigenen Plan:** Die AP7.4-Definition verlangte, den `_get_review_decisions()`-„Workaround" zu entfernen, weil AP7.1 die Review-Ergebnisse strukturell verfügbar mache. **Das war falsch.** Die Funktion ist **kein** Workaround für fehlendes Gedächtnis: Sie liest die Entscheidungen bereits aus der DB (`repo.get_decisions_for_snapshot`) und nutzt die Chat-Historie **nur**, um die Snapshot-ID zu finden. Sie ist die Brücke zwischen Review Board und Chat — genau der Fix für BUG 1 (Chat antwortete auf „was war die Lösung?" mit dem KI-Vorschlag, obwohl der Mensch ihn überstimmt hatte). AP7.1 macht sie nicht überflüssig; sie zu entfernen hätte den Bug wieder aufgerissen. Sie bleibt unverändert. `PT4_PLAN.md` wurde entsprechend korrigiert.
+- **Open / next:** **AP7 ist damit vollständig** (7.0 Rulebook-Split + A/B-Schalter · 7.1 episodischer Schreibpfad · 7.2 Retrieval + abgestuftes `memory_support` · 7.3 Gedächtnis im Review-UI · 7.4 Short-term benannt). Vor AP-E: **Seeding-Lauf** (mit 6 Fällen ist die Mechanik gezeigt, aber keine Statistik möglich) und die A/B-Messung `monolith` vs. `cards` über mehrere Snapshots. Offen: AP6 muss nach `formula_version` filtern (v0/v1/v2), sonst mischt die Kalibrierungskurve drei Formelgenerationen.
+
+---
+
+### 2026-07-12 — A/B-Messung (monolith vs. cards) + AP6 formula_version-Filter
+- **Status:** done (A/B + Dashboard-Filter) · **BLOCKIERT:** Seeding-Lauf (siehe unten)
+- **Changed files:** `demo/skills/work-item-configs.md` (Regression-Fix), `demo/db/repository.py` (`fetch_metrics_data` liefert `memory_support` + `formula_version`), `demo/routes/dashboard.py` (Filter `?formula_version=`, neuer Flag `CONFIDENCE_MIXED_FORMULA_VERSIONS`, Legacy-Flag jetzt exakt statt heuristisch).
+- **A/B-Ergebnis (3 Snapshots mit Fehlern, beide Modi je komplett durch identify → generate):**
+
+  | Snapshot | Fehlertyp | Tokens monolith | Tokens cards | Delta | Vorschlag |
+  |---|---|---|---|---|---|
+  | 7ab03beb | DEMAND_ARTICLE_IDS | 14.355 | 10.576 | −26 % | identisch |
+  | 1d45ddff | DEMAND_ARTICLE_IDS | 14.367 | 10.587 | −26 % | identisch (beide `manual_intervention_required`) |
+  | 1ef11903 | WORK_ITEM_CONFIGS_COMPLETENESS | 53.240 | 47.757 | −10 % | identisch (**nach** Fix, siehe unten) |
+  | **Gesamt** | | **81.962** | **68.920** | **−16 %** | |
+
+  Kosten: 0,2166 $ → 0,1839 $. Memory ist in beiden Modi identisch aktiv (Retrieval hängt nicht am `RULEBOOK_MODE`) und während des Laufs konstant, weil keine Reviews entstehen — der Vergleich bleibt sauber.
+- **REGRESSION GEFUNDEN UND BEHOBEN (der eigentliche Wert dieses Laufs):** Im ERSTEN Durchlauf wich `1ef11903` ab: Beide Modi schlugen dieselben 13 `workItemConfig`-Keys vor, aber `cards` sortierte das Array **alphabetisch** (`ABF01, BA01, HE01, …`), während `monolith` es 1:1 aus einem vergleichbaren Artikel übernahm (`VOAR01 → VOPU01 → WART01 → HE01 → … → ABF01`). Das ist die **Prozessreihenfolge** der Fertigung; alphabetisch sortiert ist sie fachlich falsch. Folge: `value_grounded` fiel von **1.0 auf 0.0** („konstruiert/erfunden"), `confidence_score` von **0.75 auf 0.45**. → **Die Confidence-Mechanik hat ihre eigene Regression gefangen** — ein starker empirischer Beleg für das AP4.5-Design (`value_grounded` statt `schema_valid`). **Ursache:** KEIN verlorenes Regel-Item (das Inventar war je Regel vollständig), sondern ein verlorener **Übertragungseffekt**: Der Monolith lieferte dem `workItemConfigs`-Fall beiläufig die „funktionale Kohärenz / Sequenz"-Intelligenz aus dem *Referenzen*-Abschnitt mit; der Kartenschnitt schnitt das ab. Die Karte sagte „kopiere Struktur vom ähnlichsten Objekt", verbot aber das Umsortieren nicht. **Fix:** `work-item-configs.md` macht explizit, was der Monolith nur zufällig transportierte („Reihenfolge ist Prozessreihenfolge, NIEMALS alphabetisch sortieren, Array 1:1 vom ähnlichsten Artikel übernehmen"). Nachmessung: `value_grounded=1.0`, `confidence=0.75` — identisch zum Monolith, bei −10 % Tokens. **Offenlegung: Die Karte wurde NACH dem Sehen des Messergebnisses angepasst.** Der Wert für `1ef11903` in der Tabelle oben ist eine Nachmessung. Das ist zulässig, weil ein echter Defekt behoben wurde und nicht das Experiment geschönt — muss aber in der Auswertung so ausgewiesen werden. **Lehre für die Modularisierung: nicht nur Regeln inventarisieren, sondern auch die impliziten Querbezüge zwischen Abschnitten.**
+- **AP6 formula_version:** `fetch_metrics_data` liefert jetzt `formula_version` und `memory_support`. Der bestehende Flag `CONFIDENCE_LEGACY_FORMULA` erkennt Legacy-Zeilen jetzt **exakt** über `formula_version` statt heuristisch über `value_grounded IS NULL` (das trennte nur v0). Neuer Flag `CONFIDENCE_MIXED_FORMULA_VERSIONS`: warnt, sobald entschiedene Vorschläge aus MEHREREN Generationen stammen — die Scores liegen dann nicht auf derselben Skala (v0 quasi-konstant, v1 bei 0.8 gedeckelt, erst v2 voller Bereich). Neuer Query-Param `?formula_version=v0|v1|v2` pinnt eine Generation; die Reviews herausgefilterter Proposals fallen mit weg, sonst zählte man eine Entscheidung ohne zugehörigen Vorschlag. **Verifikation:** `?formula_version=v2` blendet die Legacy-Flags korrekt aus. Der MIXED-Flag feuert derzeit NICHT — korrekt, denn alle 6 entschiedenen Vorschläge sind v0; es existiert genuin nur eine Generation unter den Entscheidungen. Er greift, sobald ein v2-Vorschlag entschieden wird.
+- **BLOCKIERT — Seeding-Lauf:** Proposals über mehrere Snapshots zu erzeugen ist mechanisch und kann automatisiert werden. Ein Fall im Gedächtnis entsteht aber erst durch eine **menschliche Review-Entscheidung**, und die darf NICHT fabriziert werden: `memory_items` ist per Definition die Ground Truth. Genau daran ist Fall #7 aufgelaufen (erfundenes `reject` → korrekter Vorschlag wurde dauerhaft unterdrückt). Das im großen Stil zu wiederholen würde die Fallbasis wertlos machen. **Die Approve/Reject/Modify-Entscheidungen muss ein Mensch treffen.** Nächster Schritt: Vorschläge für den Seeding-Lauf vorbereiten, dann durch die Review-UI klicken lassen.
+
+---
+
+### 2026-07-12 — AP-E Testkatalog gebaut + KRITISCHER BEFUND: value_grounded ist für ID-Fehler invertiert
+- **Status:** Katalog done · **BLOCKER gefunden** (Confidence-Formel)
+- **Changed files:** `demo/eval/build_test_catalog.py` (neu). DB-Bereinigung: 10 Duplikat-Proposals aus meinen Testläufen gelöscht (13 offene Vorschläge waren nur 3 distinkte Fehler); je distinktem Fehler blieb der neueste v2-Vorschlag stehen.
+- **Testkatalog (Smart-Planning TESTINSTANZ `vm-t-…-test02…`, cca-dev.com — vom Nutzer freigegeben, Einträge heißen `PT4-TEST-*`):** 4 Snapshots mit gezielt injizierten, bekannten Fehlern; Ground Truth in `metadata.txt`. **Abgrenzung: der INPUT ist konstruiert, die GROUND TRUTH bleibt beim Menschen** — es wurden KEINE Review-Entscheidungen fabriziert (Lehre aus Fall #7). Jeder injizierte Fehler wurde vom **echten serverseitigen Validator** bestätigt:
+
+  | # | Snapshot | Injektion | Validator | Ground Truth |
+  |---|---|---|---|---|
+  | 01 | `e92b3ee2` | leere `demandId` | `[validate_unique_ids] must not be empty` | `D100079_001` |
+  | 02 | `7d2de27d` | doppelte `demandId` | `[validate_unique_ids] Duplicates: D100099_001` | `D100099_002` |
+  | 03 | `17a7c1e3` | Typo in `articleId` | `[validate_demand_article_ids] Missing: 100112X` | `100112` |
+  | 04 | `84f5af97` | negative `relDensityMin` | `[validate_density_values] invalid: -2` | `1.017` |
+
+  Damit sind erstmals **alle vier Regelkarten abgedeckt** (`UNIQUE_IDS` und `DENSITY_VALUES` kamen in den vorhandenen Snapshots gar nicht vor).
+- **Zwei Fallen beim Bauen (beide dokumentiert, damit sie niemand erneut tritt):** **(1) Falsches Grün.** `validate_snapshot.py` HOLT nur die Nachrichtenliste und TRIGGERT den Validierungs-Job nicht — der erste injizierte Fehler wurde als „0 Fehler, Snapshot ist valide" gemeldet. Erst `trigger_server_validation` (AP3.3d) liefert die Wahrheit. Genau der `REVALIDATION_PRE_AP33D`-Effekt aus dem Dashboard-Flag; ein Katalog, der darauf hereinfällt, evaluiert leere Snapshots. **(2) Prioritäts-Kollision.** Jeder frisch gecrawlte Snapshot bringt einen echten Datenfehler mit (Artikel 124211 ohne `workItemConfigs`). Der Priorisierer stuft ihn als Root Cause über Duplikat und Dichte — bei 2 von 4 Snapshots wurde deshalb NICHT der injizierte Fehler bearbeitet. Behoben, indem die Basisdaten repariert wurden — **mit den Werten, die ein Mensch in Memory-Fall #6 bereits bestätigt hat** (keine erfundenen Werte). Danach trägt jeder Testsnapshot genau EINEN Fehler. Nebenbei der erste praktische Nutzen des Gedächtnisses: es hat die Testdaten repariert.
+- **KRITISCHER BEFUND — `value_grounded` ist für die ID-Klasse strukturell invertiert:**
+
+  | # | Fehlertyp | KI-Vorschlag | Ground Truth | korrekt? | `value_grounded` | **confidence** |
+  |---|---|---|---|---|---|---|
+  | 01 | UNIQUE_IDS (leer) | `D100079_001` | `D100079_001` | **JA, exakt** | 0.0 | **0.44** |
+  | 02 | UNIQUE_IDS (Duplikat) | `D100099_002` | `D100099_002` | **JA, exakt** | 0.0 | **0.44** |
+  | 03 | DEMAND_ARTICLE_IDS | `100112` | `100112` | JA, exakt | 1.0 | 0.775 |
+  | 04 | DENSITY_VALUES | `1.14` | `1.017` | **NEIN** | 1.0 | **0.75** |
+
+  **Der Score ist auf dieser Stichprobe ANTI-korreliert mit der Richtigkeit.** Die beiden exakt richtigen ID-Vorschläge erhalten 0.44, der falsche Dichtewert 0.75. Ursache steht wörtlich in der vom System selbst erzeugten Begründung: *„Identitätsfeld: 'D100079_001' muss neu/eindeutig sein und ist daher grundsätzlich nicht aus den Daten belegbar."* — `compute_value_grounded` **erkennt den Fall und bestraft ihn trotzdem mit 0**. Eine neue eindeutige ID DARF per Definition nicht in den Daten stehen; täte sie es, wäre sie ein Duplikat. Der 0.3-Term ist für die gesamte ID-Generierungsklasse **unerfüllbar** — und das ist ausgerechnet der vertikale Slice von PT4. Umgekehrt bei #04: die KI hat `1.14` vom Nachbarartikel abgeschrieben — „belegt" (1.0) und trotzdem falsch. **Belegt ≠ richtig.** Das ist derselbe Fehlertyp wie damals `schema_valid`, nur schwerwiegender: der Term trägt nicht bloß keine Information, er ist für eine ganze Fehlerklasse invertiert. **Für AK2 (≥80 % akzeptiert UND Kalibrierung) ist das ein Blocker — er muss VOR der Evaluation entschieden werden.**
+  **Lösungsrichtung (nicht gebaut, Nutzerentscheidung):** `value_grounded` klassenabhängig machen. `compute_value_grounded` erkennt den Identitätsfall bereits — statt 0 zurückzugeben, müsste es dort ein passendes Kriterium prüfen: *folgt der Wert dem erkannten ID-Pattern UND ist er im Zielarray eindeutig?* Das ist genauso deterministisch wie der heutige Test und für diese Klasse das sachlich richtige Kriterium.
+- **Open / next:** **7 offene Vorschläge warten auf menschliche Reviews** (4 aus dem Katalog + 3 bestehende) — das ist der Seeding-Stapel. Erst danach sind Kalibrierung und Approval-Rate messbar. Empfehlung: den `value_grounded`-Blocker VOR dem Seeding entscheiden, sonst reviewst du gegen eine Confidence, von der wir bereits wissen, dass sie für zwei der vier Fehlerarten falsch herum zeigt.
+
+---
+
+### 2026-07-12 — AP7.5 Drop-in-Regelkarten (Skills-Ordner wird gescannt statt nachgeschlagen)
+- **Status:** done
+- **Changed files:** `demo/rulebook_loader.py` (scannt jetzt den Ordner), `demo/agent_config.py` (`RULEBOOK_CARDS` entfernt), die vier Karten in `demo/skills/` (YAML-Frontmatter ergänzt).
+- **Warum:** Der Loader schaute bis jetzt in ein hartkodiertes Dictionary (`RULEBOOK_CARDS`) in `agent_config.py`. Eine neue Markdown-Datei in `demo/skills/` wäre damit **unsichtbar** geblieben — sie hätte zusätzlich einen Python-Change gebraucht. Das untergräbt den Zweck des Skills-Ordners: Fachleute sollen Regeln pflegen können, **ohne Entwickler**. (Nutzeranforderung, wörtlich: „ich will einfach eine neue MD-Datei in Skills erstellen und den Umgang mit einem Problem beschreiben, dann fertig — wie wenn ich ganz normal einen System-Prompt erweitern würde".)
+- **What was done:** Karten beschreiben sich jetzt **selbst**. Der Loader scannt `demo/skills/*.md` und baut die Zuordnung zur Laufzeit. Regeln: `_core.md` wird immer geladen (Dateien mit führendem `_` sind nie Karten); eine optionale YAML-Frontmatter (`applies_to: [TAG, …]`) nennt die zuständigen `[validate_*]`-Tags; **ohne** Frontmatter gilt die Konvention **Dateiname → Tag** (`work-plan-ids.md` → `WORK_PLAN_IDS`), für den einfachen Fall reicht also die Datei allein; **mehrere Karten dürfen denselben Tag bedienen** — sie werden alle geladen, alphabetisch nach Dateiname, so ergänzt man einen Sonderfall ohne die bestehende Karte anzufassen; kein Treffer → `_core.md` allein (verlustfrei wie bisher). Die Frontmatter ist Metadaten und wird aus dem Prompt-Text entfernt. Mini-Parser statt PyYAML (nicht installiert; für `key: value` und `key: [a, b]` wäre eine neue Abhängigkeit unangemessen). `RULEBOOK_MODE` bleibt unverändert.
+- **Verification:** **(a) Scan:** alle 4 Karten mit korrekten Tags gefunden, Frontmatter im Prompt nicht sichtbar, geladene Zeichenzahlen identisch zur Dictionary-Version (12.067 / 22.782 / 17.475 / 13.703; unbekannter Tag → 9.870 = nur `_core`). **(b) Drop-in, ohne eine Zeile Code:** `work-plan-ids.md` (nur Datei, keine Frontmatter) wird für die NEUE Fehlerart `WORK_PLAN_IDS` geladen (9.870 → 9.988 Zeichen); `unique-ids-kundenauftrag.md` (Frontmatter `applies_to: [UNIQUE_IDS]`) wird ZUSÄTZLICH zur bestehenden `unique-ids.md` geladen, beide Regeltexte sind im Prompt (12.067 → 12.193). Testdateien danach entfernt. **(c) Regression:** echter Lauf auf Katalog-Snapshot 01 unverändert (`UNIQUE_IDS`, 12.067 Zeichen, Vorschlag `D100079_001` = Ground Truth).
+- **Bedeutung für AP-X:** Damit ist die Voraussetzung für den Tages-Agenten gelegt — er kann eine Regelkarte als Datei vorschlagen/anlegen, ohne `agent_config.py` zu editieren.
+- **Open / next:** Unverändert offen: der **`value_grounded`-Blocker** (für die ID-Klasse strukturell invertiert — zwei exakt richtige Vorschläge mit 0.44, ein falscher mit 0.75) und danach der **Seeding-Lauf** über die 7 offenen Vorschläge.
+
+---
+
+### 2026-07-12 — AP7.5b Agent waehlt Regelkarten selbst + Cloud-Storage + Vorlage
+- **Status:** done
+- **Changed files:** `demo/rulebook_loader.py`, `demo/smart-planning/runtime/identify_error_llm.py`, `demo/smart-planning/runtime/generate_correction_llm.py`, `demo/skills/_VORLAGE.md` (neu), `demo/skills/umgang-mit-zwei-falsche-nummern.md` (Nutzer-Karte, Frontmatter ergaenzt — Regeltext unveraendert).
+- **Auslöser (Nutzeranforderung, wörtlich):** *„der Agent soll immer jederzeit Zugriff auf alles haben und er soll entscheiden, und zwar intelligent. Ich will einfach solche Beschreibungen hinzufügen, ganz easy in meiner einfachen Sprache, und erwarte, dass sie berücksichtigt werden."* — Der Nutzer legte `umgang-mit-zwei-falsche-nummern.md` an. Sie wurde **nie geladen**: die Dateiname→Tag-Konvention leitete daraus `UMGANG_MIT_ZWEI_FALSCHE_NUMMERN` ab, ein Tag, den es nicht gibt. **Das war ein Designfehler von mir** — eine Falle derselben Klasse wie der stille Regelverlust, gegen den AP7.0 mit dem Inventar antrat: eine Karte, die stumm nichts tut.
+- **What was done:** **(1) Der Agent waehlt selbst.** Der Identifikationsschritt (laeuft ohnehin, kostet also KEINEN zusaetzlichen LLM-Call) bekommt jetzt ein **Inhaltsverzeichnis ALLER Karten** — Dateiname plus Klartext-`description` — und gibt in `relevant_cards` zurueck, welche zum Fehler passen (plus Begruendung). `generate_correction_llm` laedt genau diese. Damit hat der Agent **jederzeit Zugriff auf den gesamten Regelbestand**, laedt aber nur, was er braucht — statt alles in jeden Prompt zu kippen (das waere wieder der Monolith und skaliert bei 30 Karten nicht). **(2) Dateiname→Tag-Konvention ENTFERNT** (die Falle). `applies_to` ist jetzt eine optionale Abkuerzung fuer den garantierten Treffer; ohne sie entscheidet der Agent ueber die Beschreibung. Ohne `description` faellt der Loader auf die erste Textzeile zurueck. **(3) Cloud.** Der Kartenzugriff laeuft ueber den `StorageManager` — derselbe Code fuer `STORAGE_MODE=LOCAL` (`demo/skills/`) und `STORAGE_MODE=AZURE` (Blob-Prefix `skills/` im Container, ueber `RULEBOOK_SKILLS_PREFIX` ueberschreibbar). Fachanwender koennen die Regeln im Storage Account pflegen, **ohne Redeployment**. **(4) `_VORLAGE.md`** erklaert das Muster (Dateien mit `_` sind nie Karten). **(5) `check_cards()`** meldet `applies_to`-Tippfehler.
+- **Verification (echter Lauf, Katalog-Snapshot 84f5af97, Fehler `relDensityMin: -2`):** Der Index zeigt alle 5 Karten. Der Agent waehlte **von selbst** `['density-values.md', 'umgang-mit-zwei-falsche-nummern.md']` mit Begruendung — **die Nutzer-Karte wurde gefunden, obwohl der Nutzer keinen Validator-Tag kennt.** Der Vorschlag aenderte sich dadurch von `1.14` (Median aus Nachbarartikeln, bisherige Regel) auf `2` (Vorzeichen umgedreht, neue Regel). **Die Nutzer-Karte hat die bestehende Karte ueberstimmt.**
+- **WICHTIGER BEFUND — eine neue Karte kann bestehendes Verhalten ueberstimmen:** Genau das ist hier passiert. Im Testsnapshot ist die Ground Truth `1.017`, die neue Regel liefert `2`. Das heisst NICHT, dass die Regel falsch ist — mein Testfall passt nicht zu ihr: ich hatte `1.017` durch `-2` **ueberschrieben**, das war nie ein Vorzeichenfehler. Bei einem echten Vorzeichenfehler waere der Originalwert `2` gewesen. **Die Lehre bleibt:** eine drop-in-Karte kann etablierte Regeln aushebeln, ohne dass jemand Code reviewt. Das ist das staerkste Argument dafuer, dass der AP-X-Tagesagent Kartenaenderungen **nie ohne menschliche Freigabe** schreiben darf — und ein Grund, spaeter eine Konfliktpruefung zwischen Karten vorzusehen (im Plan bereits als Risiko notiert: „Widerspruch zwischen neuer und bestehender Regel").
+- **Open / next:** Unveraendert: der **`value_grounded`-Blocker** (fuer die ID-Klasse invertiert) und danach der **Seeding-Lauf**. Neu auf der Liste: Konfliktpruefung zwischen Regelkarten (Backlog, nicht blockierend).
+
+---
+
+### 2026-07-12 — AP5.4 Automatische Review-E-Mails deaktiviert
+- **Status:** done
+- **Changed files:** `demo/mcp_connections/notifier.py`, `demo/mcp_connections/README.md`, `docs/PT4_PLAN.md`, `docs/PROJECT_LOG.md`
+- **What was done:** Auf ausdrückliche Nutzerentscheidung sendet die Proposal-/Korrekturpipeline keine E-Mail mehr. Der bestehende Runtime-Hook bleibt wegen der Runtime-Hard-Rule kompatibel aufrufbar, endet im Adapter aber immer als dokumentierter Skip und kann ACS/SendGrid nicht erreichen. Der separate Chat-Pfad bleibt unverändert: E-Mail-Versand ist nur über einen persistenten Entwurf und `send_email_draft(..., confirmed=True)` beziehungsweise die ausdrückliche Chat-Anweisung `Bitte absenden` möglich. Der nicht mehr verwendete automatische Review-Mail-Builder wurde entfernt; Secrets wurden nicht angefasst.
+- **Verification:** Wegwerf-DB bei aktivem `NOTIFICATION_CHANNEL=acs` und Provider-Testdouble: neuer Proposal-Hook → 0 Provider-Aufrufe; unbestätigter Chat-Draft → HTTP-ähnlich 409 und 0 Aufrufe; bestätigter Chat-Draft → genau 1 ACS-Aufruf; erneutes Senden → idempotent, weiterhin genau 1. Fixture restlos gelöscht. Kein Runtime-Tool geändert.
+- **Open / next:** Keiner für diese Verhaltensänderung; `NOTIFICATION_RECIPIENT_EMAIL` darf in `.env` verbleiben, wird vom deaktivierten Automatikpfad aber nicht mehr gelesen.
+
+---
+
+### 2026-07-12 — AP7 ABGESCHLOSSEN (M7) — Verifikation, Default-Umstellung, Aufräumen
+- **Status:** AP7 done — Milestone M7 abgehakt
+- **Changed files:** `demo/agent_config.py` (Default `RULEBOOK_MODE` → `cards`), `docs/PT4_PLAN.md` (AP7.0–7.5 abgehakt, AP7.5 nachgetragen, M7 = [x], Handover-Abschnitt an AP-E). DB-Bereinigung: 5 veraltete/doppelte Vorschläge entfernt.
+- **Verifikation aller DoDs gegen den LIVE-Code (nicht behauptet, geprüft):**
+  - **AP7.0** `monolith` byte-identisch zum Original (34.899 Zeichen, Assertion). `cards` lädt selektiv: 9.870 (nur `_core`) bis 22.782 Zeichen. `check_cards()` meldet keine Tippfehler.
+  - **AP7.1** `memory_items = 6`, `reviews = 6`, Backfill idempotent.
+  - **AP7.2** Retrieval `demands[].demandId` → 3 Fälle; `memory_support` liefert 0.0 / 0.5 / 1.0; **12 Proposals mit `formula_version = v2`**; DB-Verteilung v0=6, v2=12.
+  - **AP7.3** 7 offene Vorschläge, davon zeigen 8 (vor der Bereinigung) Altfälle inkl. menschlicher Begründung im Review-UI.
+  - **AP7.4** `get_recent_messages` in `main`, `web_server`, `short_term` **dieselbe Funktion**; Alt-Zustand aus `web_server` entfernt.
+  - **AP7.5** Nutzer-Karte wurde vom Agenten selbst gewählt und hat das Ergebnis verändert (1.14 → 2).
+  - **AP6-Filter** `?formula_version=v2` blendet die Legacy-Flags korrekt aus.
+- **ENTSCHEIDUNG — Default `RULEBOOK_MODE` von `monolith` auf `cards` umgestellt (Nutzerfreigabe).** Begründung: Mit `monolith` als Default ist der **gesamte Skills-Ordner im Normalbetrieb wirkungslos** — jede Regelkarte, die ein Fachanwender schreibt, wäre tot. Die A/B-Messung über 3 Snapshots zeigt: `cards` liefert **identische Vorschläge bei −16 % Prompt-Tokens**. Die Rückfallebene bleibt vollständig erhalten: `RULEBOOK_MODE=monolith` liefert weiterhin die byte-identische Originaldatei (verifiziert), die A/B-Messung für AP-E ist jederzeit möglich.
+- **Aufgeräumt:** 5 Vorschläge entfernt — teils Duplikate meiner Testläufe, teils **veraltet** (`WORK_ITEM_CONFIGS`-Vorschläge für Fehler, die es nach der Basis-Reparatur der Katalog-Snapshots nicht mehr gibt). Bereinigt anhand der AKTUELLEN Validierung je Snapshot, nicht nach Gefühl. Stand: **7 offene Vorschläge, genau einer je Snapshot** — der Seeding-Stapel, alle vier Fehlerarten abgedeckt.
+- **Was AP7 an AP-E übergibt (steht jetzt auch im Plan):** (1) **BLOCKER `value_grounded`** — gehört zur Confidence-Formel (AP1/AP4.5), NICHT zu AP7, muss aber vor AP-E entschieden werden; für die ID-Klasse strukturell invertiert (zwei exakt richtige ID-Vorschläge → 0.44, ein falscher Dichtewert → 0.75). (2) **Seeding-Lauf** — 7 Vorschläge warten auf MENSCHLICHE Entscheidungen; die dürfen nie fabriziert werden. (3) **Testkatalog** steht (`demo/eval/build_test_catalog.py`, 4 Snapshots auf der SP-Testinstanz mit dokumentierter Ground Truth). (4) **Backlog:** Konfliktprüfung zwischen Regelkarten; drei Memory-Items tragen weiter das Legacy-Label `EMPTY_FIELD` (unschädlich, Retrieval matcht über `affected_entity_pattern`).
+
+---
+
+### 2026-07-12 — GESAMTSTAND: was ist wirklich noch offen? (Bestandsaufnahme)
+Vollständige Durchsicht von `PT4_PLAN.md`, `PROJECT_LOG.md` und dem Code. Der Backlog-Block vom
+2026-07-11 ist teilweise überholt — hier der aktuelle Stand.
+
+**Meilensteine — nur Buchhaltung, keine offene Arbeit:**
+`M4 (AP4 HitL-Frontend)` und `M6 (AP6 Dashboard)` standen noch auf `[ ]`, obwohl beide **code-seitig
+abgeschlossen und lauffähig** sind (verifiziert: Review-Board liefert 7 offene Vorschläge; Dashboard
+liefert alle KPIs inkl. der 8 Ehrlichkeits-Flags). Auch AP1.1–AP1.4 waren nie abgehakt, obwohl M1
+`[x]` ist. → Checkboxen nachgezogen, keine echte Restarbeit.
+
+**Durch AP7 erledigt (Backlog-Einträge streichen):**
+- *„`llm-validation-fix-rules.md` überarbeiten"* — durch **AP7.0** erledigt: die ~3× duplizierten
+  PACKAGING-Blöcke sind raus, die Struktur ist hergestellt (Identifikation / array_context / Actions
+  getrennt in `_core.md` + Karten), und die im 124211-Fall vermisste Regel („Reihenfolge = Prozess-
+  reihenfolge, Array 1:1 vom ähnlichsten Artikel") ist ergänzt.
+  **ACHTUNG, der alte Vorbehalt war berechtigt:** „NICHT vor der Baseline ändern (verschiebt die
+  AK2-Grundlinie)". Wir HABEN vor der Baseline geändert. Deshalb ist zwingend: der Monolith bleibt
+  byte-identisch erhalten (verifiziert) und **die Baseline-Messung muss den `RULEBOOK_MODE`
+  festnageln** — sonst misst man gegen eine verschobene Grundlinie. Genau dafür existiert der
+  A/B-Schalter.
+- *„AP6-Notiz: `revalidation_result` aus Läufen VOR AP3.3d markieren"* — erledigt, das Dashboard
+  führt den Flag `REVALIDATION_PRE_AP33D` (verifiziert).
+- *„[später] AP5 MCP, AP6 Dashboard, AP7 Memory"* — alle drei erledigt. Nur AP-E bleibt.
+
+**NEUER OFFENER PUNKT (von mir verursacht) — Snapshots auf dem Testserver:**
+Der Log-Eintrag vom 2026-07-11 hielt fest: *„Blockiert durch: es gibt kein Lösch-Tool — jeder Fall
+hinterlässt einen dauerhaften Snapshot auf dem Testserver (11 Stück). Nutzer hat die Ausführung
+deshalb vorerst gestoppt."* **Das war mir nicht bekannt.** Beim Bau des AP-E-Testkatalogs habe ich
+heute **4 weitere Snapshots** angelegt (`PT4-TEST-01`…`04`) — Stand jetzt **13**. Die Freigabe des
+Nutzers deckte das ab, aber der ursprüngliche Grund für den Stopp besteht unverändert: **es fehlt
+ein Lösch-/Aufräumweg für Testsnapshots.** Das ist die Vorbedingung dafür, den Katalog künftig
+gefahrlos zu erweitern (die Baseline sah 10 Fälle vor). → Neuer Backlog-Punkt.
+
+**Gehört fachlich in AP-E.0 (nicht separat führen):**
+- `value_grounded` deckt `add_to_array` und verschachtelte Pfade (`equipment[i].predecessors[0]`)
+  nicht gezielt ab und liefert dort konservativ `0`. **Dasselbe Grundproblem wie der ID-Blocker** —
+  in einem Fix erledigen.
+
+**Echte Tech-Debt, weiterhin offen (nicht blockierend):**
+1. **BA01-Werte für Artikel 124211 nie am Stammsatz gegengeprüft** (statistisch hergeleitet:
+   16/16 Himbeer-Grundstoffe = 30/1, `P` als Modus 11/16). **Neue Tragweite:** genau mit diesen
+   Werten wurden die Basisdaten der **vier Testkatalog-Snapshots** repariert. Sind sie falsch, ist
+   die Katalog-Basis falsch. Vor der Evaluation am Stammsatz verifizieren.
+2. **AP3.6c** — Fallback-Verhalten, wenn das `[validate_*]`-Tag fehlt (`generate_correction_llm`
+   fällt dann auf die widerlegte Zähl-Heuristik zurück). Im Rahmen der Baseline messen, wie oft das
+   real passiert; falls nie → durch neutrales `UNKNOWN` ersetzen.
+3. **`review.js` kennt HTTP 422 nicht** (action-Guard). Kann aktuell nicht eintreten, rein
+   vorsorglich.
+4. **Identitäts-Guard** für Sonderentitäten (`equipment` duale ID, `worker*`, `packaging`) und
+   `KIND_ADD_OBJECT` — bewusst guard-skipped, bis reale Fälle existieren.
+5. **Phase-3-Kennzahl (85 % Auto-Fix-Rate) ist fragwürdig** — beruht vermutlich auf dem False-Green-
+   Validierungsbug. **Nicht ungeprüft in der Ausarbeitung zitieren.**
+6. **Reload-Historie in der Review-Detailansicht** — `get_proposal_as_dict()` liefert keine
+   `reviews`-Daten; nach einem Reload sieht man den Status, aber nicht *was* entschieden wurde.
+7. **action-Semantik (kosmetisch)** — `update_field` für eine ganze Array-Befüllung.
+8. **Konfliktprüfung zwischen Regelkarten** (neu aus AP7.5) — eine Drop-in-Karte kann eine
+   bestehende Regel überstimmen, ohne dass jemand Code reviewt.
+
+**Fazit:** Außer den AP-E-Punkten (AP-E.0 Blocker, AP-E.2 Seeding, AP-E.3 A/B, AP-E.4 Messung/Demo)
+ist **nichts Blockierendes offen**. Alles Übrige ist Tech-Debt oder Buchhaltung. Die einzigen zwei
+Punkte, die vor der Evaluation wirklich angefasst werden sollten, sind der **`value_grounded`-Fix
+(AP-E.0)** und die **Verifikation der BA01-Werte** (weil die Testkatalog-Basis darauf steht).
+
+---
+
+### 2026-07-12 — AP5/AP6-Gesamtdokumentation als Markdown
+- **Status:** done
+- **Changed files:** `docs/AP5_AP6_DOCUMENTATION.md` (neu), `docs/PROJECT_LOG.md`
+- **What was done:** Die zuvor gelieferte detaillierte Gesamtübersicht zu AP5/MCP und AP6/Dashboard wurde 1:1 als eigenständige Markdown-Dokumentation übernommen. Enthalten sind 34 nummerierte Abschnitte, Status, Architekturen, alle MCP-Tools, ACS/SendGrid, konversationeller E-Mail-Agent, Persistenz, Dashboard-API, KPI- und Datenqualitätsdefinitionen, Kostenmodell, UI/Charts, Nachweise, Grenzen, nächste Schritte und Dateiverweise.
+- **Verification:** Datei als UTF-8 gelesen; 1.813 Zeilen / 42.881 Zeichen; Abschnitte 1–34 vollständig; 120 Markdown-Code-Fence-Marker paarig; `git diff --check` ohne Whitespace-Fehler. Keine Runtime-Datei und keine Produktdaten geändert.
+- **Open / next:** Keiner; die Datei ist die ausformulierte AP5/AP6-Referenzdokumentation.
+
+---
+
+### 2026-07-12 — Tech-Debt abgearbeitet (AP3.6c, Reload-Historie, HTTP 422) + Grundsatzentscheidungen
+- **Status:** done
+- **Changed files:** `demo/smart-planning/runtime/generate_correction_llm.py` (AP3.6c), `demo/db/repository.py` (`get_proposal_as_dict` liefert die Entscheidung), `demo/ui/scripts/review.js` (entschiedener Zustand + HTTP 422), `demo/ui/css/styles.css`.
+
+**GRUNDSATZENTSCHEIDUNG — das System darf NIE Snapshots löschen (Nutzerentscheidung).**
+Das fehlende Lösch-Tool ist damit **kein offener Punkt, sondern gewollt**. Begründung (fürs Protokoll,
+weil es ein Governance-Argument für die Ausarbeitung ist): Ein Agent, der Planungsdaten löschen kann,
+ist ein Agent, der Planungsdaten löschen wird. Der Preis ist, dass Testsnapshots auf der Testinstanz
+dauerhaft liegen bleiben (aktuell 13). Das ist bewusst akzeptiert. **Konsequenz für AP-E:** die
+Katalog-Erweiterung (geplant waren 10 Fälle) muss mit diesem Wachstum leben — kein Blocker mehr.
+
+**BESTÄTIGT — der Monolith ist unangetastet, mitsamt seinen Schwächen.**
+Nachgemessen: `llm-validation-fix-rules.md` enthält weiterhin **3×** den duplizierten
+„Domain-Intelligence"-Block und **2×** den PACKAGING-Block, und die Prozessreihenfolge-Regel fehlt
+dort. Alle Korrekturen leben **ausschließlich** in `demo/skills/`. Damit ist der Monolith der saubere
+„Vorher"-Arm der A/B-Messung — genau die Trennung, die der Nutzer gefordert hat.
+
+**AP3.6c — Fallback bei fehlendem `[validate_*]`-Tag: gemessen und geschlossen.**
+Messung über **alle 41** vorhandenen Identify-Artefakte: das Tag ist in **41 von 41** Fällen
+vorhanden — es fehlt nie. Der Fallback auf die Zähl-Heuristik war damit toter Code mit scharfer
+Kante: auf dem einen Pfad, auf dem er feuern *würde*, liefert er einen Wert, den wir als falsch
+kennen (`DUPLICATE_ID` bei >1 Treffer), und dieser Wert flösse in die Regelkarten-Auswahl, die
+Memory-Signatur und das Dashboard. **Ein falsches Label ist schlimmer als kein Label** → Fallback ist
+jetzt neutrales `UNKNOWN` plus Warnung. `legacy_error_type` bleibt als Audit-Feld erhalten.
+*Verifiziert:* neuer Lauf auf `e92b3ee2` → `error_type=UNKNOWN` feuert nicht, Tag greift (`UNIQUE_IDS`).
+
+**Reload-Historie in der Review-Detailansicht — geschlossen.**
+`get_proposal_as_dict()` liefert jetzt additiv die **letzte Entscheidung** (`decision`, `final_value`,
+`comment`, `reviewer_ref`, `decided_at`, `revalidation_result`); die Detailansicht zeigt sie im
+Entscheidungs-Panel an. Bisher stand dort nach einem Reload nur „Status: approved" — **was** entschieden
+wurde (finaler Wert, menschliche Begründung) war unsichtbar. Das war ein Loch in der Audit-Sicht: der
+ganze Sinn von HitL ist, dass die menschliche Entscheidung festgehalten ist.
+*Verifiziert:* entschiedener Vorschlag liefert `decision=approve`, `final_value=0.965`, Kommentar und
+Zeitstempel; offener Vorschlag liefert korrekt `decision=None`.
+
+**HTTP 422 im Review-UI — geschlossen.** Der Action-Guard blockt Modify auf `remove_from_array` /
+`manual_intervention_required` mit 422, **bevor** etwas geschrieben wird. Das UI zeigte dafür einen
+generischen Fehler. Jetzt: Klartext-Meldung inkl. der unzulässigen Action und dem ausdrücklichen
+Hinweis „Es wurde nichts gespeichert und nichts angewendet"; das Panel bleibt offen, der Reviewer kann
+eine andere Aktion wählen. Kann aktuell nicht eintreten (alle realen Proposals sind `update_field`) —
+reine Vorsorge, analog zur bestehenden 409-A/409-B/502-Unterscheidung.
+
+**WIDERSPRUCH zum Nutzervorschlag — Identitäts-Guard gehört NICHT in eine Lernkarte.**
+Der Nutzer schlug vor, den Identitäts-Guard für Sonderentitäten als Regelkarte umzusetzen.
+**Das geht nicht und wäre gefährlich.** Der Guard ist keine Heuristik für die KI, sondern eine
+**deterministische Sperre im Apply-Pfad**: Er läuft NACH der menschlichen Freigabe, in Python, ohne
+jedes LLM, vergleicht die Identität des Zielobjekts mit der im Vorschlag verankerten und **blockiert
+den Schreibvorgang mit HTTP 409** bei Abweichung. Regelkarten landen ausschliesslich im *Prompt der
+Vorschlagserzeugung* — sie können im Apply-Pfad gar nicht wirken. Und selbst wenn: aus einer harten
+Sperre würde ein Hinweis, dem das Modell folgen kann oder auch nicht. Das widerspricht dem Scope Guard
+im Plan („deterministische Config und Logik bleiben Code; nur Domänen-Heuristiken wandern in Karten").
+→ Guard bleibt Code, bleibt offen bis reale Sonderentitäten-Fälle existieren.
+
+**Verbleibende Tech-Debt (mit Nutzerentscheidung):**
+- **BA01-Werte für Artikel 124211 am Stammsatz gegenprüfen** → *nach AP-E besprechen* (Nutzer).
+  Achtung: der AP-E-Testkatalog steht auf diesen Werten.
+- **Phase-3-Kennzahl (85 % Auto-Fix-Rate) fragwürdig** → *nach AP-E besprechen* (Nutzer).
+  Bis dahin: **nicht ungeprüft zitieren.**
+- **Identitäts-Guard für Sonderentitäten** → bleibt offen bis reale Fälle (siehe Widerspruch oben).
+- **Konfliktprüfung zwischen Regelkarten** → **out of scope für PT4, verschoben nach AP-X** (Nutzer).
+- **`action`-Semantik** (`update_field` für eine ganze Array-Befüllung statt Array-Replace) → **später**
+  (Nutzer). Kosmetisch; ein Eingriff dort berührt den Apply-Pfad, Risiko ohne aktuellen Nutzen.

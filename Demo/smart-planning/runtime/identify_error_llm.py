@@ -16,6 +16,9 @@ from openai import AzureOpenAI
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from runtime_storage import get_storage, get_iteration_folders
 
+# AP7.0/AP7.5: rulebook loader + der Karten-Index (Agent waehlt selbst aus, siehe Prompt)
+from rulebook_loader import load_rulebook, card_index as rb_card_index
+
 # Load environment variables (aus demo-Verzeichnis)
 # Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
 env_path = Path(__file__).parent.parent.parent / ".env"
@@ -23,12 +26,15 @@ load_dotenv(dotenv_path=env_path)
 
 
 def load_validation_fix_rules():
-    """Load the validation fix rules document"""
-    rules_file = Path("runtime-files/llm-validation-fix-rules.md")
-    if not rules_file.exists():
-        raise FileNotFoundError("llm-validation-fix-rules.md not found")
-    
-    return rules_file.read_text(encoding='utf-8')
+    """
+    Load the rulebook for error IDENTIFICATION (AP7.0).
+
+    No error_type is passed: this step is what SELECTS the error in the first place, so the
+    [validate_*] tag is not known yet. In "cards" mode that means _core.md alone — which is
+    exactly what identification needs (prioritisation, search-mode selection, investigation
+    decision, action catalogue). In "monolith" mode the full file is loaded as before.
+    """
+    return load_rulebook()
 
 
 def derive_error_type_from_message(message: str):
@@ -166,6 +172,15 @@ def analyze_validation_with_llm(validation_data):
     except Exception as e:
         print(f"Error loading validation fix rules: {e}")
         return None
+
+    # AP7.5: der VOLLSTAENDIGE Regelbestand als Inhaltsverzeichnis (Datei + Klartext-
+    # Beschreibung). Der Agent hat damit jederzeit Zugriff auf alles und waehlt selbst aus,
+    # was er liest — ohne dass ein Fachanwender einen Validator-Tag kennen muss.
+    try:
+        card_index = rb_card_index()
+    except Exception as e:
+        print(f"WARN: Regelkarten-Index nicht ladbar: {e}")
+        card_index = "(nicht verfuegbar)"
     
     # Create prompt for LLM with ALL errors
     prompt = f"""You are analyzing validation errors from a Smart Planning system. 
@@ -189,8 +204,21 @@ Respond in JSON format:
     "search_value": "the ID value to search for (value mode) OR the field name (empty_field mode)",
     "error_type": "brief description of the selected error",
     "should_investigate": true or false,
-    "prioritization_reasoning": "Why this error was selected as most critical (reference Section 0.1)"
+    "prioritization_reasoning": "Why this error was selected as most critical (reference Section 0.1)",
+    "relevant_cards": ["file.md", "..."],
+    "relevant_cards_reasoning": "Warum genau diese Karten zu diesem Fehler passen"
 }}
+
+---
+
+# VERFUEGBARE REGELKARTEN (Wissensbestand des Agenten)
+
+Dies ist der VOLLSTAENDIGE Regelbestand. Waehle in "relevant_cards" JEDE Karte aus, deren
+Beschreibung zum ausgewaehlten Fehler passt — auch mehrere. Die Beschreibungen stammen von
+Fachanwendern und sind in normaler Sprache formuliert; entscheide inhaltlich, nicht nach
+Schluesselwoertern. Passt keine, gib eine leere Liste zurueck.
+
+{card_index}
 
 ---
 

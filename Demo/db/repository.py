@@ -260,6 +260,10 @@ def save_proposal(record: dict) -> Optional[str]:
         row.value_grounded = cp.get("value_grounded")
         row.value_grounded_reason = cp.get("value_grounded_reason")
         row.confidence_rationale = cp.get("confidence_rationale")
+        # AP7.2 episodic memory term + which formula generation produced confidence_score
+        row.memory_support = cp.get("memory_support")
+        row.memory_support_reason = cp.get("memory_support_reason")
+        row.formula_version = cp.get("formula_version")
 
         # `proposal_id` is deterministic ({snapshot_id}__iteration-{N}), so re-running
         # the generator hits an existing row. A human decision must survive that:
@@ -374,7 +378,32 @@ def get_proposal_as_dict(proposal_id: str) -> Optional[dict]:
             "value_grounded": r.value_grounded,
             "value_grounded_reason": r.value_grounded_reason,
             "confidence_rationale": r.confidence_rationale,
+            # AP7.2/7.3: the episodic term and which formula generation produced the score
+            "memory_support": r.memory_support,
+            "memory_support_reason": r.memory_support_reason,
+            "formula_version": r.formula_version,
             "created_at": r.created_at.isoformat() if r.created_at else None,
+            # Tech-Debt-Fix 2026-07-12: the DECISION itself, not just the status. Without this a
+            # reload shows "approved" but not WHAT was approved — no final value, no comment.
+            # That is a hole in the audit view: the whole point of HitL is that the human's
+            # decision is recorded, and after a page reload it was invisible.
+            "decision": (
+                {
+                    "decision": rv.decision,
+                    "final_value": rv.final_value,
+                    "comment": rv.comment,
+                    "reviewer_ref": rv.reviewer_ref,
+                    "decided_at": rv.decided_at.isoformat() if rv.decided_at else None,
+                    "revalidation_result": rv.revalidation_result,
+                }
+                if (rv := (
+                    db.query(models.Review)
+                    .filter(models.Review.proposal_id == proposal_id)
+                    .order_by(models.Review.id.desc())
+                    .first()
+                )) is not None
+                else None
+            ),
         }
 
 
@@ -447,6 +476,85 @@ def add_memory_item(**fields: Any) -> int:
         db.add(row)
         db.flush()
         return row.id
+
+
+def get_latest_review_as_dict(proposal_id: str) -> Optional[dict]:
+    """AP7.1: the most recent human decision on a proposal, or None."""
+    with session_scope() as db:
+        row = (
+            db.query(models.Review)
+            .filter(models.Review.proposal_id == proposal_id)
+            .order_by(models.Review.id.desc())
+            .first()
+        )
+        if row is None:
+            return None
+        return {
+            "id": row.id,
+            "proposal_id": row.proposal_id,
+            "decision": row.decision,
+            "final_value": row.final_value,
+            "comment": row.comment,
+            "reviewer_ref": row.reviewer_ref,
+            "revalidation_result": row.revalidation_result,
+        }
+
+
+def memory_item_exists(source_proposal_id: str) -> bool:
+    """AP7.1: idempotency guard — one memory case per proposal."""
+    with session_scope() as db:
+        return (
+            db.query(models.MemoryItem.id)
+            .filter(models.MemoryItem.source_proposal_id == source_proposal_id)
+            .first()
+            is not None
+        )
+
+
+def list_reviewed_proposal_ids() -> list[str]:
+    """AP7.1: every proposal that carries at least one human decision (for the backfill)."""
+    with session_scope() as db:
+        rows = (
+            db.query(models.Review.proposal_id)
+            .distinct()
+            .order_by(models.Review.proposal_id)
+            .all()
+        )
+        return [r[0] for r in rows]
+
+
+def count_memory_items() -> int:
+    with session_scope() as db:
+        return db.query(models.MemoryItem).count()
+
+
+def list_memory_items_as_dicts() -> list[dict]:
+    with session_scope() as db:
+        rows = db.query(models.MemoryItem).order_by(models.MemoryItem.id).all()
+        return [
+            {
+                "id": r.id,
+                "error_type": r.error_type,
+                "affected_entity_pattern": r.affected_entity_pattern,
+                "suggested_value": r.suggested_value,
+                "final_value": r.final_value,
+                "decision": r.decision,
+                "comment": r.comment,
+                "revalidation_ok": r.revalidation_ok,
+                "source_proposal_id": r.source_proposal_id,
+            }
+            for r in rows
+        ]
+
+
+def set_memory_item_error_type(item_id: int, error_type: str) -> bool:
+    """AP7.1: repair a legacy error_type label on an existing case."""
+    with session_scope() as db:
+        row = db.get(models.MemoryItem, item_id)
+        if row is None:
+            return False
+        row.error_type = error_type
+        return True
 
 
 def get_decision_state(proposal_id: str) -> Optional[dict]:
@@ -611,6 +719,10 @@ def fetch_metrics_data() -> dict:
                 "status": p.status,
                 "confidence_score": p.confidence_score,
                 "value_grounded": p.value_grounded,
+                # AP7.2: which formula produced confidence_score. The dashboard MUST NOT mix
+                # generations in one calibration curve — see routes/dashboard.py.
+                "memory_support": p.memory_support,
+                "formula_version": p.formula_version,
                 "created_at": p.created_at,
             }
             for p in db.query(models.Proposal).all()

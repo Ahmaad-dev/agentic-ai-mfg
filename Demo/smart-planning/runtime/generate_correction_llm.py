@@ -18,8 +18,20 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from runtime_storage import get_storage, get_iteration_folders_with_file, get_latest_iteration_number
 
+# AP7.0: rulebook loader (monolith vs. error-type cards, switched via RULEBOOK_MODE)
+from rulebook_loader import load_rulebook
+from agent_config import RULEBOOK_MODE
+
+# AP7.2: episodic memory — retrieve human-decided past cases, derive memory_support
+from memory import retrieval as mem_retrieval
+
 # Pydantic model for schema-validity part of the confidence score (AP1.3b)
 from correction_models import CorrectionProposal
+
+#: Stamped on every proposal. AP6 must not mix generations in one calibration curve:
+#: "v1" = memory_support hard-wired to 0 (max reachable score 0.8).
+#: "v2" = memory_support graded from the episodic case base (AP7.2).
+CONFIDENCE_FORMULA_VERSION = "v2"
 
 # Load environment variables (aus demo-Verzeichnis)
 # Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
@@ -44,13 +56,16 @@ def load_current_snapshot_id(snapshot_id: str = None):
     
     return snapshot_id
 
-def load_validation_fix_rules():
-    """Load the validation fix rules document"""
-    rules_file = Path("runtime-files/llm-validation-fix-rules.md")
-    if not rules_file.exists():
-        raise FileNotFoundError("llm-validation-fix-rules.md not found")
-    
-    return rules_file.read_text(encoding='utf-8')
+def load_validation_fix_rules(error_type: str = None, relevant_cards=None):
+    """
+    Load the rulebook for this correction.
+
+    AP7.0: monolith, or _core.md + the card(s) for this error's [validate_*] tag.
+    AP7.5: PLUS every card the agent itself picked during identification (`relevant_cards`).
+    Das ist der Weg fuer Karten, die ein Fachanwender in normaler Sprache beschrieben hat,
+    ohne einen technischen Tag zu kennen.
+    """
+    return load_rulebook(error_type, extra_cards=relevant_cards)
 
 def load_search_results(snapshot_id):
     """Load the last_search_results.json from the snapshot folder"""
@@ -423,23 +438,28 @@ def compute_confidence_score(correction_proposal, snapshot_data=None):
         grounded, _ = compute_value_grounded(correction_proposal, snapshot_data)
     grounded = max(0.0, min(1.0, float(grounded)))
 
-    # Memory support arrives in AP7
-    memory_support = 0.0
+    # AP7.2: memory_support is precomputed in main() from the episodic case base (graded
+    # 0 / 0.5 / 1.0, see memory.retrieval.compute_memory_support). Defensive: if it is absent
+    # (e.g. the memory lookup failed) the term stays 0.0 and the score behaves exactly as before.
+    memory_support = correction_proposal.get("memory_support")
+    if not isinstance(memory_support, (int, float)) or isinstance(memory_support, bool):
+        memory_support = 0.0
+    memory_support = max(0.0, min(1.0, float(memory_support)))
 
     score = 0.5 * llm_self + 0.3 * grounded + 0.2 * memory_support
     return round(score, 3)
 
 
-def generate_correction_with_llm(fix_rules, identify_response, search_results):
+def generate_correction_with_llm(fix_rules, identify_response, search_results, memory_evidence=""):
     """Generate correction proposal using Azure OpenAI"""
-    
+
     # Initialize Azure OpenAI client
     client = AzureOpenAI(
         api_key=os.getenv("AZURE_OPENAI_API_KEY"),
         api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
         azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
     )
-    
+
     # Build prompt
     prompt = f"""You are a data correction expert for Smart Planning API snapshots.
 
@@ -476,6 +496,9 @@ ERROR ANALYSIS:
 
 SEARCH RESULTS (Error Context):
 {json.dumps(search_results, indent=2, ensure_ascii=False)}
+
+MEMORY — HUMAN-DECIDED PAST CASES (AP7.2):
+{memory_evidence}
 
 ---
 
@@ -625,17 +648,44 @@ def main():
     
     # Load inputs
     print("Loading inputs...")
-    fix_rules = load_validation_fix_rules()
+    # AP7.0: identify_response first — it carries the authoritative tag_error_type that selects
+    # the rulebook card. In monolith mode the argument is ignored.
     identify_response = load_identify_response(snapshot_id)
+    _analysis = identify_response.get("llm_analysis") or {}
+    rulebook_error_type = _analysis.get("tag_error_type")
+    # AP7.5: die Karten, die der Agent bei der Identifikation selbst als relevant benannt hat.
+    relevant_cards = _analysis.get("relevant_cards") or []
+    fix_rules = load_validation_fix_rules(rulebook_error_type, relevant_cards)
     search_results = load_search_results(snapshot_id)
-    print(f"- Fix rules loaded ({len(fix_rules)} chars)")
+    print(f"- Fix rules loaded ({len(fix_rules)} chars, mode={RULEBOOK_MODE}, error_type={rulebook_error_type})")
+    if relevant_cards:
+        print(f"- Vom Agenten gewaehlt: {', '.join(relevant_cards)} "
+              f"({_analysis.get('relevant_cards_reasoning', '')[:80]})")
     print(f"- Error analysis loaded (iteration {identify_response.get('iteration')})")
     print(f"- Search results loaded ({search_results['results_count']} results)\n")
     
+    # AP7.2: retrieve past HUMAN-decided cases for this kind of error and hand them to the LLM
+    # as evidence. The target path is already known here (search_results[0].path), so the entity
+    # pattern — the retrieval key — can be built before the proposal exists.
+    # Defensive: any memory failure degrades to "no evidence", never breaks the pipeline.
+    similar_cases, memory_evidence = [], ""
+    try:
+        results = search_results.get("results") or []
+        query_path = results[0].get("path") if results else None
+        similar_cases = mem_retrieval.find_similar_cases(query_path, rulebook_error_type)
+        memory_evidence = mem_retrieval.format_cases_for_prompt(similar_cases)
+        print(f"- Memory: {len(similar_cases)} vergleichbare(r) Fall/Fälle "
+              f"für {mem_retrieval.entity_pattern(query_path)}")
+    except Exception as _mem_err:
+        print(f"WARN: memory retrieval failed, continuing without evidence: {_mem_err}")
+        memory_evidence = "Gedächtnis nicht verfügbar."
+
     # Generate correction proposal
     print("Generating correction proposal with LLM...")
-    correction_proposal, llm_call_data = generate_correction_with_llm(fix_rules, identify_response, search_results)
-    
+    correction_proposal, llm_call_data = generate_correction_with_llm(
+        fix_rules, identify_response, search_results, memory_evidence
+    )
+
     print(f"\nProposal generated:")
     print(f"- Action: {correction_proposal.get('action')}")
     print(f"- Target: {correction_proposal.get('target_path')}")
@@ -666,23 +716,48 @@ def main():
     )
     correction_proposal["value_grounded"] = grounded
     correction_proposal["value_grounded_reason"] = grounded_reason
+
+    # AP7.2: memory_support — graded, deterministic, from the episodic cases only. It can only
+    # be scored once the proposed value exists, so it happens here, not before the LLM call.
+    try:
+        support, support_reason = mem_retrieval.compute_memory_support(
+            correction_proposal.get("new_value"), similar_cases
+        )
+    except Exception as _ms_err:
+        print(f"WARN: memory_support could not be computed: {_ms_err}")
+        support, support_reason = 0.0, "Gedächtnis nicht verfügbar."
+    correction_proposal["memory_support"] = support
+    correction_proposal["memory_support_reason"] = support_reason
+    correction_proposal["memory_cases_used"] = [c["id"] for c in similar_cases]
+    correction_proposal["formula_version"] = CONFIDENCE_FORMULA_VERSION
+
     correction_proposal["confidence_score"] = compute_confidence_score(
         correction_proposal, snapshot_data_for_identity
     )
     print(f"- Value grounded: {grounded} ({grounded_reason})")
+    print(f"- Memory support: {support} ({support_reason})")
     print(f"- Confidence Score: {correction_proposal['confidence_score']} "
-          f"(= 0.5*{correction_proposal.get('llm_confidence')} + 0.3*{grounded} + 0.2*0)")
+          f"(= 0.5*{correction_proposal.get('llm_confidence')} + 0.3*{grounded} "
+          f"+ 0.2*{support}) [formula {CONFIDENCE_FORMULA_VERSION}]")
     
     # AP3.6b-2: the authoritative error_type comes from the reliable [validate_*] tag
     # (tag_error_type, produced in identify_error_llm since AP3.6b-1), not from the
     # hit-count heuristic in last_search_results.json (which mislabels e.g. a missing-field
-    # error as DUPLICATE_ID — see AP3.6a). Fallback to the old heuristic value if the tag is
-    # missing/null (message without a tag), so behaviour is preserved for those cases. The
-    # old value is kept additively as legacy_error_type for traceability/comparison.
-    # identify_snapshot.py is intentionally left as-is; its heuristic error_type is now dead.
+    # error as DUPLICATE_ID — see AP3.6a).
+    #
+    # AP3.6c (2026-07-12, measured): the tag is present in 41 of 41 identify artifacts — it never
+    # goes missing. The old fallback to the hit-count heuristic is therefore dead code with a
+    # sharp edge: on the one path where it WOULD fire it hands back a value we know to be wrong
+    # (DUPLICATE_ID for anything with >1 hit), and that value would flow into the rulebook card
+    # selection, the memory case signature and the dashboard. A wrong label is worse than no
+    # label, so the fallback is now the neutral "UNKNOWN". `legacy_error_type` is still recorded
+    # next to it as an audit field. identify_snapshot.py stays untouched; its heuristic is dead.
     legacy_error_type = search_results.get("error_type")
     tag_error_type = (identify_response.get("llm_analysis") or {}).get("tag_error_type")
-    authoritative_error_type = tag_error_type if tag_error_type else legacy_error_type
+    authoritative_error_type = tag_error_type or "UNKNOWN"
+    if not tag_error_type:
+        print(f"WARN: kein [validate_*]-Tag in der Fehlermeldung — error_type=UNKNOWN "
+              f"(die alte Heuristik haette '{legacy_error_type}' geraten, was unzuverlaessig ist)")
 
     # Build final output
     output_data = {

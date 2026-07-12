@@ -139,6 +139,13 @@ class Proposal(Base):
     value_grounded: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     value_grounded_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     confidence_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # AP7.2 episodic memory: the third confidence term (graded 0/0.5/1.0) and why it fired.
+    # `formula_version` stamps WHICH formula produced confidence_score — "v1" had
+    # memory_support hard-wired to 0 (score capped at 0.8), "v2" grades it from the case base.
+    # AP6 must not mix the two generations in one calibration curve.
+    memory_support: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    memory_support_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    formula_version: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     snapshot: Mapped[Optional["SnapshotMeta"]] = relationship(back_populates="proposals")
