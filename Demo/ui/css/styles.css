@@ -17,6 +17,10 @@
     
     --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-code: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+    /* Breite der App-Shell-Sidebar (AP4.6). Auch die `fixed` positionierte Eingabezeile
+       braucht sie, sonst zentriert sie sich am Viewport statt am Inhaltsbereich. */
+    --sidebar-w: 264px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -37,6 +41,151 @@ body {
         radial-gradient(circle at top right, #1a1c2e 0%, transparent 40%),
         radial-gradient(circle at bottom left, #151720 0%, transparent 40%),
         var(--bg-color);
+}
+
+/* =============================================================================
+   APP-SHELL (AP4.6) — feste Sidebar links, Inhalt rechts. Gilt für alle Seiten.
+   Das <body> war bisher selbst der Content-Container (column, zentriert); diese
+   Rolle übernimmt jetzt .app-main, damit die Sidebar daneben stehen kann.
+   ============================================================================= */
+body {
+    flex-direction: row;
+    align-items: stretch;
+}
+
+.app-main {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;   /* Bezugsrahmen für das absolut positionierte Welcome-Panel */
+    overflow: hidden;
+}
+
+.app-sidebar {
+    flex: 0 0 var(--sidebar-w);
+    width: var(--sidebar-w);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px 14px;
+    background: rgba(15, 17, 23, 0.72);
+    border-right: 1px solid var(--border-color);
+    backdrop-filter: blur(8px);
+}
+
+.sb-brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 2px; }
+.sb-brand-text { font-weight: 600; letter-spacing: 0.01em; }
+.sb-logo { display: inline-flex; }
+
+.sb-new {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-main);
+    background: linear-gradient(90deg, rgba(6, 182, 212, 0.16), rgba(132, 204, 22, 0.16));
+    border: 1px solid rgba(6, 182, 212, 0.35);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.sb-new:hover { border-color: rgba(132, 204, 22, 0.6); }
+.sb-new .material-symbols-outlined { font-size: 18px; }
+
+.sb-nav { display: flex; flex-direction: column; gap: 2px; }
+.sb-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    font-size: 0.9rem;
+    color: var(--text-sub);
+    text-decoration: none;
+    border-radius: 8px;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.sb-nav-item:hover { background: rgba(255, 255, 255, 0.04); color: var(--text-main); }
+.sb-nav-item.active { background: rgba(255, 255, 255, 0.07); color: var(--text-main); font-weight: 500; }
+.sb-nav-item.disabled { opacity: 0.45; cursor: default; }
+.sb-nav-item.disabled:hover { background: none; color: var(--text-sub); }
+.sb-nav-item .material-symbols-outlined { font-size: 19px; }
+
+.sb-badge {
+    margin-left: auto;
+    min-width: 20px;
+    padding: 1px 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-align: center;
+    color: #eab308;
+    background: rgba(234, 179, 8, 0.15);
+    border: 1px solid rgba(234, 179, 8, 0.35);
+    border-radius: 999px;
+}
+.sb-soon {
+    margin-left: auto;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-sub);
+}
+
+.sb-section-label {
+    padding: 6px 10px 0;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-sub);
+}
+
+.sb-sessions {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 2px;
+}
+.sb-sessions::-webkit-scrollbar { width: 6px; }
+.sb-sessions::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 999px; }
+
+.sb-session {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--text-sub);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.sb-session:hover { background: rgba(255, 255, 255, 0.04); color: var(--text-main); }
+.sb-session.active { background: rgba(255, 255, 255, 0.08); color: var(--text-main); }
+.sb-session-title {
+    font-size: 0.86rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sb-session-meta { font-size: 0.72rem; color: var(--text-sub); }
+.sb-muted { padding: 8px 10px; font-size: 0.82rem; color: var(--text-sub); }
+
+@media (max-width: 860px) {
+    :root { --sidebar-w: 60px; }   /* die Eingabezeile folgt automatisch */
+    .app-sidebar { padding: 14px 8px; }
+    .sb-brand-text, .sb-new span:not(.material-symbols-outlined),
+    .sb-nav-item:not(.active) span:not(.material-symbols-outlined),
+    .sb-section-label, .sb-sessions { display: none; }
 }
 
 /* --- WELCOME SCREEN (Zentriert, verschwindet beim ersten Chat) --- */
@@ -338,14 +487,18 @@ body {
 }
 
 /* --- INPUT BEREICH (Startet in der Mitte, wandert nach unten) --- */
+/* AP4.6-Fix: die Eingabezeile ist `fixed` und richtete sich damit am VIEWPORT aus — seit
+   die Sidebar existiert, war sie um deren halbe Breite nach links verschoben (der
+   Willkommenstext daneben sitzt korrekt in .app-main). Sie beginnt jetzt hinter der
+   Sidebar und zentriert sich im Inhaltsbereich. */
 .input-area {
     position: fixed;
-    width: 100%;
+    left: var(--sidebar-w);
+    width: calc(100% - var(--sidebar-w));
     display: flex;
     justify-content: center;
     padding: 20px;
     top: 55%;
-    left: 0;
     transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
     z-index: 100;
 }
@@ -356,7 +509,7 @@ body {
     background-color: var(--input-bg);
     border-radius: 24px;
     display: flex;
-    align-items: center; /* Center vertically for single line balance */
+    align-items: flex-end; /* Buttons bleiben unten, wenn die Textarea mehrzeilig wächst */
     padding: 12px 20px;
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 20px rgba(0,0,0,0.2);
@@ -371,6 +524,7 @@ body {
 
 textarea {
     flex: 1;
+    align-self: center; /* vertically centre in the input-wrapper row */
     background: transparent;
     border: none;
     color: var(--text-main);
@@ -378,7 +532,10 @@ textarea {
     line-height: 1.5;
     resize: none;
     height: 24px;
-    max-height: 200px;
+    /* Deckel identisch zu autoResize() in chat.js (150px), sonst wächst das Feld
+       optisch weiter, während der Text schon abgeschnitten scrollt. */
+    max-height: 150px;
+    overflow-y: auto;
     outline: none;
     font-family: var(--font-body);
     padding: 0;
@@ -576,4 +733,579 @@ body.chat-started .chat-container {
     .bubble { max-width: 90%; }
     .chat-container { padding: 20px 10px; }
     .input-area { padding: 16px; }
+}
+
+/* =============================================================================
+   REVIEW BOARD (AP4.1) — additive; reuses the existing color scheme/vars.
+   The base `body` is a centered, overflow-hidden flex column (for the chat);
+   the review page needs a normal scrollable document, hence the overrides.
+   ============================================================================= */
+:root {
+    --rb-card-bg: #171922;
+    --rb-chip-bg: #23262f;
+}
+
+/* Review-Seite in der App-Shell (AP4.6): der Body bleibt die Shell (row, 100vh, kein
+   Scroll) — gescrollt wird der Content-Bereich, sonst würde die Sidebar mitscrollen. */
+body.review-page .app-main {
+    overflow-y: auto;
+    align-items: stretch;
+}
+
+.review-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    width: 100%;
+    background: rgba(15, 17, 23, 0.85);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.review-header-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.review-brand { display: flex; align-items: center; gap: 12px; }
+.review-brand h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+.review-logo { display: inline-flex; }
+
+.review-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-sub);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.review-nav-link:hover {
+    color: var(--text-main);
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.08);
+}
+.review-nav-link .material-symbols-outlined { font-size: 18px; }
+
+.review-main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+    width: 100%;
+}
+
+.review-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.review-subtitle { color: var(--text-sub); font-size: 0.95rem; }
+
+.review-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--input-bg);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.review-refresh:hover:not(:disabled) { border-color: var(--accent-primary); }
+.review-refresh:disabled { opacity: 0.5; cursor: default; }
+.review-refresh .material-symbols-outlined { font-size: 18px; }
+
+.review-list { display: flex; flex-direction: column; gap: 14px; }
+
+/* --- Proposal card --- */
+.rb-card {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px 18px;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.rb-card:hover { border-color: var(--accent-primary); }
+
+.rb-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.rb-error-type {
+    font-family: var(--font-code);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-main);
+    background: rgba(6, 182, 212, 0.10);
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
+.rb-status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.rb-status-pending_review { background: rgba(234, 179, 8, 0.12); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.3); }
+.rb-status-approved { background: rgba(34, 197, 94, 0.12); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+.rb-status-rejected { background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+.rb-status-modified { background: rgba(99, 102, 241, 0.12); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+.rb-status-applied { background: rgba(148, 163, 184, 0.12); color: var(--text-sub); border: 1px solid var(--border-color); }
+
+.rb-card-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px 24px;
+}
+.rb-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rb-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-sub);
+}
+.rb-value { font-size: 0.9rem; color: var(--text-main); overflow-wrap: anywhere; }
+.rb-mono { font-family: var(--font-code); }
+.rb-muted { color: var(--text-sub); }
+
+/* Snapshot id: full, selectable, with a copy button; spans the full card width */
+.rb-field-wide { grid-column: 1 / -1; }
+.rb-snapshot { display: flex; align-items: center; gap: 8px; }
+.rb-snapshot .rb-value { flex: 1; min-width: 0; }
+.rb-selectable { user-select: all; }  /* one click selects the whole id */
+.rb-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 3px;
+    color: var(--text-sub);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.rb-copy:hover { color: var(--text-main); border-color: var(--accent-primary); }
+.rb-copy.copied { color: #84cc16; border-color: rgba(132, 204, 22, 0.4); }
+.rb-copy .material-symbols-outlined { font-size: 16px; }
+
+/* Confidence bar */
+.rb-confidence { display: flex; align-items: center; gap: 8px; }
+.rb-confidence-track {
+    flex: 1;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.rb-confidence-fill { height: 100%; border-radius: 999px; }
+.rb-confidence-fill.high { background: linear-gradient(90deg, #06b6d4, #84cc16); }
+.rb-confidence-fill.mid { background: #eab308; }
+.rb-confidence-fill.low { background: #ef4444; }
+.rb-confidence-value { font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--text-main); }
+
+/* AP3.5 chips */
+.rb-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color); }
+.rb-chip {
+    font-family: var(--font-code);
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: var(--rb-chip-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-sub);
+}
+.rb-chip-kind { color: #818cf8; border-color: rgba(99, 102, 241, 0.3); }
+.rb-chip-entity { color: #84cc16; border-color: rgba(132, 204, 22, 0.3); }
+
+/* Empty / error / loading states */
+.rb-empty, .rb-error, .rb-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+    padding: 60px 20px;
+    border: 1px dashed var(--border-color);
+    border-radius: 12px;
+    color: var(--text-main);
+}
+.rb-empty .material-symbols-outlined,
+.rb-error .material-symbols-outlined { font-size: 40px; opacity: 0.6; }
+.rb-empty p, .rb-error p { font-size: 1.05rem; font-weight: 500; }
+.rb-error { border-color: rgba(239, 68, 68, 0.4); }
+.rb-error .material-symbols-outlined { color: #ef4444; }
+.rb-loading { flex-direction: row; border-style: solid; padding: 40px 20px; }
+.rb-spin { animation: rb-spin 1s linear infinite; }
+@keyframes rb-spin { to { transform: rotate(360deg); } }
+
+/* Clickable list cards (AP4.2) */
+.rb-card[data-proposal-id] { cursor: pointer; }
+.rb-card[data-proposal-id]:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+
+/* =============================================================================
+   DETAIL VIEW (AP4.2) — before/after diff. Colour convention: old = red/struck,
+   new = green. Additive; existing chat + list styles untouched.
+   ============================================================================= */
+.rb-detail-topbar { margin-bottom: 20px; }
+
+.rb-detail-context {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.rb-chips-top { margin-top: 0; padding-top: 0; border-top: none; align-items: center; }
+.rb-chip-error {
+    font-family: var(--font-code);
+    color: var(--text-main);
+    background: rgba(6, 182, 212, 0.10);
+    border-color: rgba(6, 182, 212, 0.25);
+}
+
+.rb-detail-section { margin-bottom: 24px; }
+.rb-detail-section h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Diff layout: two side-by-side columns that stack on narrow screens */
+.rb-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.rb-diff-side { min-width: 0; }
+.rb-diff-head {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.rb-diff-head-old { color: #ef4444; }
+.rb-diff-head-new { color: #22c55e; }
+
+.rb-empty-before {
+    font-family: var(--font-code);
+    color: var(--text-sub);
+    background: var(--rb-chip-bg);
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+/* Scalar diff (Fall A) */
+.rb-diff-scalar {
+    font-family: var(--font-code);
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-wrap: anywhere;
+}
+.rb-old { background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); color: #fca5a5; }
+.rb-old s { text-decoration: line-through; }
+.rb-new { background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); color: #86efac; }
+
+/* Object-array diff table (Fall B) */
+.rb-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    display: block;
+    overflow-x: auto;
+}
+.rb-diff-table th, .rb-diff-table td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+.rb-diff-table th {
+    color: var(--text-sub);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
+}
+.rb-diff-row-new td { background: rgba(34, 197, 94, 0.06); }
+.rb-diff-row-old td { background: rgba(239, 68, 68, 0.06); text-decoration: line-through; }
+.rb-diff-new td:first-child, .rb-diff-old td:first-child { border-left: 3px solid transparent; }
+.rb-diff-row-new td:first-child { border-left-color: #22c55e; }
+.rb-diff-row-old td:first-child { border-left-color: #ef4444; }
+
+/* Scalar-array fallback */
+.rb-list-old, .rb-list-new { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rb-list-old li, .rb-list-new li {
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+.rb-list-old li { background: rgba(239, 68, 68, 0.06); text-decoration: line-through; color: #fca5a5; }
+.rb-list-new li { background: rgba(34, 197, 94, 0.06); color: #86efac; }
+
+/* Reasoning + code blocks */
+.rb-reasoning {
+    color: var(--text-main);
+    line-height: 1.7;
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+.rb-code {
+    font-family: var(--font-code);
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    background: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+}
+
+/* =============================================================================
+   CODE-KONTEXT (AP4.7) — Fehlerstelle 1:1 aus snapshot-data.json, Diff-Hunk-Optik:
+   Zeilennummern-Spalte links, betroffene Zeilen rot hinterlegt (wie ein Review-Diff).
+   ============================================================================= */
+.rb-codeview {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--code-bg);
+}
+.rb-code-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--border-color);
+}
+.rb-code-head .material-symbols-outlined { font-size: 16px; }
+.rb-code-head .rb-muted { margin-left: auto; }
+
+.rb-code-body {
+    overflow-x: auto;
+    padding: 6px 0;
+}
+.rb-code-line {
+    display: flex;
+    align-items: flex-start;
+    font-family: var(--font-code);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    white-space: pre;
+}
+.rb-code-num {
+    flex: 0 0 auto;
+    min-width: 72px;
+    padding: 0 12px 0 10px;
+    text-align: right;
+    color: #5a5f6b;
+    user-select: none;
+    border-right: 1px solid var(--border-color);
+}
+.rb-code-text {
+    padding: 0 16px 0 12px;
+    color: var(--text-sub);
+}
+/* Die betroffene(n) Zeile(n) — rot, mit Markierung am linken Rand wie in einem Diff. */
+.rb-code-line.err { background: rgba(239, 68, 68, 0.13); }
+.rb-code-line.err .rb-code-num {
+    color: #ef4444;
+    border-right-color: rgba(239, 68, 68, 0.45);
+    box-shadow: inset 3px 0 0 #ef4444;
+}
+.rb-code-line.err .rb-code-text { color: #fca5a5; }
+.rb-code-foot { padding: 6px 12px; font-size: 0.78rem; border-top: 1px solid var(--border-color); }
+
+/* Confidence breakdown (AP4.5) — the deterministic groundedness signal */
+.rb-grounded {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--rb-card-bg);
+}
+.rb-grounded .material-symbols-outlined { font-size: 22px; flex: 0 0 auto; }
+.rb-grounded p { margin-top: 4px; font-size: 0.86rem; line-height: 1.5; }
+.rb-grounded.ok { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.08); }
+.rb-grounded.ok .material-symbols-outlined { color: #22c55e; }
+.rb-grounded.warn { border-color: rgba(234, 179, 8, 0.45); background: rgba(234, 179, 8, 0.10); }
+.rb-grounded.warn .material-symbols-outlined { color: #eab308; }
+.rb-conf-rationale { margin-top: 10px; font-size: 0.84rem; line-height: 1.5; }
+
+/* Snapshot filter (AP4.4) */
+.rb-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.rb-filter-select {
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    color: var(--text-main);
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+.rb-filter-select:focus { outline: none; border-color: var(--accent-primary); }
+
+/* =============================================================================
+   DECISION PANEL (AP4.3.1) — approve / reject. Modify is present but disabled
+   until AP4.3.2. Same colour convention as the status badges above.
+   ============================================================================= */
+.rb-actions {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px 18px;
+}
+.rb-actions h3 { border-bottom: none; padding-bottom: 0; margin-bottom: 10px; }
+
+.rb-comment {
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px 12px;
+    font-family: var(--font-main);
+    font-size: 0.9rem;
+    color: var(--text-main);
+    background: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    resize: vertical;
+}
+.rb-comment:focus { outline: none; border-color: var(--accent-primary); }
+.rb-comment:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.rb-btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.rb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    font-family: var(--font-main);
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+.rb-btn .material-symbols-outlined { font-size: 18px; }
+.rb-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.rb-btn-approve { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
+.rb-btn-approve:hover:not(:disabled) { background: rgba(34, 197, 94, 0.12); }
+.rb-btn-reject { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
+.rb-btn-reject:hover:not(:disabled) { background: rgba(239, 68, 68, 0.12); }
+.rb-btn-modify { color: var(--text-sub); }
+/* Busy: the icon spins while the (synchronous) apply runs. */
+.rb-btn.busy .material-symbols-outlined { animation: rb-spin 1s linear infinite; }
+
+.rb-hint { font-size: 0.8rem; margin-top: 10px; line-height: 1.5; }
+
+/* Modify editor (AP4.3.2b): final_value is the WHOLE value, so a JSON textarea. */
+.rb-modify-editor {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--code-bg);
+}
+.rb-modify-editor code { font-family: var(--font-code); font-size: 0.85em; }
+.rb-json {
+    width: 100%;
+    margin-top: 6px;
+    padding: 12px;
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    tab-size: 2;
+    color: var(--text-main);
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    resize: vertical;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+}
+.rb-json:focus { outline: none; border-color: var(--accent-primary); }
+.rb-json:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.rb-json-hint {
+    margin-top: 8px;
+    font-size: 0.82rem;
+    font-family: var(--font-code);
+    min-height: 1.2em;
+    color: var(--text-sub);
+}
+.rb-json-hint.ok { color: #22c55e; }
+.rb-json-hint.warn { color: #eab308; }
+.rb-json-hint.error { color: #ef4444; }
+
+.rb-decision-status {
+    margin-top: 14px;
+    padding: 12px 14px;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+}
+.rb-decision-status.ok { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.10); }
+.rb-decision-status.warn { border-color: rgba(234, 179, 8, 0.4); background: rgba(234, 179, 8, 0.10); }
+.rb-decision-status.error { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.10); }
+.rb-decision-status.info { color: var(--text-sub); }
+.rb-decision-status code { font-family: var(--font-code); font-size: 0.85em; }
+
+@media (max-width: 600px) {
+    .review-header-inner, .review-main { padding-left: 14px; padding-right: 14px; }
+    .review-toolbar { flex-direction: column; align-items: flex-start; }
+    .rb-card-body { grid-template-columns: 1fr 1fr; }
+    .rb-diff { grid-template-columns: 1fr; }
 }

@@ -172,7 +172,19 @@ class OrchestrationAgent(BaseAgent):
             if agent_key == "chat" and self.last_snapshot_metadata:
                 enhanced_context["last_snapshot_metadata"] = self.last_snapshot_metadata
                 logger.info(f"[{self.name}] Snapshot-Metadaten an Chat Agent weitergegeben")
-            
+
+            # Review-Entscheidungen mitgeben: Die Chat-History enthaelt nur den KI-VORSCHLAG.
+            # Die menschliche Entscheidung faellt im Review Board, ausserhalb des Chats - ohne
+            # diesen Kontext berichtet der Chat den verworfenen KI-Wert als "die Loesung".
+            if agent_key == "chat":
+                decisions = self._get_review_decisions(chat_history, user_input)
+                if decisions:
+                    enhanced_context["review_decisions"] = decisions
+                    logger.info(
+                        f"[{self.name}] {len(decisions)} Review-Entscheidung(en) an Chat Agent weitergegeben"
+                    )
+
+
             result = agent.execute(user_input, enhanced_context)
             
             # WICHTIG: Extrahiere recovery_suggestion BEVOR Interpretation (sonst geht sie verloren!)
@@ -659,13 +671,13 @@ class OrchestrationAgent(BaseAgent):
                 if HUMAN_IN_THE_LOOP and intent["action_name"] == "apply_and_upload":
                     logger.info(
                         f"[{self.name}] HUMAN_IN_THE_LOOP aktiv: Pipeline 'apply_and_upload' blockiert "
-                        f"(Anwenden nur nach Freigabe moeglich, folgt in AP3)"
+                        f"(Anwenden nur nach Freigabe im Review Board)"
                     )
                     return {
                         "response": (
                             "Im Human-in-the-Loop-Modus wird nichts automatisch angewendet. "
-                            "Die Korrektur kann erst nach ausdrücklicher Freigabe übernommen werden "
-                            "(die Freigabe-Funktion folgt in einem späteren Schritt / AP3)."
+                            "Die Korrektur wird erst nach deiner ausdrücklichen Freigabe übernommen."
+                            + self._review_board_hint(pipeline_snapshot_id)
                         ),
                         "metadata": {
                             "agent": "sp",
@@ -699,7 +711,12 @@ class OrchestrationAgent(BaseAgent):
                     user_input=user_input,
                     chat_history=chat_history
                 )
-                
+
+                # Ein Vorschlag ohne Wegweiser ist eine Sackgasse: analyze_only erzeugt einen
+                # Vorschlag, der auf eine Entscheidung wartet - der Nutzer muss erfahren, WO.
+                if intent["action_name"] == "analyze_only" and result.get("success"):
+                    interpreted += self._review_board_hint(pipeline_snapshot_id)
+
                 return {
                     "response": interpreted,
                     "metadata": {
@@ -717,13 +734,13 @@ class OrchestrationAgent(BaseAgent):
                 if HUMAN_IN_THE_LOOP and intent["action_name"] == "apply_correction":
                     logger.info(
                         f"[{self.name}] HUMAN_IN_THE_LOOP aktiv: Tool 'apply_correction' blockiert "
-                        f"(Anwenden nur nach Freigabe moeglich, folgt in AP3)"
+                        f"(Anwenden nur nach Freigabe im Review Board)"
                     )
                     return {
                         "response": (
                             "Im Human-in-the-Loop-Modus wird nichts automatisch angewendet. "
-                            "Die Korrektur kann erst nach ausdrücklicher Freigabe übernommen werden "
-                            "(die Freigabe-Funktion folgt in einem späteren Schritt / AP3)."
+                            "Die Korrektur wird erst nach deiner ausdrücklichen Freigabe übernommen."
+                            + self._review_board_hint(snapshot_id_from_history)
                         ),
                         "metadata": {
                             "agent": "sp",
@@ -812,9 +829,67 @@ class OrchestrationAgent(BaseAgent):
             matches = re.findall(uuid_pattern, content, re.IGNORECASE)
             if matches:
                 return matches[-1]  # Neueste ID in dieser Message
-        
+
         return None
-    
+
+    def _review_board_hint(self, snapshot_id: Optional[str] = None) -> str:
+        """
+        Wegweiser ins Review Board, inkl. Deep-Link auf den konkreten offenen Vorschlag.
+
+        Ohne diesen Hinweis endet der HitL-Flow im Nichts: der Nutzer erfaehrt, dass nichts
+        angewendet wurde, aber nicht, wo er entscheiden kann. Faellt bei DB-Problemen still
+        auf den Link zur Liste zurueck.
+        """
+        if snapshot_id:
+            try:
+                from db import repository as repo
+                open_ones = [
+                    p for p in repo.list_open_proposals_as_dicts()
+                    if p["snapshot_id"] == snapshot_id
+                ]
+                if open_ones:
+                    p = open_ones[0]  # neuester zuerst
+                    return (
+                        f"\n\nDein Korrekturvorschlag wartet auf eine Entscheidung: "
+                        f"[Im Review Board oeffnen](/review.html?proposal={p['proposal_id']}) "
+                        f"— {p.get('error_type') or 'Vorschlag'}, "
+                        f"Konfidenz {round((p.get('confidence_score') or 0) * 100)} %. "
+                        f"Dort kannst du Genehmigen, Ablehnen oder den Wert aendern."
+                    )
+            except Exception as exc:
+                logger.warning(f"[{self.name}] Deep-Link nicht baubar: {exc}")
+        return (
+            "\n\nOffene Korrekturvorschlaege findest du im "
+            "[Review Board](/review.html) — dort kannst du Genehmigen, Ablehnen "
+            "oder den Wert aendern."
+        )
+
+    def _get_review_decisions(self, chat_history: List, user_input: str = "") -> List[dict]:
+        """
+        Menschliche Review-Entscheidungen zum aktuellen Snapshot (aus der DB).
+
+        Die Entscheidung faellt im Review Board, nicht im Chat - sie steht also NICHT in der
+        Chat-Historie. Ohne diese Bruecke antwortet der Chat auf "was war die Loesung?" mit
+        dem KI-Vorschlag, auch wenn der Mensch ihn verworfen hat.
+
+        Die Snapshot-ID wird zuerst in der AKTUELLEN Nachricht gesucht (die steht noch nicht
+        in der Historie), dann in der Historie.
+
+        Defensiv: jeder DB-Fehler wird geschluckt, der Chat funktioniert dann wie bisher.
+        """
+        snapshot_id = (
+            self._extract_snapshot_id_from_history([{"content": user_input or ""}])
+            or self._extract_snapshot_id_from_history(chat_history)
+        )
+        if not snapshot_id:
+            return []
+        try:
+            from db import repository as repo
+            return repo.get_decisions_for_snapshot(snapshot_id)
+        except Exception as exc:  # DB darf den Chat nie brechen
+            logger.warning(f"[{self.name}] Review-Entscheidungen nicht ladbar: {exc}")
+            return []
+
     def _get_context_summary(self, chat_history: List, max_messages: int = 3) -> str:
         """Erstellt eine kompakte Zusammenfassung der letzten Messages"""
         if not chat_history:

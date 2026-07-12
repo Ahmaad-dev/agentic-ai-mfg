@@ -124,6 +124,17 @@ class Proposal(Base):
     confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     schema_valid: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending_review")
+    # AP3.5a guard metadata (populated from the correction_proposal).
+    correction_kind: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    target_entity_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    target_entity_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    identity_check_supported: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # AP4.5 confidence transparency: the deterministic groundedness signal (is the proposed
+    # value provable from the data or constructed?) plus the LLM's own justification for its
+    # self-estimate. Both are what makes a confidence number reviewable instead of opaque.
+    value_grounded: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    value_grounded_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confidence_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     snapshot: Mapped[Optional["SnapshotMeta"]] = relationship(back_populates="proposals")

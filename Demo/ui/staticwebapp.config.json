@@ -1,13 +1,23 @@
 {
   "routes": [
     {
+      "route": "/review.html",
+      "serve": "/review.html",
+      "statusCode": 200
+    },
+    {
       "route": "/*",
       "serve": "/index.html",
       "statusCode": 200
     }
   ],
   "navigationFallback": {
-    "rewrite": "/index.html"
+    "rewrite": "/index.html",
+    "exclude": [
+      "/review.html",
+      "/css/*",
+      "/scripts/*"
+    ]
   },
   "mimeTypes": {
     ".json": "application/json",

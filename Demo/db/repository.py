@@ -93,6 +93,74 @@ def add_message(
         return row.id
 
 
+#: How much of the first user message is used as a session title.
+_TITLE_MAX = 60
+
+
+def _derive_title(first_user_message: Optional[str]) -> str:
+    """Session title = the first user message, shortened. No LLM call, no extra column."""
+    text = (first_user_message or "").strip().replace("\n", " ")
+    if not text:
+        return "Neuer Chat"
+    return text if len(text) <= _TITLE_MAX else text[: _TITLE_MAX - 1].rstrip() + "…"
+
+
+def list_sessions_as_dicts(limit: int = 50) -> list[dict]:
+    """
+    AP4.6: All chat sessions that actually contain messages, newest activity first.
+
+    Sessions without any message are skipped — every page load used to create one, so the
+    table is full of empty rows; showing them would drown the real conversations.
+    """
+    with session_scope() as db:
+        rows = db.query(models.Session).order_by(models.Session.id.desc()).all()
+        out = []
+        for s in rows:
+            msgs = sorted(s.messages, key=lambda m: m.id)
+            if not msgs:
+                continue
+            first_user = next((m.content for m in msgs if m.role == "user"), None)
+            last = msgs[-1]
+            out.append(
+                {
+                    "session_id": s.id,
+                    "title": _derive_title(first_user),
+                    "message_count": len(msgs),
+                    "started_at": s.started_at.isoformat() if s.started_at else None,
+                    "last_activity": last.created_at.isoformat() if last.created_at else None,
+                    "snapshot_id": s.snapshot_id,
+                }
+            )
+            if len(out) >= limit:
+                break
+        return out
+
+
+def get_messages_as_dicts(session_id: int) -> list[dict]:
+    """AP4.6: The full message history of one session, oldest first (for replaying a chat)."""
+    with session_scope() as db:
+        msgs = (
+            db.query(models.Message)
+            .filter(models.Message.session_id == session_id)
+            .order_by(models.Message.id.asc())
+            .all()
+        )
+        return [
+            {
+                "role": m.role,
+                "content": m.content,
+                "agent_name": m.agent_name,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in msgs
+        ]
+
+
+def session_exists(session_id: int) -> bool:
+    with session_scope() as db:
+        return db.get(models.Session, session_id) is not None
+
+
 def add_agent_run(
     session_id: int,
     agent_name: Optional[str] = None,
@@ -181,6 +249,16 @@ def save_proposal(record: dict) -> Optional[str]:
         row.evidence = cp.get("additional_updates") or []
         row.confidence_score = cp.get("confidence_score", record.get("confidence_score"))
         row.schema_valid = cp.get("schema_valid")
+        # AP3.5a guard metadata (target_entity_id may be int/str in the JSON → store as str).
+        row.correction_kind = cp.get("correction_kind")
+        row.target_entity_type = cp.get("target_entity_type")
+        _tid = cp.get("target_entity_id")
+        row.target_entity_id = str(_tid) if _tid is not None else None
+        row.identity_check_supported = cp.get("identity_check_supported")
+        # AP4.5 confidence transparency
+        row.value_grounded = cp.get("value_grounded")
+        row.value_grounded_reason = cp.get("value_grounded_reason")
+        row.confidence_rationale = cp.get("confidence_rationale")
 
         # `proposal_id` is deterministic ({snapshot_id}__iteration-{N}), so re-running
         # the generator hits an existing row. A human decision must survive that:
@@ -252,6 +330,13 @@ def list_open_proposals_as_dicts() -> list[dict]:
                 "target_path": r.target_path,
                 "confidence_score": r.confidence_score,
                 "status": r.status,
+                "correction_kind": r.correction_kind,
+                "target_entity_type": r.target_entity_type,
+                "target_entity_id": r.target_entity_id,
+                "identity_check_supported": r.identity_check_supported,
+                "value_grounded": r.value_grounded,
+                "value_grounded_reason": r.value_grounded_reason,
+                "confidence_rationale": r.confidence_rationale,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows
@@ -281,8 +366,51 @@ def get_proposal_as_dict(proposal_id: str) -> Optional[dict]:
             "confidence_score": r.confidence_score,
             "schema_valid": r.schema_valid,
             "status": r.status,
+            "correction_kind": r.correction_kind,
+            "target_entity_type": r.target_entity_type,
+            "target_entity_id": r.target_entity_id,
+            "identity_check_supported": r.identity_check_supported,
+            "value_grounded": r.value_grounded,
+            "value_grounded_reason": r.value_grounded_reason,
+            "confidence_rationale": r.confidence_rationale,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         }
+
+
+def get_decisions_for_snapshot(snapshot_id: str) -> list[dict]:
+    """
+    All human review decisions made on a snapshot, newest first.
+
+    Exists so the CHAT AGENT can answer "what was the solution?" truthfully. Without it the
+    chat only sees the conversation history — which contains the AI's PROPOSAL, not the
+    human's decision (that happens in the review board, outside the chat). It therefore used
+    to report the AI's rejected value as the applied one.
+
+    `final_value` is the value that was really applied (the human's on `modify`, the AI's on
+    `approve`); `ai_value` is what the AI had proposed, kept for contrast.
+    """
+    with session_scope() as db:
+        rows = (
+            db.query(models.Review, models.Proposal)
+            .join(models.Proposal, models.Review.proposal_id == models.Proposal.proposal_id)
+            .filter(models.Proposal.snapshot_id == snapshot_id)
+            .order_by(models.Review.decided_at.desc(), models.Review.id.desc())
+            .all()
+        )
+        return [
+            {
+                "proposal_id": p.proposal_id,
+                "error_type": p.error_type,
+                "target_path": p.target_path,
+                "decision": rv.decision,
+                "applied_value": rv.final_value,
+                "ai_value": p.suggested_value,
+                "reviewer_comment": rv.comment,
+                "proposal_status": p.status,
+                "decided_at": rv.decided_at.isoformat() if rv.decided_at else None,
+            }
+            for rv, p in rows
+        ]
 
 
 # --------------------------------------------------------------------------- #

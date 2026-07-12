@@ -274,15 +274,120 @@ def _proposal_matches_schema(correction_proposal):
         return False
 
 
-def compute_confidence_score(correction_proposal):
-    """
-    AP1.3b: Combine the raw signals into one confidence_score in [0.0, 1.0].
+#: Fields that REFERENCE another entity: field -> (array holding it, its identity field).
+#: Used by the groundedness check: a reference is grounded exactly if the referenced object
+#: actually exists in the snapshot.
+REFERENCE_FIELD_TARGET = {
+    "articleId": ("articles", "articleId"),
+    "workPlanId": ("workPlans", "workPlanId"),
+}
 
-    Formula (per PT4_PLAN.md):
+
+def compute_value_grounded(correction_proposal, snapshot_data):
+    """
+    Deterministic answer to: **is the proposed value provable from the data, or invented?**
+
+    This exists because the LLM's own `llm_confidence` is not calibratable by prompt alone.
+    Measured: it rated an ID it had INVENTED (counted a sequence number up) as "Band A / 0.9"
+    — in exactly the case where it was wrong and the human had to overrule it. A self-estimate
+    cannot distinguish "I read this from the data" from "I made this up"; this check can.
+
+    Returns (grounded: float 0.0|1.0, reason: str). Conservative: anything it cannot verify
+    counts as NOT grounded, so an unverifiable value never inflates the score.
+
+    Grounded (1.0) means one of:
+      a) the value is a REFERENCE and the referenced object exists (e.g. demands[i].articleId
+         set to 122873 and articles[] really contains articleId 122873), or
+      b) the identical value/structure already exists on the SAME field of another object of
+         the same array (e.g. a workItemConfigs array copied from a comparable article).
+    Not grounded (0.0) means the value cannot be found anywhere — it was constructed. The
+    classic case is de-duplicating an ID by incrementing a counter: the new ID must be unique,
+    so by definition it is NOT in the data. That is precisely a value a human should look at.
+    """
+    if correction_proposal.get("action") == "manual_intervention_required":
+        return 0.0, "manual_intervention_required"
+
+    new_value = correction_proposal.get("new_value")
+    if new_value is None or new_value == "":
+        return 0.0, "kein new_value"
+    if not isinstance(snapshot_data, dict):
+        return 0.0, "snapshot-data nicht ladbar (konservativ: nicht belegt)"
+
+    array_name, index, field = _parse_target_entity(correction_proposal.get("target_path"))
+    if not array_name or not field:
+        return 0.0, "target_path nicht auswertbar"
+
+    # (a0) IDENTITY field of its own array (demands[i].demandId, articles[i].articleId, ...).
+    # Such a value must be UNIQUE, so it can never be "read from the data" — it is always
+    # constructed. Grounded is therefore 0 by definition. And if the proposed value DOES
+    # already exist elsewhere, the proposal is not merely unproven, it is provably wrong:
+    # applying it would create a NEW duplicate. (Measured: the LLM proposed 'D210451_002'
+    # for a de-duplication — an ID that already sat on demands[768].)
+    if ENTITY_IDENTITY_FIELD.get(array_name) == field:
+        objects = snapshot_data.get(array_name)
+        if isinstance(objects, list):
+            for i, o in enumerate(objects):
+                if i != index and isinstance(o, dict) and o.get(field) == new_value:
+                    return 0.0, (
+                        f"KOLLISION: {array_name}[{i}].{field} traegt bereits {new_value!r} "
+                        f"— dieser Vorschlag wuerde ein neues Duplikat erzeugen"
+                    )
+        return 0.0, (
+            f"Identitaetsfeld: {new_value!r} muss neu/eindeutig sein und ist daher "
+            f"grundsaetzlich nicht aus den Daten belegbar (konstruiert)"
+        )
+
+    # (a) Reference field -> the referenced object must exist.
+    ref = REFERENCE_FIELD_TARGET.get(field)
+    if ref and ref[0] != array_name:
+        ref_array, ref_id_field = ref
+        objects = snapshot_data.get(ref_array)
+        if not isinstance(objects, list):
+            return 0.0, f"Referenz-Array '{ref_array}' fehlt"
+        exists = any(
+            isinstance(o, dict) and str(o.get(ref_id_field)) == str(new_value)
+            for o in objects
+        )
+        if exists:
+            return 1.0, f"Referenz belegt: {ref_array}.{ref_id_field}={new_value} existiert"
+        return 0.0, f"Referenz NICHT belegt: kein {ref_array} mit {ref_id_field}={new_value}"
+
+    # (b) Same value already used on the same field of a comparable object.
+    objects = snapshot_data.get(array_name)
+    if not isinstance(objects, list):
+        return 0.0, f"Array '{array_name}' fehlt in snapshot-data"
+
+    for i, o in enumerate(objects):
+        if i == index or not isinstance(o, dict):
+            continue
+        if field in o and o[field] == new_value:
+            return 1.0, (
+                f"Wert existiert bereits in {array_name}[{i}].{field} "
+                f"— aus vergleichbarem Datensatz uebernommen"
+            )
+
+    return 0.0, (
+        f"Wert nicht in den Daten auffindbar — konstruiert/erfunden "
+        f"(kein {array_name}[*].{field} mit diesem Wert)"
+    )
+
+
+def compute_confidence_score(correction_proposal, snapshot_data=None):
+    """
+    AP1.3b / AP4.5: Combine the raw signals into one confidence_score in [0.0, 1.0].
+
+    Formula:
         confidence = 0.5 * llm_self_estimate   (LLM self-assessment, 0..1)
-                   + 0.3 * schema_valid        (1 if proposal matches Pydantic schema, else 0)
+                   + 0.3 * value_grounded      (1 if the value is provable from the data, else 0)
                    + 0.2 * memory_support      (AP7; 0 for now)
     Special case: action == "manual_intervention_required" -> 0.0
+
+    CHANGE vs. the original PT4_PLAN formula (user decision, 2026-07-11): the middle term was
+    `schema_valid`, which is ALWAYS 1 — the proposal is validated against the Pydantic model
+    immediately after being built, so the term was tautological dead weight and the score
+    collapsed to 0.5*llm + 0.3 (0.775 in 7 of 8 measured proposals). It is replaced by
+    `value_grounded`, a deterministic signal that actually discriminates (see
+    compute_value_grounded). `schema_valid` is still recorded as its own field.
     """
     # Special case: no automatic correction possible -> zero confidence
     if correction_proposal.get("action") == "manual_intervention_required":
@@ -294,13 +399,17 @@ def compute_confidence_score(correction_proposal):
         llm_self = 0.0
     llm_self = max(0.0, min(1.0, float(llm_self)))
 
-    # Schema validity: 1.0 if the freshly built proposal matches the Pydantic model
-    schema_valid = 1.0 if _proposal_matches_schema(correction_proposal) else 0.0
+    # Groundedness: prefer an already-computed value (set in main() once snapshot-data is
+    # loaded); otherwise compute it here. Without snapshot_data it is 0.0 (conservative).
+    grounded = correction_proposal.get("value_grounded")
+    if not isinstance(grounded, (int, float)) or isinstance(grounded, bool):
+        grounded, _ = compute_value_grounded(correction_proposal, snapshot_data)
+    grounded = max(0.0, min(1.0, float(grounded)))
 
     # Memory support arrives in AP7
     memory_support = 0.0
 
-    score = 0.5 * llm_self + 0.3 * schema_valid + 0.2 * memory_support
+    score = 0.5 * llm_self + 0.3 * grounded + 0.2 * memory_support
     return round(score, 3)
 
 
@@ -387,8 +496,9 @@ OUTPUT FORMAT (JSON):
   "target_path": "exact.path[index].field",
   "current_value": "current value",
   "new_value": "corrected value" OR null (for manual_intervention_required),
-  "reasoning": "Explanation of why this correction is proposed OR why manual intervention is needed",
-  "llm_confidence": 0.0-1.0,
+  "reasoning": "<text>",
+  "llm_confidence": <number>,
+  "confidence_rationale": "<text>",
   "additional_updates": [
     {{
       "target_path": "path.to.reference",
@@ -398,10 +508,38 @@ OUTPUT FORMAT (JSON):
   ]
 }}
 
-FIELD NOTE - llm_confidence:
-- This is YOUR OWN self-assessment of how confident you are that this correction is correct.
-- Use a value between 0.0 and 1.0 (1.0 = very confident, 0.0 = very unsure).
-- If action == "manual_intervention_required", set llm_confidence to 0.0.
+LANGUAGE (important):
+- The VALUES of "reasoning" and "confidence_rationale" must be written in GERMAN — the
+  reviewer is German. Write natural German prose.
+- Do NOT copy these instructions into the values. Write the actual content.
+- All other fields (action, target_path, values) stay technical and unchanged.
+
+FIELD NOTE - llm_confidence (BE STRICT AND HONEST — a human reviews this):
+This is your calibrated estimate that the proposed VALUE IS CORRECT — not that the JSON is
+well-formed. Use the FULL scale. Do not anchor on one comfortable number.
+
+BAND A (0.90-1.00) — the correct value is DIRECTLY READABLE from the supplied data.
+   Example: the articleId is invalid, but the demand's own demandId is 'D122873_001' and the
+   pattern D{{articleId}}_{{sequence}} is confirmed by other records → articleId = 122873 is
+   directly derivable. You can point at the evidence.
+BAND B (0.70-0.89) — the value follows a pattern that SEVERAL comparable records confirm
+   consistently, but the exact value itself is not in the data.
+BAND C (0.40-0.69) — you INVENT or EXTRAPOLATE a value that cannot be verified in the data
+   (e.g. incrementing a sequence number to make an ID unique, guessing times from neighbours),
+   OR several candidates are equally plausible.
+BAND D (0.10-0.39) — essentially a guess.
+0.0 — action == "manual_intervention_required".
+
+HARD RULES:
+- An ID you MADE UP (counted up, constructed) and cannot find in the data is BAND C:
+  llm_confidence MUST NOT exceed 0.69, no matter how plausible the pattern looks.
+- Re-read your own reasoning before answering. If it contains an inconsistency (e.g. you name
+  one articleId but build the ID from another), lower the confidence and fix the value.
+- A WRONG value with HIGH confidence is the worst possible outcome. An honest low value
+  costs nothing — a human will look at it either way.
+- "confidence_rationale": start with the band letter (A/B/C/D), then name the concrete
+  evidence, in German. Example: "Band A: articleId 122873 ist direkt aus der demandId
+  'D122873_001' ablesbar, das Muster ist durch D122873_002/_003 bestaetigt."
 """
     
     # Make API call
@@ -502,6 +640,21 @@ def main():
           f"(entity={correction_proposal.get('target_entity_type')}, "
           f"id={correction_proposal.get('target_entity_id')}, "
           f"guard_supported={correction_proposal.get('identity_check_supported')})")
+
+    # AP4.5: groundedness needs snapshot-data.json, which only exists here (the score was
+    # first computed inside generate_correction_with_llm without it). Compute it now and
+    # RECOMPUTE confidence_score with the real signal.
+    grounded, grounded_reason = compute_value_grounded(
+        correction_proposal, snapshot_data_for_identity
+    )
+    correction_proposal["value_grounded"] = grounded
+    correction_proposal["value_grounded_reason"] = grounded_reason
+    correction_proposal["confidence_score"] = compute_confidence_score(
+        correction_proposal, snapshot_data_for_identity
+    )
+    print(f"- Value grounded: {grounded} ({grounded_reason})")
+    print(f"- Confidence Score: {correction_proposal['confidence_score']} "
+          f"(= 0.5*{correction_proposal.get('llm_confidence')} + 0.3*{grounded} + 0.2*0)")
     
     # AP3.6b-2: the authoritative error_type comes from the reliable [validate_*] tag
     # (tag_error_type, produced in identify_error_llm since AP3.6b-1), not from the

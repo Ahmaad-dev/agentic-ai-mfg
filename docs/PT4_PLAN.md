@@ -42,11 +42,20 @@ Real data structure note: the correction proposal is nested inside a wrapper
 (`iteration`, `snapshot_id`, `original_error`, `error_analyzed`, `correction_proposal`).
 New fields go INTO `correction_proposal`, not the wrapper.
 
-Confidence formula:
-confidence = 0.5 * llm_self_estimate      (LLM returns 0..1 in an extended prompt)
-+ 0.3 * schema_valid           (1 if schema validation passed, else 0)
+Confidence formula (REVISED 2026-07-11, user decision — see PROJECT_LOG "AP4.5"):
+confidence = 0.5 * llm_self_estimate      (LLM returns 0..1 in an extended prompt, calibrated
+                                           against an A–D rubric)
++ 0.3 * value_grounded         (1 if the proposed value is PROVABLE from the snapshot data,
+                                else 0 — deterministic check, see compute_value_grounded)
 + 0.2 * memory_support         (AP7; 0 for now)
 Special case: action == "manual_intervention_required" → confidence = 0.0
+
+Why the middle term changed: it used to be `schema_valid`, which is ALWAYS 1 — the proposal is
+validated against the Pydantic model immediately after being built, so the term was tautological
+and the score collapsed to a near-constant 0.775 (measured: 7 of 8 proposals). Worse, the LLM's
+self-estimate cannot tell "I read this value from the data" from "I made it up": it rated an
+INVENTED de-duplication ID at 0.9 in exactly the case where it was wrong. `value_grounded` is the
+deterministic signal that separates the two. `schema_valid` is still recorded as its own field.
 ### Sub-packages
 - [ ] **AP1.1 — Extend schema**
   File: `demo/smart-planning/runtime/correction_models.py`

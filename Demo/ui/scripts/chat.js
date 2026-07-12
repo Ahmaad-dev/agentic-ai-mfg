@@ -7,7 +7,19 @@ const chatContainer = document.getElementById('chatContainer');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const micBtn = document.getElementById('micBtn');
-const sessionId = 'session_' + Date.now();
+
+/**
+ * AP4.6 — Chat-Sessions.
+ *
+ * Vorher: `const sessionId = 'session_' + Date.now()` — bei JEDEM Seitenaufruf eine neue
+ * Session. Ein Wechsel ins Review Board und zurück war damit ein neuer Chat, der Verlauf war
+ * weg (obwohl er seit AP2 in der DB stand, nur nie zurückgelesen wurde).
+ *
+ * Jetzt ist `sessionId` die DB-Id der Session. Sie kommt aus ?session=<id>, sonst aus dem
+ * localStorage, sonst wird eine neue angelegt. Der Verlauf wird beim Laden aus der DB geholt.
+ */
+const SESSION_STORAGE_KEY = 'pt4.activeSessionId';
+let sessionId = null;
 let isFirstMessage = true;
 let isRecording = false;
 let recognizer = null;
@@ -47,6 +59,14 @@ function autoResize(textarea) {
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
 }
+
+/**
+ * Mehrzeiliges Eingabefeld: die Textarea wächst mit dem Inhalt.
+ *
+ * autoResize() gab es schon, wurde aber NUR aus der Spracherkennung heraus aufgerufen —
+ * beim Tippen passierte nichts, das Feld blieb einzeilig (feste height: 24px im CSS).
+ */
+userInput.addEventListener('input', () => autoResize(userInput));
 
 /**
  * Enter-Taste zum Senden abfangen (Shift+Enter für Zeilenumbruch)
@@ -162,6 +182,10 @@ async function sendMessage(retryCount = 0) {
         } else {
             addMessage(data.response, 'agent', data.agent);
         }
+
+        // Sidebar auffrischen: ein frischer Chat bekommt jetzt erst seinen Titel (= erste
+        // Nachricht) und taucht damit überhaupt in der Liste auf.
+        if (window.AppShell) window.AppShell.refreshSessions(sessionId);
 
     } catch (error) {
         clearTimeout(coldStartTimer);
@@ -518,7 +542,130 @@ userInput.focus();
 document.addEventListener('DOMContentLoaded', () => {
     userInput.setAttribute('aria-label', 'Nachricht eingeben');
     sendBtn.setAttribute('aria-label', 'Nachricht senden');
-    
+
     // Initialize Speech Recognition
     initializeSpeechRecognition();
 });
+
+
+// =============================================================================
+// AP4.6 — Session-Verwaltung (Verlauf überlebt Seitenwechsel und Serverneustart)
+// =============================================================================
+
+/** Alle Nachrichten aus dem Chatfenster entfernen und zurück in den Willkommens-Zustand. */
+function resetChatView() {
+    chatContainer.innerHTML = '';
+    document.body.classList.remove('chat-started');
+    isFirstMessage = true;
+}
+
+/** Den Chat in den "läuft bereits"-Zustand versetzen (Welcome-Screen weg). */
+function enterChatMode() {
+    document.body.classList.add('chat-started');
+    isFirstMessage = false;
+}
+
+/** Eine neue Session anlegen und in sie wechseln. */
+async function startNewSession() {
+    const res = await fetch(`${API_CONFIG.baseURL}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+    });
+    if (!res.ok) throw new Error(`Session konnte nicht angelegt werden (HTTP ${res.status})`);
+    const data = await res.json();
+    setActiveSession(data.session_id);
+    resetChatView();
+    if (window.AppShell) window.AppShell.refreshSessions(data.session_id);
+    userInput.focus();
+    return data.session_id;
+}
+
+function setActiveSession(id) {
+    sessionId = String(id);
+    localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+    if (window.AppShell) window.AppShell.setActiveSession(id);
+    // Die Session-Id in der URL halten, damit ein Reload denselben Chat zeigt.
+    const url = new URL(window.location.href);
+    url.searchParams.set('session', sessionId);
+    url.searchParams.delete('new');
+    window.history.replaceState({}, '', url);
+}
+
+/** Den Verlauf einer Session aus der DB holen und rendern. */
+async function loadSessionMessages(id) {
+    const res = await fetch(`${API_CONFIG.baseURL}/api/sessions/${id}/messages`, {
+        headers: { Accept: 'application/json' },
+    });
+    if (res.status === 404) return false;          // Session existiert nicht (mehr)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const messages = await res.json();
+    resetChatView();
+    if (!messages.length) return true;
+
+    enterChatMode();
+    messages.forEach(m => {
+        // addMessage() kennt genau zwei Sender: 'user' und 'agent'.
+        addMessage(m.content, m.role === 'user' ? 'user' : 'agent',
+                   m.role === 'user' ? null : (m.agent_name || null));
+    });
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    return true;
+}
+
+/** In eine andere Session wechseln (Klick in der Sidebar) — ohne Seiten-Reload. */
+async function switchToSession(id) {
+    if (String(id) === String(sessionId)) return;
+    try {
+        const ok = await loadSessionMessages(id);
+        if (!ok) return;
+        setActiveSession(id);
+    } catch (err) {
+        console.error('[Sessions] Wechsel fehlgeschlagen:', err);
+    }
+}
+
+/**
+ * Startzustand bestimmen:
+ *   ?new=1        -> neue Session
+ *   ?session=<id> -> diese Session öffnen (Deep-Link aus der Sidebar)
+ *   localStorage  -> die zuletzt benutzte Session fortsetzen
+ *   sonst         -> neue Session
+ */
+async function initSession() {
+    const params = new URLSearchParams(window.location.search);
+    const wantsNew = params.get('new') === '1';
+    const fromUrl = params.get('session');
+    const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+
+    try {
+        if (wantsNew) {
+            await startNewSession();
+            return;
+        }
+        const candidate = fromUrl || stored;
+        if (candidate) {
+            const ok = await loadSessionMessages(candidate);
+            if (ok) {
+                setActiveSession(candidate);
+                return;
+            }
+            // Session gibt es nicht mehr -> sauber neu anfangen
+            localStorage.removeItem(SESSION_STORAGE_KEY);
+        }
+        await startNewSession();
+    } catch (err) {
+        console.error('[Sessions] Initialisierung fehlgeschlagen:', err);
+        // Fallback: Chat bleibt benutzbar, das Backend legt dann selbst eine Session an.
+        sessionId = stored || 'default';
+    }
+}
+
+// Die Sidebar (shell.js) delegiert ihre Klicks hierher.
+if (window.AppShell) {
+    window.AppShell.onSelectSession = switchToSession;
+    window.AppShell.onNewChat = () => startNewSession().catch(e => console.error(e));
+}
+
+document.addEventListener('DOMContentLoaded', initSession);

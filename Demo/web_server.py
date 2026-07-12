@@ -87,9 +87,30 @@ _COST_PER_1K_TOKENS: float = float(os.getenv("COST_PER_1K_TOKENS", "0.005"))  # 
 
 
 def _get_db_session_id(chat_session_id, snapshot_id=None):
-    """Lazily create a DB session row for a web chat session. Never breaks chat."""
+    """
+    Resolve the web chat-session id to a DB session id. Never breaks chat.
+
+    AP4.6: the frontend now sends the DB session id itself (an integer as string), so a chat
+    survives a page reload and a server restart. A numeric id that exists in the DB is used
+    as-is. Anything else keeps the old lazy-create behaviour (backwards compatible with
+    'default' and the old 'session_<timestamp>' ids).
+    """
     if chat_session_id in db_session_ids:
         return db_session_ids[chat_session_id]
+
+    # Numeric id -> an existing DB session (the AP4.6 case).
+    try:
+        numeric = int(str(chat_session_id))
+    except (TypeError, ValueError):
+        numeric = None
+    if numeric is not None:
+        try:
+            if db_repo.session_exists(numeric):
+                db_session_ids[chat_session_id] = numeric
+                return numeric
+        except Exception as e:
+            logger.warning(f"DB: could not look up session {numeric}: {e}")
+
     try:
         db_id = db_repo.create_session(snapshot_id=snapshot_id, user_ref=str(chat_session_id))
         db_session_ids[chat_session_id] = db_id
@@ -183,9 +204,30 @@ def initialize_system():
 
 
 def get_session_history(session_id: str):
-    """Hole oder erstelle Chat-Historie für eine Session"""
+    """
+    Hole oder erstelle Chat-Historie für eine Session.
+
+    AP4.6: Der In-Memory-Cache ist nicht mehr die Quelle der Wahrheit. Ist eine Session dort
+    nicht bekannt (Serverneustart, oder der Nutzer wechselt zurück in einen alten Chat), wird
+    die Historie aus der DB nachgeladen — sonst antwortet der Agent ohne jeden Kontext,
+    obwohl der Verlauf längst persistiert ist. DB-Fehler brechen den Chat nie.
+    """
     if session_id not in chat_sessions:
-        chat_sessions[session_id] = []
+        history = []
+        db_sid = _get_db_session_id(session_id)
+        if db_sid is not None:
+            try:
+                history = [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in db_repo.get_messages_as_dicts(db_sid)
+                ]
+                if history:
+                    logger.info(
+                        f"Session {session_id}: {len(history)} Nachrichten aus der DB geladen"
+                    )
+            except Exception as e:
+                logger.warning(f"DB: could not load history for session {session_id}: {e}")
+        chat_sessions[session_id] = history
     return chat_sessions[session_id]
 
 
@@ -328,6 +370,47 @@ def clear_session():
     except Exception as e:
         logger.error(f"Fehler beim Löschen: {str(e)}", exc_info=True)
         return jsonify({'error': f'Fehler: {str(e)}'}), 500
+
+
+# --------------------------------------------------------------------------- #
+# AP4.6 — Chat-Sessions aus der DB (die Nachrichten liegen seit AP2 dort, wurden
+# aber nie zurueckgelesen: jeder Seitenaufruf erzeugte eine neue Session und der
+# Verlauf war verloren).
+# --------------------------------------------------------------------------- #
+@app.route('/api/sessions', methods=['GET'])
+def list_sessions():
+    """Alle Chat-Sessions mit Inhalt, neueste Aktivitaet zuerst."""
+    try:
+        return jsonify(db_repo.list_sessions_as_dicts()), 200
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Sessions: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sessions', methods=['POST'])
+def create_chat_session():
+    """Neue Chat-Session anlegen und ihre DB-Id zurueckgeben."""
+    try:
+        new_id = db_repo.create_session(user_ref="web")
+        chat_sessions[str(new_id)] = []
+        db_session_ids[str(new_id)] = new_id
+        logger.info(f"Neue Chat-Session angelegt: {new_id}")
+        return jsonify({'session_id': new_id}), 201
+    except Exception as e:
+        logger.error(f"Fehler beim Anlegen der Session: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sessions/<int:session_id>/messages', methods=['GET'])
+def get_session_messages(session_id: int):
+    """Vollstaendiger Verlauf einer Session (zum Wiederherstellen im UI)."""
+    try:
+        if not db_repo.session_exists(session_id):
+            return jsonify({'error': 'Session not found', 'session_id': session_id}), 404
+        return jsonify(db_repo.get_messages_as_dicts(session_id)), 200
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Nachrichten: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

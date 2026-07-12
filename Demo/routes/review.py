@@ -35,14 +35,24 @@ Any new caller of the apply path must go through `_apply_after_review`, never st
 `SPAgent.execute_pipeline`.
 =============================================================================
 """
+import copy
 import datetime as _dt
+import json
 import logging
+import re
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
+from requests.exceptions import ConnectionError, Timeout
 
 from db import repository as repo
-from routes.apply_prep import check_identity_guard, check_iteration_is_latest, prepare_proposal_for_apply
+from routes.apply_prep import (
+    ProposalApplyBlockedError,
+    check_identity_guard,
+    check_iteration_is_latest,
+    get_storage,
+    prepare_proposal_for_apply,
+)
 from routes.server_validation import trigger_server_validation
 
 logger = logging.getLogger(__name__)
@@ -111,6 +121,99 @@ def get_proposal(proposal_id: str):
     return jsonify(proposal), 200
 
 
+#: Wie viele Zeilen vor/nach der Fehlerstelle gezeigt werden.
+_CONTEXT_LINES = 7
+
+
+@review_bp.get("/proposals/<proposal_id>/context")
+def get_proposal_context(proposal_id: str):
+    """
+    AP4.7: Die betroffene Stelle 1:1 aus `snapshot-data.json`, mit echten Zeilennummern.
+
+    Warum das nötig ist: Der Reviewer sieht bisher nur `target_path` und den alten Wert. Um
+    eine Korrektur wirklich beurteilen zu können, muss er den Datensatz IM ORIGINAL sehen —
+    also den umgebenden JSON-Ausschnitt, so wie er auf der Platte steht.
+
+    Wie die Zeilennummern exakt werden: Der Zielwert wird in einer Kopie durch eine
+    eindeutige Marke ersetzt und das GANZE Dokument gedumpt. Alles VOR dem Ziel ist in beiden
+    Dumps zeichengleich, die Zeile der Marke ist damit exakt die Zeile des Zielfelds im
+    echten Dump. (Einfach mitzählen ginge nicht: derselbe Schlüsselname kommt tausendfach vor.)
+    """
+    proposal = repo.get_proposal_as_dict(proposal_id)
+    if proposal is None:
+        return jsonify({"error": "Proposal not found", "proposal_id": proposal_id}), 404
+
+    snapshot_id = proposal["snapshot_id"]
+    target_path = proposal.get("target_path") or ""
+
+    m = re.match(r"^(\w+)\[(\d+)\]\.(\w+)", target_path)
+    if not m:
+        return jsonify({
+            "error": "Kein auswertbarer target_path",
+            "target_path": target_path,
+        }), 422
+    array_name, index, field = m.group(1), int(m.group(2)), m.group(3)
+
+    data = get_storage().load_json(f"{snapshot_id}/snapshot-data.json")
+    if not isinstance(data, dict):
+        return jsonify({"error": "snapshot-data.json nicht lesbar",
+                        "snapshot_id": snapshot_id}), 404
+
+    arr = data.get(array_name)
+    if not isinstance(arr, list) or index >= len(arr) or not isinstance(arr[index], dict):
+        return jsonify({"error": f"Position {array_name}[{index}] existiert nicht"}), 404
+    if field not in arr[index]:
+        return jsonify({"error": f"Feld {field!r} fehlt in {array_name}[{index}]"}), 404
+
+    dump = lambda d: json.dumps(d, indent=2, ensure_ascii=False).splitlines()
+    original_lines = dump(data)
+
+    marker = "__PT4_TARGET_a7f3__"
+    probe = copy.deepcopy(data)
+    probe[array_name][index][field] = marker
+    probe_lines = dump(probe)
+
+    hit = next((i for i, line in enumerate(probe_lines) if marker in line), None)
+    if hit is None:
+        return jsonify({"error": "Zielzeile nicht auffindbar"}), 500
+
+    # Der Wert kann mehrzeilig sein (Array/Objekt) -> die ganze Spanne markieren.
+    end = hit
+    opener = original_lines[hit].rstrip()
+    if opener.endswith("[") or opener.endswith("{"):
+        depth = 0
+        for i in range(hit, len(original_lines)):
+            depth += original_lines[i].count("[") + original_lines[i].count("{")
+            depth -= original_lines[i].count("]") + original_lines[i].count("}")
+            if depth <= 0:
+                end = i
+                break
+
+    start = max(0, hit - _CONTEXT_LINES)
+    stop = min(len(original_lines), end + 1 + _CONTEXT_LINES)
+
+    # Sehr lange Wertblöcke (z. B. 13 workItemConfigs) nicht ungebremst ausrollen.
+    MAX_SPAN = 40
+    truncated = False
+    if end - hit > MAX_SPAN:
+        end = hit + MAX_SPAN
+        stop = end + 1
+        truncated = True
+
+    return jsonify({
+        "file": "snapshot-data.json",
+        "snapshot_id": snapshot_id,
+        "target_path": target_path,
+        "error_line": hit + 1,
+        "lines": [
+            {"n": i + 1, "text": original_lines[i], "highlight": hit <= i <= end}
+            for i in range(start, stop)
+        ],
+        "truncated": truncated,
+        "total_lines": len(original_lines),
+    }), 200
+
+
 # --------------------------------------------------------------------------- #
 # AP3.2 — decision endpoints
 # --------------------------------------------------------------------------- #
@@ -134,7 +237,7 @@ def _validate_now(agent, snapshot_id):
     return validation, trigger
 
 
-def _apply_after_review(proposal_id: str, decision: str, final_value=None):
+def _apply_after_review(proposal_id: str, decision: str, final_value=None, comment=None):
     """
     Apply a reviewed correction to the real snapshot data. Returns (apply_dict, http_status).
 
@@ -211,10 +314,52 @@ def _apply_after_review(proposal_id: str, decision: str, final_value=None):
     # errors_before: the server clears validation on upload and does not recompute on its
     # own (AP3.3d finding), so a plain read is a false green. Trigger the job and read the
     # PRE-apply state here — without this baseline we cannot show the correction did anything.
-    before_validation, _ = _validate_now(agent, snapshot_id)
+    try:
+        before_validation, _ = _validate_now(agent, snapshot_id)
+    except (ConnectionError, Timeout) as exc:
+        revalidation_result = {
+            "pipeline": APPLY_PIPELINE,
+            "pipeline_success": False,
+            "value_source": None,
+            "value_applied": None,
+            "errors_before": None,
+            "errors_after": None,
+            "validation": None,
+            "validation_trigger": None,
+            "failed_at": "pre_apply_validation",
+            "error": str(exc),
+        }
+        repo.set_latest_review_revalidation(proposal_id, revalidation_result)
+        logger.error("[review] Pre-apply validation failed for %s: %s", proposal_id, exc)
+        return (
+            {
+                "error": "Apply pipeline failed",
+                "proposal_id": proposal_id,
+                "status": state["status"],
+                "applied": False,
+                "failed_at": revalidation_result["failed_at"],
+                "detail": revalidation_result["error"],
+                "revalidation_result": revalidation_result,
+            },
+            502,
+        )
     errors_before = before_validation.get("errors") if before_validation else None
 
-    preparation = prepare_proposal_for_apply(proposal_id, decision, final_value)
+    try:
+        preparation = prepare_proposal_for_apply(proposal_id, decision, final_value, comment)
+    except ProposalApplyBlockedError as exc:
+        logger.warning("[review] Apply blocked for %s: %s", proposal_id, exc)
+        return (
+            {
+                "error": "Proposal cannot be applied",
+                "proposal_id": proposal_id,
+                "status": state["status"],
+                "applied": False,
+                "action": exc.action,
+                "reason": str(exc),
+            },
+            422,
+        )
 
     logger.warning(
         "[review] APPLYING reviewed correction to snapshot %s (proposal=%s, decision=%s, "
@@ -234,7 +379,35 @@ def _apply_after_review(proposal_id: str, decision: str, final_value=None):
     validation = None
     trigger = None
     if pipeline_ok:
-        validation, trigger = _validate_now(agent, snapshot_id)
+        try:
+            validation, trigger = _validate_now(agent, snapshot_id)
+        except (ConnectionError, Timeout) as exc:
+            revalidation_result = {
+                "pipeline": APPLY_PIPELINE,
+                "pipeline_success": pipeline_ok,
+                "value_source": preparation["value_source"],
+                "value_applied": preparation["value_to_apply"],
+                "errors_before": errors_before,
+                "errors_after": None,
+                "validation": None,
+                "validation_trigger": None,
+                "failed_at": "post_apply_validation",
+                "error": str(exc),
+            }
+            repo.set_latest_review_revalidation(proposal_id, revalidation_result)
+            logger.error("[review] Post-apply validation failed for %s: %s", proposal_id, exc)
+            return (
+                {
+                    "error": "Apply pipeline failed",
+                    "proposal_id": proposal_id,
+                    "status": state["status"],
+                    "applied": False,
+                    "failed_at": revalidation_result["failed_at"],
+                    "detail": revalidation_result["error"],
+                    "revalidation_result": revalidation_result,
+                },
+                502,
+            )
 
     revalidation_result = {
         "pipeline": APPLY_PIPELINE,
@@ -330,7 +503,7 @@ def _decide(proposal_id: str, decision: str, final_value=None, comment=None):
 
     # approve / modify: the decision is committed; now actually apply it. If the apply
     # fails or is blocked, the decision stands and the proposal keeps its decided status.
-    apply_result, apply_status = _apply_after_review(proposal_id, decision, final_value)
+    apply_result, apply_status = _apply_after_review(proposal_id, decision, final_value, comment)
     body.update(apply_result)
     return jsonify(body), apply_status
 

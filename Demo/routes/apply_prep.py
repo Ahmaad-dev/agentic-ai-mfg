@@ -35,12 +35,23 @@ from runtime_storage import get_storage, get_latest_iteration_number  # noqa: E4
 #: The file `apply_correction.py` reads the value to apply from.
 PROPOSAL_FILE = "llm_correction_proposal.json"
 
+#: Actions whose main correction consumes `correction_proposal.new_value`.
+NEW_VALUE_ACTIONS = frozenset(("update_field", "add_to_array"))
+
 #: Untouched copy of the AI's original proposal, written before a human `modify`
 #: overwrites `new_value`, so the file-level audit trail keeps the AI value.
 AI_ORIGINAL_FILE = "llm_correction_proposal.ai_original.json"
 
 #: proposal_id scheme from AP1.4: {snapshot_id}__iteration-{N}
 _PROPOSAL_ID_RE = re.compile(r"^(?P<snapshot_id>.+)__iteration-(?P<iteration>\d+)$")
+
+
+class ProposalApplyBlockedError(ValueError):
+    """A reviewed proposal is structurally unsafe to apply automatically."""
+
+    def __init__(self, message: str, action: Optional[str]) -> None:
+        super().__init__(message)
+        self.action = action
 
 
 def parse_proposal_id(proposal_id: str) -> Tuple[str, int]:
@@ -220,17 +231,48 @@ def check_identity_guard(proposal_id: str) -> Tuple[bool, str, dict]:
 # --------------------------------------------------------------------------- #
 # Function 2 — prepare the proposal file for application
 # --------------------------------------------------------------------------- #
+def _human_override_reasoning(ai_value: Any, final_value: Any, ai_reasoning: Optional[str],
+                              comment: Optional[str]) -> str:
+    """
+    Build the reasoning text for a human-modified proposal.
+
+    Why this is needed: `reasoning` is what every downstream consumer reads to learn WHY
+    the snapshot looks the way it does — `metadata.txt` (written by apply_correction),
+    `generate_audit_report.py`, the chat agent, later the dashboard and the memory system.
+    Leaving the AI's text in place after a human overruled the value makes all of them
+    report the AI's REJECTED solution as if it were the applied one. (Observed: the chat
+    agent told the reviewer his own correction had been 'D210446_003' — the AI value.)
+
+    The AI text is not destroyed: it stays verbatim at the end of this string, in the
+    `ai_reasoning` field, and in llm_correction_proposal.ai_original.json.
+    """
+    parts = [
+        f"[MENSCHLICHE KORREKTUR] Der Reviewer hat den KI-Vorschlag {ai_value!r} verworfen "
+        f"und stattdessen {final_value!r} angewendet."
+    ]
+    if comment and str(comment).strip():
+        parts.append(f"Begründung des Reviewers: {str(comment).strip()}")
+    if ai_reasoning:
+        parts.append(f"Ursprüngliche (verworfene) KI-Begründung: {ai_reasoning}")
+    return " ".join(parts)
+
+
 def prepare_proposal_for_apply(
     proposal_id: str,
     decision: str,
     final_value: Any = None,
+    comment: Optional[str] = None,
 ) -> dict:
     """
     Make `llm_correction_proposal.json` carry the value that should actually be applied.
 
     approve → the file already holds the AI value; `new_value` is left untouched.
     modify  → the AI original is copied aside first, then `new_value` is replaced by the
-              human `final_value`.
+              human `final_value` AND `reasoning` is rewritten to state the human override,
+              so that no downstream consumer reports the rejected AI solution as the applied
+              one. The AI text is preserved in `ai_reasoning`.
+
+    `comment` is the reviewer's comment; it is woven into the new reasoning when present.
 
     Applies nothing to snapshot data. Returns a dict describing exactly what happened
     (never a silent no-op).
@@ -253,6 +295,20 @@ def prepare_proposal_for_apply(
     correction_proposal = document.get("correction_proposal")
     if not isinstance(correction_proposal, dict):
         raise ValueError(f"{proposal_path} has no 'correction_proposal' object")
+
+    action = correction_proposal.get("action")
+    if action == "manual_intervention_required":
+        raise ProposalApplyBlockedError(
+            "Action 'manual_intervention_required' applies no snapshot change and cannot "
+            "be marked as applied",
+            action,
+        )
+    if decision == "modify" and action not in NEW_VALUE_ACTIONS:
+        raise ProposalApplyBlockedError(
+            f"Modify is not supported for action {action!r}: the apply tool does not consume "
+            "the human value from 'new_value' for this action",
+            action,
+        )
 
     ai_value = correction_proposal.get("new_value")
     result = {
@@ -285,10 +341,23 @@ def prepare_proposal_for_apply(
         # proposed — one confidence score and one approval cover the whole proposal
         # (PT4 scope guardrail), so there is no per-update human override.
         correction_proposal["new_value"] = final_value
+
+        # The reasoning must follow the value, otherwise metadata.txt / audit report /
+        # chat agent keep telling the AI's rejected story (see _human_override_reasoning).
+        ai_reasoning = correction_proposal.get("reasoning")
+        if ai_reasoning and "ai_reasoning" not in correction_proposal:
+            correction_proposal["ai_reasoning"] = ai_reasoning  # first AI text wins
+        correction_proposal["reasoning"] = _human_override_reasoning(
+            ai_value, final_value, correction_proposal.get("ai_reasoning"), comment
+        )
+        if comment and str(comment).strip():
+            correction_proposal["human_comment"] = str(comment).strip()
+
         correction_proposal["value_source"] = "human_modify"
         result["value_source"] = "human_modify"
         result["value_to_apply"] = final_value
         result["value_changed"] = True
+        result["reasoning_rewritten"] = True
 
     storage.save_json(proposal_path, document)
     result["changed_files"].append(proposal_path)

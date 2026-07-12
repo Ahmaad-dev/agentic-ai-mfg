@@ -61,9 +61,29 @@ class ChatAgent(BaseAgent):
             metadata = context["last_snapshot_metadata"]
             snapshot_context = f"\n\nVERFÜGBARE SNAPSHOT-INFORMATIONEN (nutze diese um User-Fragen zu beantworten):\n{json.dumps(metadata, indent=2, ensure_ascii=False)}"
             logger.info(f"[{self.name} Agent] Snapshot-Metadaten verfügbar für Kontext")
-        
+
+        # Menschliche Review-Entscheidungen. Sie fallen im Review Board, nicht im Chat, und
+        # stehen deshalb NICHT in der Historie. Die Historie enthält nur den KI-VORSCHLAG.
+        # Ohne diesen Block nennt der Chat den verworfenen KI-Wert als "die Lösung".
+        review_context = ""
+        if context and context.get("review_decisions"):
+            import json
+            decisions = context["review_decisions"]
+            review_context = (
+                "\n\nMENSCHLICHE REVIEW-ENTSCHEIDUNGEN zu diesem Snapshot "
+                "(MASSGEBLICH — sie überschreiben alles, was weiter oben in der Historie als "
+                "KI-Vorschlag steht):\n"
+                f"{json.dumps(decisions, indent=2, ensure_ascii=False, default=str)}\n"
+                "REGELN: `applied_value` ist der Wert, der TATSÄCHLICH angewendet wurde. "
+                "`ai_value` ist der ursprüngliche KI-Vorschlag — bei decision='modify' wurde er "
+                "vom Menschen VERWORFEN und darf NICHT als Lösung genannt werden. "
+                "Bei Fragen wie 'was war die Lösung?' immer `applied_value` nennen und, wenn "
+                "abweichend, erwähnen, dass der Mensch den KI-Vorschlag korrigiert hat."
+            )
+            logger.info(f"[{self.name} Agent] {len(decisions)} Review-Entscheidung(en) im Kontext")
+
         messages = [
-            {"role": "system", "content": self.system_prompt + snapshot_context},
+            {"role": "system", "content": self.system_prompt + snapshot_context + review_context},
             *chat_history,
             {"role": "user", "content": user_input}
         ]

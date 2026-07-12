@@ -22,6 +22,8 @@
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+    <!-- Die Sidebar wird von shell.js hier eingehängt (vor .app-main) -->
+    <div class="app-main">
     <!-- Welcome Screen -->
     <div class="welcome-screen" id="welcomeScreen" role="banner">
         <div class="welcome-logo" aria-hidden="true">
@@ -84,16 +86,20 @@
             </button>
         </div>
     </div>
+    </div><!-- /.app-main -->
 
     <!-- Scripts -->
     <!-- Azure Speech SDK -->
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
-    
+
     <!-- Marked.js (local) -->
     <script src="scripts/marked.min.js"></script>
-    
+
     <!-- API Config (muss VOR chat.js geladen werden) -->
     <script src="scripts/config.js"></script>
+
+    <!-- App-Shell (Sidebar, Sessions) — vor chat.js, damit window.AppShell bereitsteht -->
+    <script src="scripts/shell.js"></script>
 
     <!-- Main Application Script -->
     <script src="scripts/chat.js"></script>
