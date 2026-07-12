@@ -1301,3 +1301,41 @@ im Plan („deterministische Config und Logik bleiben Code; nur Domänen-Heurist
 - **Konfliktprüfung zwischen Regelkarten** → **out of scope für PT4, verschoben nach AP-X** (Nutzer).
 - **`action`-Semantik** (`update_field` für eine ganze Array-Befüllung statt Array-Replace) → **später**
   (Nutzer). Kosmetisch; ein Eingriff dort berührt den Apply-Pfad, Risiko ohne aktuellen Nutzen.
+
+---
+
+### 2026-07-12 — Repo-Housekeeping als Aufgabe erfasst (AP-E.5)
+- **Status:** Bestandsaufnahme done, Ausführung offen (steht als **AP-E.5** im Plan)
+- **Changed files:** `docs/PT4_PLAN.md` (neues Sub-Paket AP-E.5)
+- **Befund — und der ist anders als erwartet:** **Das Repo ist NICHT vermüllt.** Kein toter Testcode,
+  keine Wegwerf-Skripte, kein `zArchive`, keine verwaisten Fixtures. Alle temporären Dateien, die ich
+  während der Arbeit erzeugt habe, lagen im Scratchpad ausserhalb des Repos. Es gibt sehr wenig echten
+  Abfall.
+- **Das eigentliche Hygieneproblem ist ein anderes: nichts ist committet.** 16 geänderte Dateien +
+  7 unversionierte Pfade — die **gesamte AP7-Arbeit** liegt uncommittet auf der Platte
+  (`demo/skills/`, `demo/memory/`, `demo/eval/`, `demo/rulebook_loader.py`, die Alembic-Migration,
+  `docs/AP7-0_rule_inventory.md`). Ein Rechnerausfall kostet alles. Das ist dringender als jedes
+  Löschen.
+- **Echter Abfall (sicher):** `demo/__pycache__/` (9 Verzeichnisse im Projektcode, regenerierbar),
+  `demo/config/` (**leeres Verzeichnis**), `demo/logs/` (35 Logdateien Jan–Jul, gitignored, werden
+  von nichts gelesen).
+- **Zu klären:** `docs/Zwischenstand-Abschluss-AP2.md` (Statusbild vom 08.07., überholt durch
+  PROJECT_LOG + Plan) und `docs/AP5_AP6_DOCUMENTATION.md` (unversioniert, überschneidet sich mit dem
+  Log — eigenständiges Abgabedokument oder Dublette?).
+- **FINGER-WEG-LISTE (der wichtigste Teil dieses Eintrags).** Beim Aufräumen ist die Gefahr nicht der
+  Müll, sondern das, was wie Müll AUSSIEHT:
+  1. **`llm-validation-fix-rules.md`** — die alte 936-Zeilen-Datei mit den bekannten Schwächen. Sieht
+     aus wie ein Überbleibsel, ist aber der **„Vorher"-Arm der A/B-Messung**. **Wer sie löscht,
+     vernichtet die Baseline.** Byte-Identität ist Teil der DoD von AP7.0.
+  2. **`smart-planning/Snapshots/`** — gitignored, aber der Audit-Trail: die
+     `iteration-*/llm_identify_response.json` werden von der Memory-Legacy-Reparatur gelesen, und die
+     Ground Truth des AP-E-Testkatalogs steht in den `metadata.txt`. (Zudem gilt die
+     Grundsatzentscheidung: das System darf nie Snapshots löschen.)
+  3. **`demo/main.py`** — sieht nach totem CLI aus, wird aber von `agents/rag_agent.py` importiert
+     (`main.LOGGING_CONFIG`).
+  4. **`identify_snapshot.py`** — sein `error_type` ist tot (AP3.6a), die Datei macht aber die
+     eigentliche Suche.
+  5. **`alembic/versions/`** (5 Migrationen) — DB-Historie, nie aufräumen.
+- **Open / next:** AP-E.5 ausführen (A: committen · B: löschen · C: entscheiden · D: nachweislich
+  unangetastet lassen). Reihenfolge: **erst committen, dann löschen** — sonst ist ein Fehlgriff
+  nicht rückholbar.

@@ -442,6 +442,46 @@ a demonstrably correct proposal from then on.
   ≥80 % accepted-without-modification vs. the M0 baseline; calibration curve pinned to ONE
   confidence generation (`?formula_version=v2` — see AP6); memory case shown live in the review UI.
 
+- [ ] **AP-E.5 — Repo-Housekeeping** *(vor der Abgabe / dem Demo-Tag)*
+  Bestandsaufnahme 2026-07-12. **Wichtig vorweg: das Repo ist NICHT vermüllt.** Kein toter Test-
+  code, keine Wegwerf-Skripte, kein `zArchive`. Es gibt wenig echten Abfall — dafür ein echtes
+  Hygieneproblem und, wichtiger, eine Reihe von Dateien, die man beim Aufräumen NICHT anfassen darf.
+
+  **A) Das eigentliche Problem: nichts ist committet.**
+  16 geänderte Dateien + 7 unversionierte Pfade — die **komplette AP7-Arbeit** liegt uncommittet:
+  `demo/skills/`, `demo/memory/`, `demo/eval/`, `demo/rulebook_loader.py`, die Alembic-Migration
+  `2f47c4554ece`, `docs/AP7-0_rule_inventory.md`. Ein Rechnerausfall kostet alles. **Das ist die
+  dringendste Aufräum-Aufgabe, nicht das Löschen von Dateien.**
+
+  **B) Echter Abfall (löschen ist sicher):**
+  - `demo/__pycache__/` (9 Verzeichnisse im Projektcode) — regenerierbar, bereits gitignored.
+  - `demo/config/` — **leeres Verzeichnis**.
+  - `demo/logs/` — 35 Logdateien von Januar bis heute (`chat_2026*.log`, `web_2026*.log`),
+    gitignored. Nichts davon wird gelesen.
+
+  **C) Zu klären (Nutzerentscheidung, KEIN Blindlöschen):**
+  - `docs/Zwischenstand-Abschluss-AP2.md` — Statusbild vom 2026-07-08, inhaltlich überholt durch
+    `PROJECT_LOG.md` + diesen Plan. Löschen oder als historisches Dokument behalten?
+  - `docs/AP5_AP6_DOCUMENTATION.md` — unversioniert, überschneidet sich mit dem PROJECT_LOG.
+    Ist das ein eigenständiges Abgabe-Dokument? Dann behalten und committen.
+
+  **D) FINGER WEG — sieht aus wie Müll, ist aber tragend:**
+  - **`demo/smart-planning/runtime/runtime-files/llm-validation-fix-rules.md`** — die alte
+    936-Zeilen-Datei mit ihren bekannten Schwächen (3× duplizierter Block usw.). Sie sieht aus wie
+    ein Überbleibsel und ist **der „Vorher"-Arm der A/B-Messung** (`RULEBOOK_MODE=monolith`).
+    **Wer sie löscht, vernichtet die Baseline.** Byte-Identität ist Teil der DoD.
+  - **`demo/smart-planning/Snapshots/`** — 13 Snapshots. Gitignored, aber der Audit-Trail: die
+    `iteration-*/llm_identify_response.json` werden von der Memory-Legacy-Reparatur gelesen, und
+    die Ground Truth des AP-E-Testkatalogs steht in den `metadata.txt`.
+  - **`demo/main.py`** — sieht nach totem CLI aus, wird aber von `agents/rag_agent.py` importiert
+    (`main.LOGGING_CONFIG`).
+  - **`demo/smart-planning/runtime/identify_snapshot.py`** — sein `error_type` ist tot (AP3.6a),
+    die Datei selbst macht aber die eigentliche Suche.
+  - `demo/alembic/versions/` (5 Migrationen) — die Historie der DB. Nie aufräumen.
+
+  DoD: alles committet; B) gelöscht; C) entschieden; D) nachweislich unangetastet
+  (`RULEBOOK_MODE=monolith` liefert weiterhin die byte-identische Originaldatei).
+
 ### Backlog (non-blocking)
 - **Conflict check between rule cards.** A drop-in card can override an established rule with
   nobody reviewing code — it happened: the user's `umgang-mit-zwei-falsche-nummern.md` overruled
