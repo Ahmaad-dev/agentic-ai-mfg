@@ -29,9 +29,14 @@ from memory import retrieval as mem_retrieval
 from correction_models import CorrectionProposal
 
 #: Stamped on every proposal. AP6 must not mix generations in one calibration curve:
-#: "v1" = memory_support hard-wired to 0 (max reachable score 0.8).
+#: "v0" = middle term was `schema_valid` (always 1) -> score a near-constant ~0.775.
+#: "v1" = value_grounded real, but memory_support hard-wired to 0 (score capped at 0.8).
 #: "v2" = memory_support graded from the episodic case base (AP7.2).
-CONFIDENCE_FORMULA_VERSION = "v2"
+#: "v3" = value_grounded is CLASS-AWARE (AP-E.0). The weights are unchanged, but the SEMANTICS
+#:        of the 0.3 term changed: for identity fields it now asks "unique + follows the array's
+#:        ID convention?" instead of "already in the data?" (which was backwards — a new unique
+#:        ID must NOT be in the data). v2 and v3 scores are therefore NOT comparable.
+CONFIDENCE_FORMULA_VERSION = "v3"
 
 # Load environment variables (aus demo-Verzeichnis)
 # Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
@@ -315,26 +320,71 @@ REFERENCE_FIELD_TARGET = {
 }
 
 
+def _id_shape(value):
+    """
+    Strukturelle Signatur einer ID: Ziffern -> '9', Grossbuchstaben -> 'A', Kleinbuchstaben ->
+    'a', alles andere bleibt. 'D100079_001' -> 'A999999_999'.
+
+    So laesst sich deterministisch pruefen, ob eine NEU gebildete ID der Konvention des Arrays
+    folgt — ohne die Konvention hart zu kodieren.
+    """
+    out = []
+    for ch in str(value):
+        if ch.isdigit():
+            out.append("9")
+        elif ch.isalpha():
+            out.append("A" if ch.isupper() else "a")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _dominant_id_shape(objects, field, exclude_index=None):
+    """Die haeufigste ID-Form im Array (Mehrheitskonvention) + wie eindeutig sie ist."""
+    shapes = {}
+    for i, o in enumerate(objects or []):
+        if i == exclude_index or not isinstance(o, dict):
+            continue
+        v = o.get(field)
+        if v in (None, ""):
+            continue
+        s = _id_shape(v)
+        shapes[s] = shapes.get(s, 0) + 1
+    if not shapes:
+        return None, 0, 0
+    total = sum(shapes.values())
+    top, count = max(shapes.items(), key=lambda kv: kv[1])
+    return top, count, total
+
+
 def compute_value_grounded(correction_proposal, snapshot_data):
     """
-    Deterministic answer to: **is the proposed value provable from the data, or invented?**
+    Deterministic answer to: **is the proposed value verifiably admissible, or invented?**
 
     This exists because the LLM's own `llm_confidence` is not calibratable by prompt alone.
-    Measured: it rated an ID it had INVENTED (counted a sequence number up) as "Band A / 0.9"
-    — in exactly the case where it was wrong and the human had to overrule it. A self-estimate
-    cannot distinguish "I read this from the data" from "I made this up"; this check can.
+    Measured: it rated an ID it had INVENTED as "Band A / 0.9" — in exactly the case where it
+    was wrong and a human had to overrule it. A self-estimate cannot distinguish "I read this
+    from the data" from "I made this up"; this check can.
 
     Returns (grounded: float 0.0|1.0, reason: str). Conservative: anything it cannot verify
     counts as NOT grounded, so an unverifiable value never inflates the score.
 
-    Grounded (1.0) means one of:
-      a) the value is a REFERENCE and the referenced object exists (e.g. demands[i].articleId
-         set to 122873 and articles[] really contains articleId 122873), or
-      b) the identical value/structure already exists on the SAME field of another object of
-         the same array (e.g. a workItemConfigs array copied from a comparable article).
-    Not grounded (0.0) means the value cannot be found anywhere — it was constructed. The
-    classic case is de-duplicating an ID by incrementing a counter: the new ID must be unique,
-    so by definition it is NOT in the data. That is precisely a value a human should look at.
+    --- AP-E.0 (2026-07-12): the check is now CLASS-AWARE. ---
+    The old version asked ONE question for every field: "does this value already exist in the
+    data?" For an identity field that question is not merely hard, it is BACKWARDS: a new unique
+    ID must NOT exist in the data — if it did, it would be a duplicate, i.e. wrong. So the term
+    was structurally unsatisfiable for the entire ID-generation class, which is PT4's vertical
+    slice. Measured on the test catalog: two EXACTLY correct ID proposals scored 0.0 while a
+    WRONG density value scored 1.0 — the signal was anti-correlated with correctness.
+
+    The right question depends on the field class:
+      * IDENTITY field  -> is the value UNIQUE in its array AND does it follow the array's
+                           established ID convention (majority shape)?
+      * REFERENCE field -> does the referenced object exist?
+      * VALUE field     -> does the identical value already sit on the same field of a
+                           comparable object? (For list fields: is it a member of such a list?)
+      * add_to_array    -> apply the identity + reference checks to the NEW object.
+    All four are exactly as deterministic as the old single test.
     """
     if correction_proposal.get("action") == "manual_intervention_required":
         return 0.0, "manual_intervention_required"
@@ -346,30 +396,23 @@ def compute_value_grounded(correction_proposal, snapshot_data):
         return 0.0, "snapshot-data nicht ladbar (konservativ: nicht belegt)"
 
     array_name, index, field = _parse_target_entity(correction_proposal.get("target_path"))
-    if not array_name or not field:
+    if not array_name:
         return 0.0, "target_path nicht auswertbar"
 
-    # (a0) IDENTITY field of its own array (demands[i].demandId, articles[i].articleId, ...).
-    # Such a value must be UNIQUE, so it can never be "read from the data" — it is always
-    # constructed. Grounded is therefore 0 by definition. And if the proposed value DOES
-    # already exist elsewhere, the proposal is not merely unproven, it is provably wrong:
-    # applying it would create a NEW duplicate. (Measured: the LLM proposed 'D210451_002'
-    # for a de-duplication — an ID that already sat on demands[768].)
-    if ENTITY_IDENTITY_FIELD.get(array_name) == field:
-        objects = snapshot_data.get(array_name)
-        if isinstance(objects, list):
-            for i, o in enumerate(objects):
-                if i != index and isinstance(o, dict) and o.get(field) == new_value:
-                    return 0.0, (
-                        f"KOLLISION: {array_name}[{i}].{field} traegt bereits {new_value!r} "
-                        f"— dieser Vorschlag wuerde ein neues Duplikat erzeugen"
-                    )
-        return 0.0, (
-            f"Identitaetsfeld: {new_value!r} muss neu/eindeutig sein und ist daher "
-            f"grundsaetzlich nicht aus den Daten belegbar (konstruiert)"
-        )
+    # (a0) add_to_array: target_path is the bare array name and new_value is a whole object.
+    # Verify the NEW object the same way: its identity must be unique + conventional, and its
+    # references must exist.
+    if field is None and index is None and isinstance(new_value, dict):
+        return _grounded_for_new_object(array_name, new_value, snapshot_data)
 
-    # (a) Reference field -> the referenced object must exist.
+    if not field:
+        return 0.0, "target_path nicht auswertbar (kein Feld)"
+
+    # (a1) IDENTITY field of its own array (demands[i].demandId, ...).
+    if ENTITY_IDENTITY_FIELD.get(array_name) == field:
+        return _grounded_for_identity(array_name, field, index, new_value, snapshot_data)
+
+    # (a2) Reference field -> the referenced object must exist.
     ref = REFERENCE_FIELD_TARGET.get(field)
     if ref and ref[0] != array_name:
         ref_array, ref_id_field = ref
@@ -390,11 +433,20 @@ def compute_value_grounded(correction_proposal, snapshot_data):
         return 0.0, f"Array '{array_name}' fehlt in snapshot-data"
 
     for i, o in enumerate(objects):
-        if i == index or not isinstance(o, dict):
+        if i == index or not isinstance(o, dict) or field not in o:
             continue
-        if field in o and o[field] == new_value:
+        other = o[field]
+        if other == new_value:
             return 1.0, (
                 f"Wert existiert bereits in {array_name}[{i}].{field} "
+                f"— aus vergleichbarem Datensatz uebernommen"
+            )
+        # Nested list field (equipment[i].predecessors[0]): the proposal writes ONE element of
+        # a list. Comparing the scalar against the whole list never matches — check membership.
+        # (Old behaviour: always 0.0 here, i.e. every list-element fix was called "invented".)
+        if isinstance(other, list) and not isinstance(new_value, (list, dict)) and new_value in other:
+            return 1.0, (
+                f"Wert ist belegtes Element von {array_name}[{i}].{field} "
                 f"— aus vergleichbarem Datensatz uebernommen"
             )
 
@@ -402,6 +454,72 @@ def compute_value_grounded(correction_proposal, snapshot_data):
         f"Wert nicht in den Daten auffindbar — konstruiert/erfunden "
         f"(kein {array_name}[*].{field} mit diesem Wert)"
     )
+
+
+def _grounded_for_identity(array_name, field, index, new_value, snapshot_data):
+    """
+    Identitaetsfeld: der Wert MUSS neu sein. „Steht er schon in den Daten?" ist hier die falsche
+    Frage — die richtige ist: **ist er eindeutig UND folgt er der Konvention des Arrays?**
+    """
+    objects = snapshot_data.get(array_name)
+    if not isinstance(objects, list):
+        return 0.0, f"Array '{array_name}' fehlt in snapshot-data"
+
+    # 1. Eindeutigkeit — eine Kollision ist nicht nur „unbelegt", sondern nachweislich FALSCH:
+    #    das Anwenden wuerde ein NEUES Duplikat erzeugen. (Gemessen: die KI schlug bei einer
+    #    De-Duplizierung 'D210451_002' vor — eine ID, die bereits auf demands[768] sass.)
+    for i, o in enumerate(objects):
+        if i != index and isinstance(o, dict) and o.get(field) == new_value:
+            return 0.0, (
+                f"KOLLISION: {array_name}[{i}].{field} traegt bereits {new_value!r} "
+                f"— dieser Vorschlag wuerde ein neues Duplikat erzeugen"
+            )
+
+    # 2. Konvention — folgt die neue ID der Mehrheitsform der bestehenden IDs?
+    shape, count, total = _dominant_id_shape(objects, field, exclude_index=index)
+    if not shape:
+        return 0.0, f"keine bestehenden {field}-Werte, Konvention nicht pruefbar (konservativ)"
+
+    proposed = _id_shape(new_value)
+    if proposed == shape:
+        return 1.0, (
+            f"Identitaetsfeld belegt: {new_value!r} ist im Array eindeutig UND folgt der "
+            f"Konvention {shape} ({count} von {total} bestehenden {field} haben diese Form)"
+        )
+    return 0.0, (
+        f"Identitaetsfeld NICHT belegt: {new_value!r} hat die Form {proposed}, die Konvention "
+        f"des Arrays ist aber {shape} ({count} von {total}) — Wert weicht vom Muster ab"
+    )
+
+
+def _grounded_for_new_object(array_name, obj, snapshot_data):
+    """add_to_array: das NEUE Objekt pruefen — Identitaet eindeutig+konventionell, Referenzen echt."""
+    id_field = ENTITY_IDENTITY_FIELD.get(array_name)
+    if not id_field:
+        return 0.0, f"add_to_array auf '{array_name}': kein bekanntes Identitaetsfeld (konservativ)"
+    if id_field not in obj:
+        return 0.0, f"add_to_array: neues Objekt hat kein {id_field}"
+
+    grounded, reason = _grounded_for_identity(
+        array_name, id_field, None, obj[id_field], snapshot_data
+    )
+    if grounded < 1.0:
+        return 0.0, f"add_to_array: {reason}"
+
+    # Alle Referenzfelder des neuen Objekts muessen auf existierende Objekte zeigen.
+    for fld, (ref_array, ref_id) in REFERENCE_FIELD_TARGET.items():
+        if fld not in obj or ref_array == array_name:
+            continue
+        objects = snapshot_data.get(ref_array)
+        if not isinstance(objects, list):
+            return 0.0, f"add_to_array: Referenz-Array '{ref_array}' fehlt"
+        if not any(isinstance(o, dict) and str(o.get(ref_id)) == str(obj[fld]) for o in objects):
+            return 0.0, (
+                f"add_to_array: Referenz NICHT belegt — kein {ref_array} mit "
+                f"{ref_id}={obj[fld]}"
+            )
+
+    return 1.0, f"add_to_array: neues {id_field} ist eindeutig+konventionell, Referenzen belegt"
 
 
 def compute_confidence_score(correction_proposal, snapshot_data=None):

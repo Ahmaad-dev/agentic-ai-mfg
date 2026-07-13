@@ -45,8 +45,18 @@ New fields go INTO `correction_proposal`, not the wrapper.
 Confidence formula (REVISED 2026-07-11, user decision — see PROJECT_LOG "AP4.5"):
 confidence = 0.5 * llm_self_estimate      (LLM returns 0..1 in an extended prompt, calibrated
                                            against an A–D rubric)
-+ 0.3 * value_grounded         (1 if the proposed value is PROVABLE from the snapshot data,
-                                else 0 — deterministic check, see compute_value_grounded)
++ 0.3 * value_grounded         (1 if the proposed value is deterministically VERIFIABLE for its
+                                field class, else 0 — CLASS-AWARE since AP-E.0:
+                                  identity field  -> unique in its array AND follows the array's
+                                                     ID convention (majority shape)
+                                  reference field -> the referenced object exists
+                                  value field     -> the identical value sits on the same field
+                                                     of a comparable object (or is a member of
+                                                     such a list)
+                                  add_to_array    -> the same checks applied to the NEW object
+                                Before AP-E.0 the check asked "is the value already in the data?"
+                                for EVERY field — backwards for identity fields, where a new
+                                unique ID must NOT be in the data. See compute_value_grounded.)
 + 0.2 * memory_support         (0 until AP7.2; then GRADED 0 / 0.5 / 1.0 from the episodic
                                 layer only — see "memory_support — binding definition" in AP7.
                                 It must NOT be derived from the rulebook cards: those load on
@@ -373,7 +383,11 @@ a demonstrably correct proposal from then on.
 
 ### Sub-packages
 
-- [ ] **AP-E.0 — BLOCKER: `value_grounded` is inverted for the ID class**  *(do this FIRST)*
+- [x] **AP-E.0 — BLOCKER: `value_grounded` is inverted for the ID class**  *(FIXED 2026-07-12)*
+  **Result:** the two exactly-correct ID proposals moved 0.44 → 0.74 and 0.445 → 0.745; the wrong
+  density value stayed at 0.475. Correlation with correctness restored. Formula generation bumped
+  to **v3** (weights unchanged, but the SEMANTICS of the 0.3 term changed — v2 and v3 scores are
+  NOT comparable, so AP6 must pin one generation).
   Files: `demo/smart-planning/runtime/generate_correction_llm.py` (`compute_value_grounded`).
   Belongs to the confidence formula (AP1/AP4.5), surfaced by the AP7 test catalog.
 

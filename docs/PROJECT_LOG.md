@@ -1339,3 +1339,31 @@ im Plan („deterministische Config und Logik bleiben Code; nur Domänen-Heurist
 - **Open / next:** AP-E.5 ausführen (A: committen · B: löschen · C: entscheiden · D: nachweislich
   unangetastet lassen). Reihenfolge: **erst committen, dann löschen** — sonst ist ein Fehlgriff
   nicht rückholbar.
+
+---
+
+### 2026-07-12 — AP-E.0 BLOCKER behoben: `value_grounded` ist jetzt klassenabhängig (Formel v3)
+- **Status:** done — der einzige echte Blocker von AP-E ist weg
+- **Changed files:** `demo/smart-planning/runtime/generate_correction_llm.py` (`compute_value_grounded` + zwei neue Helfer `_id_shape` / `_dominant_id_shape` + `_grounded_for_identity` / `_grounded_for_new_object`, `CONFIDENCE_FORMULA_VERSION` → `v3`), `docs/PT4_PLAN.md` (Formel + AP-E.0 abgehakt). DB: die 7 offenen Vorschläge neu bewertet.
+- **Der Defekt.** `value_grounded` stellte für JEDES Feld dieselbe Frage: *„steht dieser Wert schon in den Daten?"* Für ein **Identitätsfeld** ist das nicht bloss schwer, es ist **verkehrt herum**: Eine neue eindeutige ID DARF nicht in den Daten stehen — täte sie es, wäre sie ein Duplikat, also falsch. Der 0.3-Term war damit für die gesamte ID-Generierungsklasse **strukturell unerfüllbar** — ausgerechnet den vertikalen Slice von PT4.
+- **Der Fix — die Frage hängt jetzt an der Feldklasse (alle vier gleich deterministisch wie vorher):**
+  - **Identitätsfeld** → ist der Wert im Array **eindeutig** UND folgt er der **ID-Konvention** des Arrays? Die Konvention wird nicht hart kodiert, sondern aus den Daten abgeleitet: `_id_shape()` bildet eine Strukturform (Ziffern→`9`, Grossbuchstaben→`A`, …), `_dominant_id_shape()` nimmt die Mehrheitsform. `D100079_001` → `A999999_999`. Eine **Kollision** bleibt 0.0 und ist nicht nur „unbelegt", sondern nachweislich falsch.
+  - **Referenzfeld** → existiert das referenzierte Objekt? (unverändert)
+  - **Wertfeld** → sitzt derselbe Wert auf demselben Feld eines vergleichbaren Objekts? (unverändert)
+  - **`add_to_array`** → dieselben Prüfungen auf das NEUE Objekt (Identität eindeutig+konventionell, alle Referenzfelder belegt). *Vorher gar nicht abgedeckt.*
+  - **Verschachtelte Listenpfade** (`equipment[i].predecessors[0]`) → Mitgliedschaftsprüfung statt Skalar-gegen-Liste-Vergleich. *Vorher lieferte das **immer** „erfunden".*
+  (Die letzten beiden waren als eigene Tech-Debt-Punkte geführt; sie gehören fachlich hierher und sind mit erledigt.)
+- **Verifikation gegen die Ground Truth des Testkatalogs — die Anti-Korrelation ist umgedreht:**
+
+  | Fall | KI-Vorschlag | Ground Truth | korrekt? | conf. **vorher** | conf. **jetzt** |
+  |---|---|---|---|---|---|
+  | `e92b3ee2` UNIQUE_IDS (leer) | `D100079_001` | `D100079_001` | **JA, exakt** | 0.445 | **0.745** |
+  | `7d2de27d` UNIQUE_IDS (Duplikat) | `D100099_002` | `D100099_002` | **JA, exakt** | 0.44 | **0.74** |
+  | `17a7c1e3` DEMAND_ARTICLE_IDS | `100112` | `100112` | JA, exakt | 0.775 | 0.775 |
+  | `84f5af97` DENSITY_VALUES | `2` | `1.017` | **NEIN** | 0.475 | **0.475** |
+
+  Richtige Vorschläge liegen jetzt bei **0.74–0.775**, der falsche bei **0.475**. Die Begründung bleibt lesbar: *„Identitätsfeld belegt: `D100079_001` ist im Array eindeutig UND folgt der Konvention `A999999_999` (1394 von 1394)"*.
+  Zusätzlich unit-getestet: `add_to_array` (konventionell+Referenz belegt → 1.0; Kollision → 0.0; tote Referenz → 0.0), verschachtelte Liste (belegtes Element → 1.0; unbekannter Wert → 0.0), Konventionsbruch (`NEUE_ID_XYZ` → 0.0).
+- **Formel-Generation auf `v3` erhöht.** Die **Gewichte** sind unverändert, aber die **Semantik** des 0.3-Terms hat sich geändert — v2- und v3-Scores sind **nicht vergleichbar**. Die 7 offenen Vorschläge wurden **neu bewertet, nicht neu generiert** (kein LLM-Call, kein Vorschlags-Drift): DB-Stand jetzt `v0=6` (historisch, entschieden), `v3=7`. AP6 muss weiterhin eine Generation pinnen (`?formula_version=v3`).
+- **VERBLEIBENDE GRENZE, ehrlich benannt:** Für **Wertfelder** misst `value_grounded` weiterhin *Herkunft*, nicht *Korrektheit*. Ein Wert, den die KI vom **falschen Nachbarn** abgeschrieben hat, ist „belegt" (1.0) und trotzdem falsch — genau so passiert, als die KI `1.14` statt `1.017` vorschlug. Das ist keine Regression, sondern die Natur des Signals: es trennt „aus den Daten abgeleitet" von „erfunden", nicht „richtig" von „falsch". Für die ID-Klasse ist es jetzt sehr wohl ein Korrektheits-Signal (eindeutig + konventionell ist dort fast hinreichend). In der Auswertung so ausweisen.
+- **Open / next:** AP-E.2 Seeding — der Nutzer bereitet **10 Snapshots mit möglichst realen Fehlern** vor (Spezifikation besprochen: **Wiederholungen desselben Musters statt 10 verschiedener Typen**, sonst lässt sich das Gedächtnis nicht demonstrieren; Ground Truth je Fall notieren; ein Fehler pro Snapshot). Zusammen mit den 7 bestehenden ergibt das **17 Entscheidungen** → der `SMALL_SAMPLE`-Flag (n<10) fällt, Kalibrierungskurve wird möglich.
