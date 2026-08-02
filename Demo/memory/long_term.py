@@ -60,6 +60,17 @@ def _revalidation_ok(revalidation_result) -> Optional[bool]:
     return None
 
 
+def entity_key(entity_type, entity_id) -> Optional[str]:
+    """
+    Canonical entity identity for memory, e.g. 'articles:100005'. Type+id together so a value
+    corrected for article 100005 can never be recalled for demand 100005 (different objects).
+    None when the identity is unknown (then retrieval degrades to pattern-only, as before).
+    """
+    if entity_id in (None, ""):
+        return None
+    return f"{entity_type or '?'}:{entity_id}"
+
+
 def record_case(proposal_id: str) -> Optional[int]:
     """
     Write the memory case for one decided proposal. Returns the memory_item id, or None if
@@ -78,6 +89,9 @@ def record_case(proposal_id: str) -> Optional[int]:
     return repo.add_memory_item(
         error_type=proposal.get("error_type"),
         affected_entity_pattern=entity_pattern(proposal.get("target_path")),
+        affected_entity_id=entity_key(
+            proposal.get("target_entity_type"), proposal.get("target_entity_id")
+        ),
         suggested_value=proposal.get("suggested_value"),
         final_value=review.get("final_value"),
         decision=review.get("decision"),
@@ -148,6 +162,21 @@ def repair_legacy_error_types() -> list[dict]:
     return repaired
 
 
+def backfill_entity_ids() -> list[dict]:
+    """One-off: populate affected_entity_id on existing cases from their source proposal."""
+    filled = []
+    for item in repo.list_memory_items_as_dicts():
+        if item.get("affected_entity_id"):
+            continue
+        proposal = repo.get_proposal_as_dict(item.get("source_proposal_id") or "")
+        if not proposal:
+            continue
+        key = entity_key(proposal.get("target_entity_type"), proposal.get("target_entity_id"))
+        if key and repo.set_memory_item_entity_id(item["id"], key):
+            filled.append({"id": item["id"], "entity_id": key})
+    return filled
+
+
 def backfill() -> dict:
     """One-off: turn every review that already exists into a case. Safe to run repeatedly."""
     written, skipped = [], []
@@ -158,5 +187,6 @@ def backfill() -> dict:
         "written": written,
         "skipped": skipped,
         "repaired": repair_legacy_error_types(),
+        "entity_ids": backfill_entity_ids(),
         "total": repo.count_memory_items(),
     }

@@ -14,7 +14,14 @@ Source: `llm-validation-fix-rules.md` lines 286–363 (inventory rules R7, R8).
 
 **Problem:** Mehrere Einträge haben dieselbe ID.
 
-**Strategie:** Nummeriere Duplikate mit `_1`, `_2`, `_3`, etc.
+**Strategie:** Zuerst alle Objekte mit der gemeldeten ID vergleichen. Nicht pauschal
+durchnummerieren und nicht automatisch einen Datensatz löschen.
+
+1. Exakten Datensatz aus einem bestätigten gültigen Snapshot suchen.
+2. Prüfen, ob die Objekte echte Dubletten oder verschiedene Business-Objekte mit kollidierter ID sind.
+3. Nur die nachweislich falsche ID auf ihren belegten Originalwert korrigieren.
+4. Abhängige Referenzen nur dann mitändern, wenn eindeutig feststeht, welchem Objekt sie gehören.
+5. Sind beide Objekte verschieden und die richtige Zuordnung ist nicht belegbar: keine ID erfinden.
 
 **Beispiel:**
 ```json
@@ -24,15 +31,10 @@ Source: `llm-validation-fix-rules.md` lines 286–363 (inventory rules R7, R8).
     {"articleId": "SPE_AR_fil"}
 ]
 
-// Nachher
+// Nachher – nur wenn eine autoritative Quelle die zweite ID als SPE_AR_fil_2 belegt
 "articles": [
     {"articleId": "SPE_AR_fil"},
     {"articleId": "SPE_AR_fil_2"}
-]
-// oder
-"articles": [
-    {"articleId": "SPE_AR_fil_2"},
-    {"articleId": "SPE_AR_fil_1"}
 ]
 ```
 
@@ -59,7 +61,8 @@ Source: `llm-validation-fix-rules.md` lines 286–363 (inventory rules R7, R8).
 
 **Problem:** ID-Feld ist leer (`null`, `""`, oder nur Whitespace).
 
-**Strategie:** Generiere ID basierend auf erkanntem Pattern.
+**Strategie:** ID aus einer autoritativen Quelle wiederherstellen. Ein Array-Pattern darf nur
+verwendet werden, wenn es deterministisch ist und genau eine freie ID ergibt.
 
 **Pattern-Erkennung:**
 1. Analysiere existierende IDs im gleichen Array
@@ -87,4 +90,6 @@ Source: `llm-validation-fix-rules.md` lines 286–363 (inventory rules R7, R8).
 ]
 ```
 
-**Fallback:** Wenn kein Pattern erkennbar, nutze `{PREFIX}_{TIMESTAMP}` oder `{PREFIX}_NEW_{INDEX}`.
+**Kein Fallback mit Timestamp, Zufall oder `NEW`:** Solche IDs sind nicht fachlich belegt,
+nicht reproduzierbar und können externe Referenzen brechen. Wenn kein eindeutiger Wert aus
+Historie, Business-Schlüssel oder lückenloser Sequenz ableitbar ist, Korrektur als mehrdeutig melden.

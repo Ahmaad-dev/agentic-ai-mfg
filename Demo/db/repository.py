@@ -536,6 +536,7 @@ def list_memory_items_as_dicts() -> list[dict]:
                 "id": r.id,
                 "error_type": r.error_type,
                 "affected_entity_pattern": r.affected_entity_pattern,
+                "affected_entity_id": r.affected_entity_id,
                 "suggested_value": r.suggested_value,
                 "final_value": r.final_value,
                 "decision": r.decision,
@@ -554,6 +555,16 @@ def set_memory_item_error_type(item_id: int, error_type: str) -> bool:
         if row is None:
             return False
         row.error_type = error_type
+        return True
+
+
+def set_memory_item_entity_id(item_id: int, entity_id: str) -> bool:
+    """AP7 (entity-precise): backfill affected_entity_id on an existing case."""
+    with session_scope() as db:
+        row = db.get(models.MemoryItem, item_id)
+        if row is None:
+            return False
+        row.affected_entity_id = entity_id
         return True
 
 

@@ -202,6 +202,11 @@ class MemoryItem(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     error_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     affected_entity_pattern: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # AP7 precision (2026-07-31): the concrete entity the correction targets (e.g. "articles:100005").
+    # For per-entity VALUE fields (density, per-article times, department) the corrected value is
+    # specific to THIS entity — retrieval must match the same entity, not just the pattern, or the
+    # memory would leak one article's density onto a different article (a memory-introduced error).
+    affected_entity_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     suggested_value: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     final_value: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     decision: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)

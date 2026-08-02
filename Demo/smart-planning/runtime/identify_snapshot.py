@@ -76,6 +76,43 @@ def load_config():
         return json.load(f)
 
 
+#: The valid work-item keys (ESAROM domain, KUNDENDOKUMENTATION.md §5.1). Anything in an
+#: equipment.workItems array outside this set is a placeholder/anomaly.
+VALID_WORK_ITEM_KEYS = {
+    "VOAR01", "VOPU01", "WART01", "WART02", "WART03", "WART04",
+    "HE01", "RF01", "RF02", "QS01", "QS02", "BA01", "ABF01", "COMB",
+}
+
+
+def find_equipment_workitem_anomalies(data: Dict, required_key: str = None) -> List[Dict]:
+    """
+    For a `validate_work_item_equipment_availability` error: the required key (e.g. VOAR01) is
+    reported as MISSING because one equipment's workItems entry was replaced by a placeholder.
+    Searching for the PRESENT key is useless (it occurs in hundreds of valid places); the fix is
+    to find the equipment whose workItems holds an ANOMALOUS value (not a valid work-item key)
+    and restore the required key there.
+
+    Returns result dicts with path `equipment[i].workItems[j]`, the anomalous current value, and
+    the required key as the suggested correction.
+    """
+    results = []
+    for i, eq in enumerate(data.get("equipment", []) or []):
+        if not isinstance(eq, dict):
+            continue
+        for j, wi in enumerate(eq.get("workItems", []) or []):
+            if wi not in VALID_WORK_ITEM_KEYS:
+                results.append({
+                    "path": f"equipment[{i}].workItems[{j}]",
+                    "field_name": "workItems",
+                    "value": wi,
+                    "original_object": eq,
+                    "anomaly": True,
+                    "required_key": required_key,
+                    "equipment_key": eq.get("equipmentKey"),
+                })
+    return results
+
+
 def find_empty_arrays(data: Any, search_field: str) -> List[Dict]:
     """Find empty arrays in snapshot data that match the search field name"""
     results = []
@@ -816,6 +853,35 @@ def main():
         print("  python identify_snapshot.py --empty demandId")
         return
     
+    # WORK_ITEM_EQUIPMENT_AVAILABILITY: anchor on the equipment ANOMALY, not the present key.
+    if sys.argv[1] == "--equipment-workitem":
+        required_key = sys.argv[2] if len(sys.argv) > 2 else None
+        search_mode = "equipment_workitem"
+        search_value = required_key
+        snapshot_id, data = load_snapshot_data(snapshot_id_arg)
+        if data is None:
+            return
+        print(f"Snapshot data loaded successfully")
+        print(f"\nSearching equipment.workItems for anomalies (required key: {required_key})...")
+        results = find_equipment_workitem_anomalies(data, required_key)
+        display_results(results, search_value)
+        storage = get_storage()
+        error_type = "EQUIPMENT_WORKITEM_ANOMALY" if results else "NO_RESULTS_FOUND"
+        output = {
+            "snapshot_id": snapshot_id,
+            "search_mode": search_mode,
+            "search_value": search_value,
+            "error_type": error_type,
+            "results_count": len(results),
+            "results": results,
+        }
+        storage.save_json(f"{snapshot_id}/last_search_results.json", output)
+        latest_iter = _get_latest_num(snapshot_id) or 1
+        storage.save_json(f"{snapshot_id}/iteration-{latest_iter}/last_search_results.json", output)
+        print(f"\nError Type: {error_type}")
+        print("Identify tool completed successfully")
+        return
+
     # Check for empty field search mode
     if sys.argv[1] == "--empty":
         if len(sys.argv) < 3:

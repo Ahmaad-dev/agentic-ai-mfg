@@ -4,6 +4,31 @@ Cross-cutting rules: error identification, array_context usage, and the action c
 Error-type specific rules live in the card loaded alongside this file.
 Source: `llm-validation-fix-rules.md` (see `docs/AP7-0_rule_inventory.md`, rules R1–R5, R18–R21).
 
+## Scope: ausschließlich Error-Level korrigieren
+
+- Bearbeite nur Meldungen mit `level: "error"` beziehungsweise einen nachweislich harten
+  Business-Validator-Fehler.
+- Warnungen sind zulässig. Erzeuge für `level: "warning"` keine Mutation, auch wenn der
+  Validatorname ebenfalls auf einer Error-Regelkarte vorkommt.
+- Wenn das Level fehlt, erkenne bekannte Warntexte wie `Equipment without departments`,
+  `Workers with ...`, `Qualifications with fewer than 3 workers`, `Isolated equipment` und
+  `No packaging equipment compatibility data found` als nicht korrekturpflichtig.
+- Validiere nach jeder Korrekturrunde erneut. Erfolg bedeutet: keine Error-Meldung mehr;
+  verbleibende Warnungen verhindern den Erfolg nicht.
+
+## Beweisstandard für jede Mutation
+
+Nutze diese Evidenzreihenfolge:
+
+1. Exakter Datensatz derselben Business-ID aus einem bestätigten gültigen/historischen Snapshot
+2. Eindeutige Referenz im aktuellen Snapshot (existierende IDs, referenzierter Workplan)
+3. Mehrere fachlich gleiche Vergleichsobjekte mit demselben Department und Workplan
+4. Nur bei numerischen Feldern: robuster Gruppenwert, wenn mindestens zwei konsistente Vergleiche vorliegen
+
+Erfinde keine Stammdaten, Berechtigungen, Schichtzeiten, Equipment-Verbindungen oder IDs.
+Bei mehreren gleich plausiblen Kandidaten keine Mutation ausgeben, sondern die Mehrdeutigkeit
+mit den Kandidaten melden. Eine formal valide, aber fachlich erfundene Korrektur gilt als falsch.
+
 ## 0. Error Identification & Prioritization
 
 Diese Regeln gelten für die **Fehler-Analyse** (identify_error_llm.py) - bevor eine Korrektur generiert wird.
@@ -105,8 +130,11 @@ OK: "demandId is empty"
 
 - **false**: Fehler ist trivial/selbsterklärend
   - Einfache Formatierungsfehler
-  - Offensichtliche Fixes (empty string → remove)
-  - Keine Kontextsuche nötig
+  - Der korrekte Zielwert steht bereits eindeutig in einer autoritativen Referenz
+
+Leere Pflichtfelder, unbekannte Referenzen, Duplikate und fehlende Array-Elemente erfordern
+grundsätzlich `should_investigate: true`. Ein leeres Pflichtfeld darf nicht einfach entfernt
+werden; das würde häufig einen Schemafehler erzeugen.
 
 ---
 
@@ -209,10 +237,14 @@ Bevor du aus Nachbar-Einträgen einen Wert ableitest (Median, häufigster Wert, 
 - `target_path` ist nur der Array-Name (z.B. `demands`), NICHT `demands[5]`
 - `new_value` muss ein vollständiges Objekt sein
 - Nutze `array_context` um Format der bestehenden Einträge zu erkennen
+- Erzeuge keine neuen Masterdaten, um eine kaputte Referenz scheinbar gültig zu machen.
+- Verwende `add_to_array` nur, wenn die Existenz und alle Feldwerte des fehlenden Objekts aus
+  einer autoritativen Quelle belegt sind, oder für ein fehlendes Nested-Element wie
+  `workItemConfigs`, das aus einem fachlich gleichen Referenzartikel übernommen wird.
 
 **Beispiel:**
 ```json
-// Fehlender Demand muss hinzugefügt werden
+// Ein nachweislich fehlender Demand wird aus einer autoritativen Quelle wiederhergestellt
 {
   "action": "add_to_array",
   "target_path": "demands",
@@ -228,7 +260,7 @@ Bevor du aus Nachbar-Einträgen einen Wert ableitest (Median, häufigster Wert, 
     "dispatcherGroup": "20",
     "priority": 12
   },
-  "reasoning": "Missing demand entry referenced by customer order. Created based on pattern from existing SPE_EM demands using array_context"
+  "reasoning": "Demand DSPE_EM_004 exists with these exact values in the last confirmed valid snapshot and is restored unchanged."
 }
 ```
 
@@ -310,6 +342,8 @@ Bevor du aus Nachbar-Einträgen einen Wert ableitest (Median, häufigster Wert, 
 
 **Generelle Regel:**
 1. **Prefer update_field** für die meisten Fälle (inkl. Nested-Arrays!)
-2. **Vermeide add_to_array** wenn möglich (suche nach Typos!)
+2. **Vermeide add_to_array** bei Referenzfehlern (suche nach Typos und historischen Werten!)
 3. **Vermeide remove_from_array** (könnte Daten-Verlust bedeuten)
-4. **Bei Unsicherheit**: Nutze update_field
+4. **Bei Unsicherheit**: Keine Änderung erfinden; Kandidaten und fehlende Evidenz melden
+5. **Minimaler Diff**: Nur die zur Error-Behebung erforderlichen Pfade ändern
+6. **Nachkontrolle**: JSON erneut validieren und sicherstellen, dass keine neuen Errors entstanden sind

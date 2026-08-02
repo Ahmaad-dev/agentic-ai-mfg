@@ -1,13 +1,12 @@
 ---
 name: references
-applies_to: [DEMAND_ARTICLE_IDS, EQUIPMENT_PREDECESSOR_REFERENCES, EQUIPMENT_CONNECTIVITY]
+applies_to: [DEMAND_ARTICLE_IDS, EQUIPMENT_PREDECESSOR_REFERENCES]
 description: Ungültige Referenzen (Typo-Korrektur, Duplikat-Filter, funktionale Kohärenz)
 ---
 
 # Card: Invalid / broken references
 
-Tags: `[validate_demand_article_ids]`, `[validate_equipment_predecessor_references]`,
-`[validate_equipment_connectivity]`.
+Tags: `[validate_demand_article_ids]`, `[validate_equipment_predecessor_references]`.
 Source: `llm-validation-fix-rules.md` lines 160–203 and 367–597 (inventory rules R6, R9–R14).
 
 ## Ungültige Referenzen
@@ -87,6 +86,8 @@ ABER WENN VALUE_B NICHT im Array wäre:
 - NOT OK: **Ähnlichkeit allein reicht nicht:** Erst filtern, dann nach Ähnlichkeit sortieren
 - OK: **Duplikat-Check ist PFLICHT:** Bei JEDEM Array-Update, in JEDEM Kontext
 - OK: **Prozess ist universell:** Gilt für Equipment, Articles, WorkItems, etc.
+- Wenn kein einzelner fachlich belegter Kandidat existiert: **nicht raten**. Keine neue
+  Article- oder Equipment-ID anlegen und keine beliebige ähnliche ID wählen.
 
 **Strategie - Typo-Korrektur (universell für alle ID-Typen):**
 1. Analysiere die fehlerhafte ID und erkenne das Pattern
@@ -242,45 +243,8 @@ ABER WENN VALUE_B NICHT im Array wäre:
 
 ---
 
-## KRITISCH: Domain-Intelligence — Packaging Equipment Pattern Analysis
+## Abgrenzung zu Packaging-Referenzen
 
-**Problem**: Leere predecessors in packagingEquipmentCompatibility
-
-**LÖSUNG**: Nutze ID-Nähe-Analyse für Equipment-Pattern:
-
-**Schritt 1: ID-Clustering**
-```json
-// Gegeben: packaging "70409" mit predecessors [""] (leer)
-// Array_context zeigt:
-"items_after": [
-  {"packaging": "70702", "predecessors": ["ABD01", "ABB01"]},      // 2-Equipment-Pattern  
-  {"packaging": "71105", "predecessors": ["AKA03", "AKA02", "AKA01", "AAR01"]},  // 4-Equipment-Pattern
-  {"packaging": "71164", "predecessors": ["ABB01"]},              // 1-Equipment-Pattern
-  {"packaging": "71330", "predecessors": ["BPU01", "APU01", "BPU03"]}  // 3-Equipment-Pattern
-]
-```
-
-**Schritt 2: ID-Pattern-Matching**
-- **70409** vs **71105**: Beide 5-stellige IDs, 70xxx/71xxx Pattern → HOHE ÄHNLICHKEIT
-- **70409** vs **70702**: Beide 70xxx, aber different length/pattern → MITTLERE ÄHNLICHKEIT  
-- **70409** vs **71164**: Different prefix → NIEDRIGE ÄHNLICHKEIT
-
-**Schritt 3: Equipment-Sequence-Priorisierung**
-- **Längere Equipment-Sequenzen bevorzugen**: 4er > 3er > 2er > 1er
-- **Funktional zusammenhängende Chains**: AKA03→AKA02→AKA01→AAR01 ist eine Abfüll-Sequenz
-- **String-Distance ist SEKUNDÄR**: ID-Pattern + Equipment-Sequence-Length ist PRIMARY
-
-**ERGEBNIS für 70409**:
-```json
-// RICHTIG (71105-basiert): 4-Equipment Aromen/Kanister-Sequence
-"predecessors": ["AKA03", "AKA02", "AKA01", "AAR01"]
-
-// FALSCH (70702-basiert): Nur 2-Equipment, andere Funktion  
-"predecessors": ["ABD01", "ABB01"]
-```
-
-**Logik-Template**:
-1. **ID-Pattern-Ähnlichkeit** (Länge, Prefix, Format)
-2. **Equipment-Sequence-Length** (längere = vollständigere Prozesse)  
-3. **Functional Coherence** (Abfüll-Ketten bevorzugen)
-4. **String-Distance** als letztes Kriterium
+Leere `packagingEquipmentCompatibility[].predecessors` nicht aus numerischer Nähe der
+Packaging-ID oder aus der längsten fremden Equipment-Kette ableiten. Packaging-Nummern
+belegen keine Prozessähnlichkeit. Dafür ausschließlich `packaging-references.md` verwenden.

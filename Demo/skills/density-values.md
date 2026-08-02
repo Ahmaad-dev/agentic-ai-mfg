@@ -13,6 +13,17 @@ Source: `llm-validation-fix-rules.md` lines 208–282 (inventory rule R22).
 
 ## KRITISCH: Domain-Intelligence bei array_context
 
+**Evidenzreihenfolge:**
+
+1. Dichte desselben `articleId` aus einem bestätigten gültigen Snapshot
+2. Gleicher Artikelstamm beziehungsweise eindeutig gleiche Produktvariante
+3. Median mehrerer Artikel mit gleichem `departmentId` und `workPlanId`
+
+Nur positive, numerische Vergleichswerte verwenden. `relDensityMin` muss nach dem Fix `> 0`
+sein. Wenn `relDensityMax` vorhanden ist, zusätzlich `relDensityMin <= relDensityMax` prüfen,
+ohne `relDensityMax` unnötig zu verändern. Bei weniger als zwei vergleichbaren Artikeln und
+ohne historischen Treffer keine Dichte erfinden.
+
 **Wenn du array_context nutzt, FILTERE die items_before/items_after intelligent!**
 
 **Für articles Array:**

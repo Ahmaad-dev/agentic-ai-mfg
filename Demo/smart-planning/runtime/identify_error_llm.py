@@ -252,6 +252,12 @@ Schluesselwoertern. Passt keine, gib eine leere Liste zurueck.
     # nothing is overwritten. Always written (None if no tag) for a consistent structure.
     llm_response["tag_error_type"] = derive_error_type_from_message(selected_error.get("message", ""))
 
+    # WORK_ITEM_EQUIPMENT_AVAILABILITY: the message names a MISSING key (e.g. VOAR01) that still
+    # occurs in hundreds of valid places — a plain value search anchors on the wrong spot. Route
+    # to the dedicated equipment-anomaly search instead (finds the placeholder in equipment.workItems).
+    if llm_response.get("tag_error_type") == "WORK_ITEM_EQUIPMENT_AVAILABILITY":
+        llm_response["search_mode"] = "equipment_workitem"
+
     # Prepare full LLM call data for logging
     llm_call_data = {
         "request": {
@@ -302,7 +308,10 @@ def trigger_identify_tool(search_mode, search_value, snapshot_id: str = None):
     # Build command based on search mode
     # Always pass --snapshot-id when available to avoid relying on current_snapshot.txt
     snapshot_args = ["--snapshot-id", snapshot_id] if snapshot_id else []
-    if search_mode == "empty_field":
+    if search_mode == "equipment_workitem":
+        command_args = [sys.executable, str(identify_script)] + snapshot_args + ["--equipment-workitem", str(search_value)]
+        print(f"\nTriggering identify tool in EQUIPMENT-WORKITEM mode for required key: {search_value}")
+    elif search_mode == "empty_field":
         command_args = [sys.executable, str(identify_script)] + snapshot_args + ["--empty", search_value]
         print(f"\nTriggering identify tool in EMPTY FIELD mode for: {search_value}")
     else:

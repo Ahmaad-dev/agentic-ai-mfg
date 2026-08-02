@@ -36,7 +36,7 @@ from correction_models import CorrectionProposal
 #:        of the 0.3 term changed: for identity fields it now asks "unique + follows the array's
 #:        ID convention?" instead of "already in the data?" (which was backwards — a new unique
 #:        ID must NOT be in the data). v2 and v3 scores are therefore NOT comparable.
-CONFIDENCE_FORMULA_VERSION = "v3"
+CONFIDENCE_FORMULA_VERSION = "v4"  # v4: floor 0.9 when memory_support==1.0 (human-confirmed value)
 
 # Load environment variables (aus demo-Verzeichnis)
 # Lade .env aus dem demo-Verzeichnis (2 Ebenen höher)
@@ -221,6 +221,13 @@ ENTITY_IDENTITY_FIELD = {
     "articles": "articleId",
     "demands": "demandId",
     "workPlans": "workPlanId",
+    # AP7/#7 (2026-08-01): special entities — the unique id validated by validate_unique_ids
+    # (KUNDENDOKUMENTATION §3.2.1). MUST stay identical to memory/retrieval.ENTITY_IDENTITY_FIELD
+    # so the guard's target_entity_id and the memory entity key agree.
+    "equipment": "equipmentId",
+    "workerAvailability": "workerId",
+    "workerQualifications": "workerId",
+    "packagingEquipmentCompatibility": "packaging",
 }
 
 
@@ -565,6 +572,16 @@ def compute_confidence_score(correction_proposal, snapshot_data=None):
     memory_support = max(0.0, min(1.0, float(memory_support)))
 
     score = 0.5 * llm_self + 0.3 * grounded + 0.2 * memory_support
+
+    # AP-E (v4, 2026-07-31): a value a human EXPLICITLY confirmed for THIS entity (memory_support
+    # == 1.0) is the strongest signal we have — stronger than data-groundedness or the model's
+    # self-estimate. For a destroyed value (density 1.017, HE01 times) value_grounded is 0 BY
+    # CONSTRUCTION (the value is not in the snapshot anymore), which used to drag a human-confirmed
+    # value BELOW a plausible guess (0.675 < 0.75) — the confidence was inverted for exactly the
+    # case that should be most certain. Floor the score so a human-confirmed value ranks high.
+    if memory_support >= 1.0:
+        score = max(score, 0.9)
+
     return round(score, 3)
 
 
@@ -786,14 +803,20 @@ def main():
     # as evidence. The target path is already known here (search_results[0].path), so the entity
     # pattern — the retrieval key — can be built before the proposal exists.
     # Defensive: any memory failure degrades to "no evidence", never breaks the pipeline.
-    similar_cases, memory_evidence = [], ""
+    similar_cases, memory_evidence, current_entity = [], "", None
     try:
         results = search_results.get("results") or []
         query_path = results[0].get("path") if results else None
-        similar_cases = mem_retrieval.find_similar_cases(query_path, rulebook_error_type)
+        original_object = results[0].get("original_object") if results else None
+        # AP7 (entity-precise): resolve the CURRENT error's entity (e.g. articles:100005) so a
+        # remembered value is only treated as authoritative for the SAME object, not any object
+        # sharing the pattern.
+        current_entity = mem_retrieval.current_entity_key(query_path, original_object)
+        similar_cases = mem_retrieval.find_similar_cases(query_path, rulebook_error_type, current_entity)
         memory_evidence = mem_retrieval.format_cases_for_prompt(similar_cases)
-        print(f"- Memory: {len(similar_cases)} vergleichbare(r) Fall/Fälle "
-              f"für {mem_retrieval.entity_pattern(query_path)}")
+        n_same = sum(1 for c in similar_cases if c.get("same_entity"))
+        print(f"- Memory: {len(similar_cases)} Fall/Fälle für {mem_retrieval.entity_pattern(query_path)} "
+              f"(Objekt={current_entity}, davon {n_same} gleiches Objekt)")
     except Exception as _mem_err:
         print(f"WARN: memory retrieval failed, continuing without evidence: {_mem_err}")
         memory_evidence = "Gedächtnis nicht verfügbar."
@@ -807,7 +830,7 @@ def main():
     print(f"\nProposal generated:")
     print(f"- Action: {correction_proposal.get('action')}")
     print(f"- Target: {correction_proposal.get('target_path')}")
-    print(f"- New Value: {correction_proposal.get('new_value')}")
+    print(f"- New Value (LLM roh): {correction_proposal.get('new_value')}")
     print(f"- Additional Updates: {len(correction_proposal.get('additional_updates', []))}")
 
     # AP3.5a: additively anchor guard metadata (correction_kind, target_entity_type,
@@ -825,6 +848,41 @@ def main():
           f"(entity={correction_proposal.get('target_entity_type')}, "
           f"id={correction_proposal.get('target_entity_id')}, "
           f"guard_supported={correction_proposal.get('identity_check_supported')})")
+
+    # AP7 (entity-precise re-retrieval, 2026-07-31): the pre-generation retrieval keyed off
+    # search_results[0].path, which is only the SEARCH ANCHOR — for a density error anchored on
+    # the articleId it is `articles[].articleId`, NOT the corrected field `relDensityMin`, so the
+    # memory was missed. Now that the proposal exists we know the REAL target_path and entity, so
+    # re-retrieve authoritatively — and apply the deterministic override: a value a HUMAN already
+    # decided for THIS exact object+field wins over a fresh estimate (the whole point of the loop).
+    try:
+        proposal_entity = mem_retrieval.entity_key(
+            correction_proposal.get("target_entity_type"),
+            correction_proposal.get("target_entity_id"),
+        )
+        similar_cases = mem_retrieval.find_similar_cases(
+            correction_proposal.get("target_path"), rulebook_error_type, proposal_entity
+        )
+        override = mem_retrieval.same_entity_confirmed_value(similar_cases)
+        if override is not None and override.get("final_value") != correction_proposal.get("new_value"):
+            old_value = correction_proposal.get("new_value")
+            correction_proposal["new_value"] = override["final_value"]
+            correction_proposal["value_source"] = "memory"
+            correction_proposal["reasoning"] = (
+                f"[GEDÄCHTNIS] Ein Mensch hat für genau dieses Objekt bereits entschieden "
+                f"(Fall #{override['id']}, {override['decision']}): Wert "
+                f"{override['final_value']!r}. Diese frühere menschliche Entscheidung ist "
+                f"verbindlicher als die Schätzung {old_value!r}. "
+                + (correction_proposal.get("reasoning") or "")
+            )
+            print(f"- MEMORY-OVERRIDE: {old_value!r} -> {override['final_value']!r} "
+                  f"(Fall #{override['id']}, {override['decision']})")
+    except Exception as _mem2_err:
+        print(f"WARN: memory re-retrieval/override failed: {_mem2_err}")
+
+    # Finaler Wert nach allen Nachbearbeitungen (Override etc.) — das ist der gespeicherte Wert.
+    print(f"- New Value (final): {correction_proposal.get('new_value')} "
+          f"(Quelle: {correction_proposal.get('value_source', 'llm')})")
 
     # AP4.5: groundedness needs snapshot-data.json, which only exists here (the score was
     # first computed inside generate_correction_with_llm without it). Compute it now and

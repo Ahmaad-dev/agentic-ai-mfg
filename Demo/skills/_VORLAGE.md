@@ -56,11 +56,17 @@ Das Tag steht vorne in jeder Fehlermeldung von Smart Planning:
  ^^^^^^^^^^^^^^^^^^^^^^^^  ->  applies_to: [DENSITY_VALUES]
 ```
 
-Bekannte Tags: `UNIQUE_IDS`, `DEMAND_ARTICLE_IDS`, `DEMAND_UNIQUENESS`, `DENSITY_VALUES`,
-`WORK_ITEM_CONFIGS_COMPLETENESS`, `START_END_OPERATION_EXISTENCE`, `WORK_PLAN_IDS`,
-`EQUIPMENT_PREDECESSOR_REFERENCES`, `EQUIPMENT_CONNECTIVITY`, `EQUIPMENT_DEPARTMENT_PRESENCE`,
-`EQUIPMENT_UNAVAILABILITY_CONSISTENCY`, `EQUIPMENT_WORKER_QUALIFICATION_COMPATIBILITY`,
-`WORKER_CONSISTENCY`.
+Bekannte Error-Tags: `UNIQUE_IDS`, `WORK_PLAN_IDS`, `DEMAND_ARTICLE_IDS`, `DENSITY_VALUES`,
+`ARTICLE_DEPARTMENT_PRESENCE`, `ARTICLE_EQUIPMENT_DEPARTMENT_CONSISTENCY`,
+`WORK_ITEM_CONFIGS_COMPLETENESS`, `START_END_OPERATION_EXISTENCE`,
+`WORK_ITEM_EQUIPMENT_AVAILABILITY`, `EQUIPMENT_WORKER_QUALIFICATION_COMPATIBILITY`,
+`EQUIPMENT_PREDECESSOR_REFERENCES`, `PACKAGING_EQUIPMENT_COMPATIBILITY_REFERENCES`,
+`PACKAGING_REFERENCES` und – nur beim vollständigen Solverlauf – `HUMAN_AVAILABILITY_EXISTS`.
+
+Bekannte Warning-Tags beziehungsweise Warning-Fälle: `WORKER_CONSISTENCY`,
+`EQUIPMENT_UNAVAILABILITY_CONSISTENCY`, `EQUIPMENT_CONNECTIVITY`,
+`EQUIPMENT_DEPARTMENT_PRESENCE`, seltene Qualifikationen und fehlende Packaging-Compatibility-Daten.
+Für Warnungen keine Korrekturkarte erzwingen und keine Mutation ausgeben.
 
 **Wenn du das Tag nicht kennst: lass es einfach weg.** Die Karte wird trotzdem gefunden.
 
@@ -102,7 +108,7 @@ abgeleitet werden (siehe density-values.md).
 
 ## Wo die Dateien liegen
 
-- **Lokal:** `demo/skills/`
+- **Lokal:** `skills/`
 - **Cloud:** Blob-Prefix `skills/` im konfigurierten Storage-Container (`STORAGE_MODE=AZURE`).
   Derselbe Code, kein Unterschied — du bearbeitest die Regeln im Storage Account, ohne die
   Anwendung neu zu deployen.

@@ -1,6 +1,6 @@
 ---
 name: work-item-configs
-applies_to: [WORK_ITEM_CONFIGS_COMPLETENESS, START_END_OPERATION_EXISTENCE]
+applies_to: [WORK_ITEM_CONFIGS_COMPLETENESS]
 description: Fehlende Elemente in workItemConfigs (Placeholder-Erkennung, Prozessreihenfolge)
 ---
 
@@ -26,7 +26,8 @@ Source: `llm-validation-fix-rules.md` lines 599–770 (inventory rules R15–R17
 
 Placeholders sind **ungültige Werte** die als Platzhalter verwendet wurden. Sie können in JEDEM Array-Typ vorkommen (workItemConfigs, predecessors, etc.)
 
-**Erkennungsmerkmale (mindestens eines erfüllt):**
+**Erkennungsmerkmale:** Ein expliziter Placeholder-Prefix oder mindestens zwei voneinander
+unabhängige Hinweise müssen vorliegen. Ein ungewöhnliches Format allein reicht nicht.
 1. **Prefix-basiert:**
    - Beginnt mit: `XXXX`, `DUMMY`, `TEST`, `PLACEHOLDER`, `TMP`, `INVALID`, `TODO`
    - Format: Prefix + Ziffern (z.B. `XXXX99`, `DUMMY01`, `TEST123`)
@@ -36,10 +37,12 @@ Placeholders sind **ungültige Werte** die als Platzhalter verwendet wurden. Sie
    - Ungültige Zeichen für den Kontext: Sonderzeichen wo normalerweise alphanumerisch
    - Repetitive Ziffern: `999`, `000`, `111` am Ende
 
-3. **Kontext-basiert (wichtigste Prüfung!):**
+3. **Kontext-basiert (Pflichtprüfung!):**
    - **Vergleiche mit benachbarten Werten im selben Array**
    - **Pattern passt NICHT:** z.B. `XXXX99` zwischen `VO*`, `WA*` Keys
    - **Format-Inkonsistenz:** Alle anderen haben Pattern `[A-Z]{2,4}[0-9]{2}`, dieser nicht
+   - Der verdächtige Key kommt weder im zugehörigen Workplan noch in einem bestätigten
+     Referenzartikel an dieser Position vor
 
 **5-SCHRITT PLACEHOLDER-DETECTION:**
 
@@ -53,9 +56,11 @@ Placeholders sind **ungültige Werte** die als Platzhalter verwendet wurden. Sie
    - Vergleiche jeden Wert mit diesem Pattern
 
 3. **Placeholder identifizieren:**
-   - Werte die NICHT dem Pattern entsprechen → potenzielle Placeholders
+   - Werte die NICHT dem Pattern entsprechen → nur potenzielle Placeholders
    - Prefix-Check (XXXX, DUMMY, etc.)
    - Kontext-Check (passt nicht zum Rest)
+   - Ohne expliziten Prefix nur ersetzen, wenn zusätzlich Workplan und Referenzsequenz den
+     fehlenden Key eindeutig an derselben Position belegen
 
 4. **Entscheidung:**
    - **Placeholder gefunden:** ACTION = `update_field` (ersetzen)
@@ -148,7 +153,8 @@ Die Reihenfolge der `workItemConfigs` ist die **Prozessreihenfolge** der Fertigu
 - **Nutze array_context** um Format zu erkennen
 - **Nutze similar_items** (falls vorhanden) für domain-spezifische Werte
 - **Prüfe enriched_context** für andere Artikel mit dem Element
-- Setze sinnvolle Default-Werte wenn keine Beispiele gefunden
+- Keine Zeiten oder Faktoren erfinden. Wenn kein historischer oder fachlich gleicher
+  Referenzeintrag existiert, keine automatische Mutation erzeugen.
 
 **Beispiel:**
 ```json
@@ -158,8 +164,8 @@ Die Reihenfolge der `workItemConfigs` ist die **Prozessreihenfolge** der Fertigu
         "articleId": "SPE_AR_fil",
         "workItemConfigs": [
             {"workItemKey": "VOAR01", "rampUpTime": 0, "netTimeFactor": 0},
+            // ABF01 fehlt vor WART04!
             {"workItemKey": "WART04", "rampUpTime": 1, "netTimeFactor": 0}
-            // ABF01 fehlt!
         ]
     }
 ]
@@ -173,8 +179,8 @@ Die Reihenfolge der `workItemConfigs` ist die **Prozessreihenfolge** der Fertigu
         "articleId": "SPE_AR_fil",
         "workItemConfigs": [
             {"workItemKey": "VOAR01", "rampUpTime": 0, "netTimeFactor": 0},
-            {"workItemKey": "WART04", "rampUpTime": 1, "netTimeFactor": 0},
-            {"workItemKey": "ABF01", "rampUpTime": 1, "netTimeFactor": 1}
+            {"workItemKey": "ABF01", "rampUpTime": 1, "netTimeFactor": 1},
+            {"workItemKey": "WART04", "rampUpTime": 1, "netTimeFactor": 0}
         ]
     }
 ]
@@ -190,6 +196,6 @@ Die Reihenfolge der `workItemConfigs` ist die **Prozessreihenfolge** der Fertigu
   "action": "update_field",
   "target_path": "articles[0].workItemConfigs",
   "new_value": [/* existing items + new ABF01 */],
-  "reasoning": "Article SPE_AR_fil is missing work_item_config for ABF01. Based on enriched_context, similar articles (SPE_EM, SPE_GS_gr) include ABF01 with rampUpTime=1 and netTimeFactor=1. Added ABF01 to workItemConfigs array to ensure completeness."
+  "reasoning": "Article SPE_AR_fil is missing ABF01. Same-department articles with the identical workPlan place ABF01 immediately before WART04 and use rampUpTime=1/netTimeFactor=1. Inserted the exact referenced config without changing the remaining sequence."
 }
 ```

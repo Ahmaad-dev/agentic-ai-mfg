@@ -282,6 +282,8 @@ function isArrayOfObjects(v) {
 function cell(v) {
     if (v === undefined) return '';
     if (v === null) return '<span class="rb-muted">null</span>';
+    // A single object/array must be serialised — escapeHtml(object) yields "[object Object]".
+    if (typeof v === 'object') return escapeHtml(JSON.stringify(v));
     return escapeHtml(v);
 }
 
@@ -345,6 +347,25 @@ function renderDiff(oldValue, newValue) {
                 <div class="rb-diff-side">
                     <div class="rb-diff-head rb-diff-head-new">Nachher — ${newValue.length} Einträge</div>
                     <ul class="rb-list-new">${newValue.map(x => `<li>${cell(x)}</li>`).join('')}</ul>
+                </div>
+            </div>`;
+    }
+
+    // Fall A2 — single object (e.g. one workItemConfig entry {workItemKey, rampUpTime, ...}).
+    // Without this it fell through to the scalar path and rendered "[object Object]".
+    if (newValue && typeof newValue === 'object') {
+        const pretty = (v) => escapeHtml(JSON.stringify(v, null, 2));
+        return `
+            <div class="rb-diff">
+                <div class="rb-diff-side">
+                    <div class="rb-diff-head rb-diff-head-old">Vorher</div>
+                    ${(oldValue === null || oldValue === undefined)
+                        ? '<div class="rb-empty-before">(leer)</div>'
+                        : `<pre class="rb-code rb-old">${pretty(oldValue)}</pre>`}
+                </div>
+                <div class="rb-diff-side">
+                    <div class="rb-diff-head rb-diff-head-new">Nachher</div>
+                    <pre class="rb-code rb-new">${pretty(newValue)}</pre>
                 </div>
             </div>`;
     }

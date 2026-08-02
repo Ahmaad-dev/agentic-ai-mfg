@@ -21,5 +21,6 @@ demo/smart-planning/Snapshots
 # Local database (AP2 persistence layer) — Alembic migrations ARE tracked
 demo/db/*.sqlite3
 
-
+docs/Expose
+docs/snapshots
 .github/instructions/

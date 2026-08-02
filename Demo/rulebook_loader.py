@@ -44,19 +44,28 @@ CORE_CARD = "_core.md"
 
 #: Die Validator-Tags, die Smart Planning tatsächlich ausgibt. Nur diese können je ein
 #: Routing auslösen. Eine Karte mit einem Tag AUSSERHALB dieser Liste wird niemals geladen.
+#: Vollständig gemäß KUNDENDOKUMENTATION §3.2 + durch die Eval-Suiten real bestätigte Kontexte
+#: (2026-08-01 vervollständigt: die 5 Department-/Equipment-/Packaging-/Human-Validatoren fehlten
+#: und führten zu falschen „Tippfehler"-Warnungen für legitime Karten).
 KNOWN_VALIDATOR_TAGS = {
     "UNIQUE_IDS",
     "DEMAND_ARTICLE_IDS",
     "DEMAND_UNIQUENESS",
     "DENSITY_VALUES",
+    "WORK_PLAN_IDS",
     "WORK_ITEM_CONFIGS_COMPLETENESS",
     "START_END_OPERATION_EXISTENCE",
-    "WORK_PLAN_IDS",
+    "WORK_ITEM_EQUIPMENT_AVAILABILITY",
+    "ARTICLE_DEPARTMENT_PRESENCE",
+    "ARTICLE_EQUIPMENT_DEPARTMENT_CONSISTENCY",
     "EQUIPMENT_PREDECESSOR_REFERENCES",
     "EQUIPMENT_CONNECTIVITY",
     "EQUIPMENT_DEPARTMENT_PRESENCE",
     "EQUIPMENT_UNAVAILABILITY_CONSISTENCY",
     "EQUIPMENT_WORKER_QUALIFICATION_COMPATIBILITY",
+    "PACKAGING_REFERENCES",
+    "PACKAGING_EQUIPMENT_COMPATIBILITY_REFERENCES",
+    "HUMAN_AVAILABILITY_EXISTS",
     "WORKER_CONSISTENCY",
 }
 
@@ -160,6 +169,43 @@ def check_cards() -> list[dict]:
     return problems
 
 
+def check_card_conflicts() -> list[dict]:
+    """
+    Diagnose (#10): mehrere Karten, die denselben [validate_*]-Tag beanspruchen.
+
+    Mehrere Karten pro Tag sind ein bewusstes Feature (AP7.5: einen Sonderfall ergaenzen, ohne
+    die Bestandskarte anzufassen) — daher ein WARNHINWEIS, kein Fehler. Aber sie werden ALLE in
+    denselben Prompt geladen: widersprechen sie sich (Karte A sagt X, Karte B sagt Y fuer
+    dasselbe Feld), bekommt das Modell gegensaetzliche Anweisungen. Der Mensch soll das pruefen,
+    BEVOR es eine falsche Korrektur erzeugt. Das ist auch die Voraussetzung fuer AP-X (ein Agent,
+    der Karten fortschreibt, darf keine widerspruechliche Karte einschleusen).
+
+    Gruppiert die Karten nach Tag und meldet jeden Tag mit >= 2 Karten.
+    """
+    by_tag: dict[str, list[str]] = {}
+    for card in list_cards():
+        for tag in card["tags"]:
+            by_tag.setdefault(tag, []).append(card["file"])
+    conflicts = []
+    for tag, files in sorted(by_tag.items()):
+        if len(files) >= 2:
+            conflicts.append({
+                "tag": tag,
+                "cards": files,
+                "hint": (
+                    f"{len(files)} Karten bedienen '{tag}': {', '.join(files)}. Alle werden "
+                    "gemeinsam geladen. Pruefen, dass sie sich ERGAENZEN (verschiedene Unterfaelle) "
+                    "und nicht WIDERSPRECHEN (gleiches Feld, andere Vorgabe)."
+                ),
+            })
+    return conflicts
+
+
+def diagnose() -> dict:
+    """Alle Karten-Diagnosen auf einmal (CLI: python rulebook_loader.py)."""
+    return {"typos": check_cards(), "conflicts": check_card_conflicts()}
+
+
 def card_index() -> str:
     """
     Das Inhaltsverzeichnis ALLER Karten — Dateiname plus Beschreibung in Klartext.
@@ -227,3 +273,18 @@ def load_rulebook(error_type: Optional[str] = None,
               f"eigenen Regeln.")
 
     return "\n\n---\n\n".join(parts)
+
+
+if __name__ == "__main__":
+    # Karten-Diagnose (#10): Tippfehler-Tags + Mehrfach-Karten pro Tag (Konfliktverdacht).
+    import json as _json
+    d = diagnose()
+    print("=== Regelkarten-Diagnose ===")
+    print(f"Tippfehler-Tags: {len(d['typos'])}")
+    for p in d["typos"]:
+        print(f"  ! {p['file']}: {p['hint']}")
+    print(f"Mehrfach-Karten pro Tag (Konfliktverdacht): {len(d['conflicts'])}")
+    for cconf in d["conflicts"]:
+        print(f"  ~ {cconf['tag']}: {', '.join(cconf['cards'])}")
+    if not d["typos"] and not d["conflicts"]:
+        print("Alles sauber.")
