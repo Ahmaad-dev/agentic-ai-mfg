@@ -50,8 +50,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: Demo
-          file: Demo/Dockerfile
+          context: app
+          file: app/deploy/Dockerfile
           push: true
           tags: |
             ${{ steps.acr.outputs.name }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.event.inputs.version }}

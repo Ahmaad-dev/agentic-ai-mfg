@@ -1498,3 +1498,821 @@ SOWIE DIE SICHERSTELLUNG EINER VERBINDUNG ZWISCHEN MEINEM AGENTEN UND DER VM VON
   - Runde 3: `articles[0].relDensityMin` — **MEMORY-OVERRIDE 1.14 → 1.017 (Fall #11, modify), value_source=memory** → 0 Fehler
 - **Bedeutung:** Belegt in EINEM Lauf (a) iterative Mehrfehler-Korrektur bis „valide" und (b) den Gedächtnis-Loop mitten im Prozess — die Pipeline hätte 1.14 geschätzt, der deterministische Override zog sie auf den vom Menschen bestätigten Wert 1.017. Eval-Modus (Direkt-Apply, keine fabrizierte Review). Damit ist die AP-E-Empirie inkl. der iterativen Dimension vollständig belegt.
 - **Open / next:** Nichts Blockierendes. Optional: #8 (Equipment/Packaging zerstörte Werte) vom Nutzer reviewen lassen; Bericht-Caveats (85-%-Kennzahl, BA01-Stammdaten).
+
+---
+
+### 2026-08-02 — UI-Redesign („Agentic AI — Demo") als Reskin, Funktionalität unverändert
+- **Status:** done
+- **Changed files:** `demo/ui/css/styles.css` (Design-Tokens, Topbar, Komponenten), `demo/ui/scripts/shell.js` (Topbar statt Sidebar), `demo/ui/scripts/dashboard.js` (Chart-Farben themeabhängig). **`review.js`, `chat.js`, `config.js` byte-identisch unverändert.** Backup des Vorzustands unter `ui-backup-20260802-123743/`.
+- **Ausgangslage:** Das gelieferte Design ist ein **React-Prototyp im Claude-Design-Format** (`x-dc` + `support.js` = dc-Runtime) mit eigenen Klassennamen (`rv-card`, `rv-chip`, …). Unsere App ist Vanilla JS/Flask und erzeugt `rb-*`-Markup aus ~95 KB Logik. Ein 1:1-Port hätte bedeutet, alle Render-Funktionen neu zu schreiben — inklusive Memory-Block, Diff-Rendering und der 409/422/502-Fehlerbehandlung. **Entscheidung: Reskin statt Rewrite.**
+- **Vorgehen:** (1) Die Design-Tokens sind jetzt die Quelle der Wahrheit (`--bg`, `--ink`, `--accent`, …), die **alten Variablennamen bleiben als Aliase** darauf bestehen — die ~250 Verwendungen im restlichen Stylesheet funktionieren unverändert und übernehmen automatisch die neue Palette. (2) Light ist Standard, Dark über `<html data-theme="dark">` mit Umschalter in der Topbar (localStorage-persistent, zusätzlich `?theme=dark|light` für Deep-Links und reproduzierbare Screenshots). (3) Navigation von der Sidebar in eine **Topbar mit Pill-Nav** (inkl. Pending-Badge); der Chat-Verlauf bleibt als Drawer, aber nur auf der Chat-Seite — Review Board und Dashboard bekommen die volle Breite. **Die öffentliche `window.AppShell`-API ist unverändert** (verifiziert: identische Symbolliste), deshalb musste `chat.js` nicht angefasst werden.
+- **Dark-Annahmen bereinigt (der eigentliche Aufwand):** Das bisherige CSS war dark-only geschrieben. Umgestellt: 7 Dark-Chrome-Hardcodes, 10 weiße Overlays (`rgba(255,255,255,…)` wirkt nur auf Dunkel), 49 semantische Statusfarben (#ef4444/#eab308/#22c55e/… → `--red`/`--amber`/`--accent`), weiße Texte (`.bubble h1-h3`, `.big-title`), der unsichtbare Gradient-Text im Welcome-Screen, sowie 5 fest weiße SVG-Textmarken im Dashboard.
+- **Chart-Farben:** Die Dashboard-Farben waren bewusst gegen die *dunkle* Kartenfläche `#171922` auf Kontrast gerechnet (Paletten-Validator: Helligkeitsband, Chroma, CVD-Trennung ΔE 95, Kontrast — alle PASS). Mit themeabhängiger Kartenfläche gilt das nicht mehr. Sie kommen jetzt aus CSS-Variablen: **Dark behält exakt die validierten Werte**, Light bekommt die Design-Palette derselben Farbfamilien (grün/indigo/rot bleiben also in beiden Themes semantisch gleich). `DECISION_SERIES.color` ist ein Getter, damit ein Theme-Wechsel zur Laufzeit greift statt beim Laden einzufrieren.
+- **Nebenfund + Fix:** `shell.js` erkannte die Seite nur am Dateinamen — jede Kopie/Umbenennung bekam stillschweigend das Chat-Layout. Erkennung nutzt jetzt primär die Body-Klasse (`review-page` / `dashboard-page`), Dateiname als Fallback.
+- **Verifikation (headless Chrome, echte Daten):** Alle drei Seiten gerendert — Chat (Topbar + Drawer + Sessions + Composer), Review Board (Liste, Karten, Konfidenz-Balken), Dashboard (25 KPIs, Flags, Zeitfilter, Charts). Dark-Theme geprüft. **Detailansicht mit dem realen Markup geprüft:** Chips, „Woher kommt die Konfidenz?" (ok/err-Boxen), **Memory-Block mit farbigen Fallkarten**, Vorher/Nachher-Diff und Entscheidungs-Panel (Freigeben/Wert ändern/Ablehnen) — alles korrekt in der neuen Optik. Responsive bei 760 px geprüft (Markentext und Pill-Beschriftungen weichen, Icons bleiben). JS-Syntax aller vier Skripte und CSS-Klammernbilanz sauber.
+- **Nicht übernommen (bewusst):** `support.js` (dc-Runtime, kein App-Code), das Kommandopalette-/Dichte-/Benutzermenü-Beiwerk des Prototyps (Benutzermenü zeigt eine erfundene Person — wir haben keine Authentifizierung), `assets/logo.png` (unser bestehendes Inline-SVG ist skalierbar, themefähig und kostet keine Ladezeit; das lokale `logo-agentic.png` ist 7,4 MB groß und ungenutzt).
+- **Open / next:** Die Prototyp-Extras (⌘K-Kommandopalette, Kompakt-Dichte) sind nachrüstbar, falls gewünscht. Sonst nichts offen.
+
+---
+
+### 2026-08-02 — UI-Optimierung 1: Verlaufsleiste ein-/ausklappbar
+- **Status:** done · **Changed files:** `demo/ui/scripts/shell.js`, `demo/ui/css/styles.css`
+- **Was:** Am Fuß der Verlaufsleiste sitzt jetzt „Leiste einklappen" (`left_panel_close`, wie im Design). Eingeklappt schrumpft die Leiste auf 0 und ein schwebender Aufklapp-Knopf (`left_panel_open`) erscheint unten links im Inhaltsbereich. Der Zustand wird in localStorage gemerkt (wie das Theme) — wer zuklappt, will die Leiste nicht beim nächsten Chat-Aufruf wieder offen haben.
+- **Der Knackpunkt:** Die Chat-Eingabezeile ist `position: fixed` und richtet sich über `--sidebar-w` aus. Ohne Gegenmaßnahme wäre sie beim Einklappen um die alte Leistenbreite verschoben stehen geblieben. Gelöst über EINEN Hebel: `body.sidebar-collapsed { --sidebar-w: 0px; }` — Leiste UND Eingabezeile folgen derselben Variable. Verifiziert: im eingeklappten Screenshot ist der Composer korrekt über die volle Breite zentriert.
+- **NEBENFUND (wichtig für künftige Tests):** Die CSP in `web_server.py` (`script-src 'self'`) **blockt Inline-Skripte**. Meine früheren Test-Harnesses (Auto-Klick, `renderDetail`-Direktaufruf) wurden deshalb nie ausgeführt — das lag NICHT an der virtuellen Zeit des Headless-Browsers, wie zunächst vermutet. Für UI-Tests also entweder statisches Markup oder eine echte .js-Datei verwenden. Der eingeklappte Zustand wurde stattdessen durch temporäres Forcieren im Code geprüft und danach zurückgesetzt (verifiziert).
+- **Verifiziert:** ausgeklappt (Button am Fuß sichtbar), eingeklappt (Leiste weg, Aufklapp-Knopf da, Composer korrekt zentriert), Default nach Revert wieder ausgeklappt, beide Knöpfe im DOM, JS-Syntax und CSS-Bilanz sauber.
+- **Offen (im Design gesehen, noch nicht umgesetzt):** Suchfeld „Verlauf durchsuchen…" und die Zeitgruppierung der Sessions (Letzte 7 Tage / Letzte 30 Tage / Älter).
+
+---
+
+### 2026-08-02 — UI-Optimierung 2: Aufklapp-Knopf verdeckt + Kennzahl-Animation
+- **Status:** done · **Changed files:** `demo/ui/css/styles.css`, `demo/ui/scripts/dashboard.js`
+
+**a) Aufklapp-Knopf verschwand, sobald der Chat lief (Nutzerbefund).**
+Ursache war kein Anzeige-, sondern ein Schichtungsfehler: sobald `body.chat-started` gesetzt ist,
+wird `.input-area` zu einem `fixed` Balken über die volle Breite mit `z-index: 100`. Der Knopf lag
+mit `z-index: 8` darunter und war ab der ersten Nachricht überdeckt. Jetzt `z-index: 101` — er
+schwebt über dem leeren linken Rand des Balkens (das Eingabefeld selbst ist mittig auf 850 px
+begrenzt), genau wie im Entwurf.
+Gegenprobe gefahren: `elementFromPoint` in der Knopfmitte liefert mit `z-index: 8` die
+`input-area` und mit `z-index: 101` den Knopf. Damit ist die Ursache belegt und nicht nur vermutet.
+
+**b) Kennzahlen zählen jetzt hoch, der AK2-Balken wächst.**
+Das gab es bei uns noch NIE — die ausgecheckte Fassung von `dashboard.js` enthält keine Zeile
+Animationscode. Es war also nichts verlorengegangen, sondern eine Eigenschaft des Entwurfs, die
+beim Portieren nicht mitgekommen war. Nachgezogen: 950 ms, kubisch ausklingend (Werte aus dem
+Entwurf) für Hero, Offene Reviews, Vorschläge, Entscheidungen, Ø Konfidenz, Revalidierung,
+Validierungen, Kosten.
+Zwei Fallen dabei:
+- `transition: width` am `.db-meter-fill` konnte NIE feuern — das Element kommt bereits mit seiner
+  Endbreite ins DOM, es gibt keinen Wertwechsel. Ersetzt durch ein Keyframe von 0 (`db-grow-w`),
+  wie es der Entwurf auch macht.
+- Die Zwischenschritte werden von DERSELBEN Funktion formatiert wie der Endwert (`COUNT_FORMATS`).
+  Ein Parser, der das Format aus dem fertigen Text errät, wäre falsch gewesen: `pct()` schreibt den
+  Dezimalpunkt englisch, `compact()` wechselt bei 10 Tsd./1 Mio. sogar die Einheit — die Zahl hätte
+  beim Zählen anders ausgesehen als am Ende. Tokens werden deshalb bewusst NICHT animiert.
+- Der Endwert steht von Anfang an im Markup; die Animation überschreibt ihn nur, solange sie läuft.
+  Ein Screenshot oder Ausdruck vor Ablauf zeigt damit trotzdem die richtige Zahl.
+  `prefers-reduced-motion: reduce` schaltet beides ab (CSS und JS).
+- **Verifiziert:** Animation mit auf 60 s verlängerter Dauer nachgewiesen (Zwischenwerte 13,0 % /
+  12,6 % / 5,6 % statt 35,7 %), danach zurück auf 950 ms und Endwerte geprüft. Alle acht Kennzahlen
+  unverändert gegenüber vorher. Keine Konsolenfehler auf Chat, Review Board und Dashboard.
+  Testhilfe (`probe.js`) wieder entfernt.
+
+---
+
+### 2026-08-02 — UI-Optimierung 3: Filterleiste unter die Kennzahlen
+- **Status:** done · **Changed files:** `demo/ui/scripts/dashboard.js`
+- **Was:** Seitenreihenfolge ist jetzt ZAHLEN → Filterleiste → Charts → offene Reviews →
+  Belastbarkeit. Vorher stand die Leiste ganz oben. Reine Umstellung der Reihenfolge im
+  `render()`-Template; `filterBar()` und `wireFilter()` selbst unverändert (`wireFilter` sucht
+  seine Elemente über IDs, die Position im Dokument spielt für die Verdrahtung keine Rolle).
+- **Bewusst in Kauf genommen:** Die Leiste filtert weiterhin ALLES auf der Seite, also auch die
+  Kennzahlen ÜBER ihr. Ein Bedienelement unter dem, was es steuert, ist erklärungsbedürftig;
+  getragen wird die Anordnung davon, dass die Kacheln in ihrer Fußzeile selbst „im gewählten
+  Zeitraum" schreiben. Als Warnung für spätere Änderungen im Dateikopf von `dashboard.js`
+  vermerkt: wer diese Fußzeilen entfernt, nimmt der Leiste ihren einzigen Reichweiten-Hinweis.
+- **Verifiziert:** DOM-Reihenfolge `db-hero` → `db-tiles` → `db-filter` → Charts; Voreinstellung
+  „Woche" per URL greift weiterhin (aktiver Chip + Zeitraum), keine Konsolenfehler.
+
+---
+
+### 2026-08-02 — UI-Optimierung 4: Management Dashboard gegen den Entwurf abgeglichen
+- **Status:** done · **Changed files:** `demo/ui/dashboard.html`, `demo/ui/scripts/dashboard.js`,
+  `demo/ui/css/styles.css`, `demo/ui/scripts/shell.js` (nur Beschriftung der Pille)
+- **Kein Backend angefasst.** `routes/dashboard.py` konnte alles bereits.
+
+**a) Benennung.** Seite heißt jetzt „Management Dashboard" (Titel, Überschrift, Pille in der
+Topbar). Untertitel wie im Entwurf: „Kennzahlen zur Human-in-the-Loop-Governance — berechnet
+aus echten Durchläufen."
+
+**b) AK2-Karte dunkel, in BEIDEN Themes.** Das ist Absicht des Entwurfs, keine vergessene
+Theme-Regel: es gibt genau eine Zahl, an der das Projekt gemessen wird, und die dunkle Fläche
+hebt sie aus der hellen Seite heraus. Folge: alle Farben INNERHALB der Karte sind fest verdrahtet
+und dürfen NICHT aus den Theme-Variablen kommen, sonst steht helle Schrift auf heller Fläche.
+Dazu: Verlaufsbalken statt Vollton, Zielmarke trägt ihre eigene Beschriftung („Ziel"), Legende
+nur noch 0 %/100 %. Der Balken bei „nicht erreicht" ist jetzt bernstein statt indigo — vorher
+war die Plakette bernstein und der Balken indigo, was aussah, als redeten beide von
+verschiedenen Dingen.
+
+**c) Filterleiste: aus ZWEI Bedienelementen wird EINES.** Vorher Voreinstellung für die Länge
+(Woche/Monat/Jahr) PLUS Auswahlfeld für die Auflösung. Beides einzeln bedienbar heißt, man kann
+sich unsinnige Kombinationen bauen (ein Jahr in Tagesbalken = 365 Striche); der Server hat das
+hinterher vergröbert, und das Auswahlfeld zeigte dann etwas anderes an als das Chart darunter.
+Jetzt: **Tage** (14 Tage) · **Wochen** (12 KW) · **Monate** (12 Monate) · **Alles**. Die
+Auflösung ist nur noch eine ANZEIGE rechts in der Leiste und zeigt, was der SERVER aufgelöst hat.
+- „Alles" fragt bewusst die FEINSTE Auflösung an und überlässt dem Server die Entscheidung
+  (er vergröbert ab 92 Balken selbsttätig, `MAX_BUCKETS`). Heute sind das Tagesbalken; wächst
+  das Projekt über ein Vierteljahr, werden daraus von selbst Wochen und später Monate. Genau
+  dieser Automatismus war der Wunsch — er benutzt jetzt die Mechanik, die im Backend längst lag.
+- Voreinstellung ist „Alles". Für ein Management-Dashboard der ehrliche Startpunkt; ein
+  kürzeres Standardfenster würde Belege verschweigen, ohne dass jemand danach gefragt hat.
+  (Der Entwurf startet auf 14 Tage — bei unserem Datenbestand, der am 08.07.2026 beginnt,
+  wären damit rund ein Drittel der Entscheidungen beim Öffnen unsichtbar.)
+- Wochen/Monate runden auf Kalendergrenzen, sonst wäre der letzte Balken ein angeschnittener
+  Teilzeitraum und sähe neben den vollen wie ein Einbruch aus. Das gerundete Ende wird auf heute
+  gekappt — „bis 31.08.2026" zu behaupten, während heute der 2. ist, wäre schlicht falsch.
+- Pfeile sind bei „Alles" und am rechten Rand ausgegraut UND klickunwirksam.
+
+**d) Leerer Zeitraum.** Der Server liefert für jeden Zeitraum die volle Bucket-Reihe, notfalls
+mit Nullen — der Leerzustand hätte also nie gegriffen. Bedingung ist jetzt „alle Buckets leer",
+nicht „keine Buckets". Vierzehn Grundlinienstriche sind eine schlechtere Auskunft als ein Satz.
+
+**e) Gefundener echter Fehler (beim Klicktest, nicht beim Lesen).** Nach dem Vorwärtsblättern
+blieb der Vor-Knopf aktiv, obwohl das Fenster schon bei heute endete — ein weiterer Klick wäre
+in die Zukunft gegangen. Ursache: `parseDay()` liefert Mitternacht, verglichen wurde aber gegen
+`new Date()` samt Uhrzeit, also war ein heute endendes Fenster immer „noch nicht bei heute".
+Alle Zeitraumvergleiche laufen jetzt über `todayStart()`.
+
+- **Verifiziert:** alle vier Ansichten per URL (Zeitraum, aktiver Knopf, Auflösungsanzeige);
+  Klicktest über eine echte .js-Datei (CSP blockt Inline-Skripte): Presetwechsel → zurück → vor
+  ergibt exakt wieder das Ausgangsfenster mit korrekt abgeschaltetem Vor-Knopf; automatische
+  Vergröberung durch eine erzwungene Fehlkombination nachgewiesen und danach zurückgesetzt;
+  Leerzustand über ein zurückliegendes Fenster; Screenshots hell und dunkel; keine
+  Konsolenfehler auf drei Seiten in beiden Themes. Testhilfe wieder entfernt.
+- **Bewusst NICHT übernommen:** die freie Wahl der Auflösung. Wer sie doch braucht, kann sie
+  weiterhin über `?from=…&to=…&granularity=…` an die API stellen — das Backend kann es
+  unverändert, nur die Oberfläche bietet es nicht mehr an.
+
+---
+
+### 2026-08-02 — UI-Optimierung 5: Zeitreihen-Chart auf den Entwurf gezogen
+- **Status:** done · **Changed files:** `demo/ui/scripts/dashboard.js`, `demo/ui/css/styles.css`
+
+**1) Farbe der AK2-Karte — keine Änderung nötig, Rückfrage geklärt.** Grün und Bernstein sind
+kein Geschmack, sondern der Zustand: grün = Ziel erreicht, bernstein = nicht erreicht. Das
+Zielbild zeigt 82,4 % (erreicht), unsere Daten stehen bei 35,7 % — deshalb der Unterschied.
+Nachgewiesen, indem die Karte einmal rein visuell auf „erreicht" geschaltet wurde: das Ergebnis
+ist deckungsgleich mit dem Zielbild. Danach zurückgesetzt.
+
+**2) „Tage" zeigte nur jeden zweiten Tag.** Die Ausdünnung der Achsenbeschriftung hing an einer
+festen Zahl (`ceil(n/12)`), also griff sie ab 13 Buckets — bei 14 Tagen fiel jeder zweite Tag
+weg, obwohl reichlich Platz war. Jetzt entscheidet die Geometrie: eine Beschriftung braucht rund
+38 px, `every = ceil(38 / slot)`. 14 Tage ⇒ alle 14 Beschriftungen.
+
+**3) Wochen als Kalenderwochen.** `bucketLabel()` gab für Wochen das Datum des Montags aus
+(„27.07."), was wie ein einzelner Tag aussieht. Jetzt „KW 31" (ISO-Woche, selbst gerechnet).
+Die volle Spanne steht im Tooltip — „KW 31" allein beantwortet nicht, welche Tage gemeint sind.
+
+**4) „Alles" zeigt Monate.** `VIEWS.all.unit` von `day` auf `month`. Damit fällt meine vorige
+Idee weg, bei „Alles" die feinste Auflösung anzufragen und den Server vergröbern zu lassen —
+auf ausdrücklichen Wunsch, und der Entwurf macht es ebenso. Die automatische Vergröberung des
+Servers (ab 92 Balken) bleibt als Rückfallebene aktiv, greift bei den vier Voreinstellungen
+aber nicht mehr.
+
+**5) Tooltip an der Säule.** Vorher SVG-`<title>`, also der native Browser-Tooltip: verzögert,
+unformatiert, nicht themefähig. Jetzt ein HTML-Element über dem SVG (dunkel im hellen Theme,
+hell im dunklen), mit Zeitraum fett in der ersten Zeile und der Aufschlüsselung darunter.
+Drei Punkte, die dabei nicht offensichtlich waren:
+- Trefferfläche ist die ganze SPALTE (transparentes Rechteck über die volle Höhe), nicht der
+  Balken — sonst müsste man einen 3 px hohen Balken treffen.
+- `<title>` wurde durch `role="img"` + `aria-label` ersetzt. Beides gleichzeitig hätte den
+  nativen Tooltip verzögert NEBEN dem eigenen aufgehen lassen; der Text bleibt für Screenreader
+  erhalten.
+- Umrechnung SVG-Einheiten → Bildpunkte über EINEN Faktor. Zulässig nur, weil
+  `.db-svg { width:100%; height:auto }` das Seitenverhältnis exakt erhält — wird die Höhe je
+  unabhängig gesetzt, trifft der Tooltip die Balkenspitze nicht mehr. Als Kommentar vermerkt.
+  Am linken/rechten Rand wird der Tooltip in die Karte hineingeschoben statt abgeschnitten.
+- **Verifiziert:** Klicktest über eine echte .js-Datei (CSP blockt Inline-Skripte): Tooltip
+  sichtbar, Text korrekt („31.07.2026 — 8 Entscheidungen / 3× freigegeben · 5× korrigiert"),
+  über der Säule, innerhalb der Karte, waagrecht exakt zentriert (0 px Abweichung), erste und
+  letzte Säule ragen nicht heraus. Achsen je Ansicht geprüft (14 Tageslabels / KW 20–31 /
+  Juli 26 + Aug. 26). Keine Konsolenfehler auf drei Seiten in beiden Themes. Testhilfe entfernt.
+
+---
+
+### 2026-08-02 — UI-Audit (Befundliste) + ein Fix nebenbei
+- **Status:** Audit abgeschlossen, Befunde in der Antwort an den Nutzer priorisiert.
+  EIN Fix direkt gemacht (Regression aus derselben Sitzung), Rest bewusst NICHT angefasst.
+- **Changed files:** `demo/ui/css/styles.css` (nur die Zusammenführung unten)
+- **Fix:** `.db-bar-g:hover path` war doppelt definiert — mein neues `filter: brightness(1.14)`
+  traf auf ein bestehendes `opacity: 0.82`. Beide gelten, sie arbeiten gegeneinander und der
+  Hover-Effekt war fast unsichtbar. Zu einer Regel zusammengeführt (Aufhellen gewinnt).
+
+**Messungen (nicht geschätzt):**
+- Kontrast beider Themes ausgerechnet: `--faint` auf weißer Karte 2,96:1 (hell) bzw. 3,31:1
+  (dunkel) — unter 4,5:1, im hellen Theme sogar unter 3:1. Betrifft u. a. Platzhaltertext im
+  Eingabefeld und den Leerzustand. `--amber` auf weiß 3,36:1 — betrifft den Status
+  „pending_review" im Review Board. `--muted` auf `--panel` 4,48:1, knapp darunter.
+- Icons und Schriften kommen von Googles CDN. Gemessen: `document.fonts.check` für
+  „Material Symbols Outlined" liefert 2,5 s nach dem Laden noch `false`, während Inter bereits
+  da ist. Bis der Font ankommt, belegt JEDES Icon die Breite seines Ligaturnamens — ein
+  `dark_mode`-Icon ist dann 85 px statt 19 px breit und schiebt die Seite waagrecht auf.
+  Der Entwurf löst das anders: er liefert 14 woff2-Dateien selbst mit.
+- Waagrechter Überlauf: `.db-table` (offene Reviews) ist ~900 px breit und läuft ab ca. 900 px
+  Fensterbreite über; `.pillnav` in der Topbar bricht unter ~600 px nicht um.
+- Genau EINE `:focus-visible`-Regel im ganzen Stylesheet; drei Stellen setzen `outline: none`
+  und ersetzen es nur durch eine Rahmenfarbe.
+- `prefers-color-scheme` wird nirgends ausgewertet — Standard ist immer hell.
+
+---
+
+### 2026-08-02 — UI-Optimierung 6: Audit-Befunde abgearbeitet
+- **Status:** done (Punkt 8 der Liste — fehlende Entwurfs-FUNKTIONEN — bewusst offen)
+- **Changed files:** `demo/ui/css/fonts.css` (neu), `demo/ui/fonts/*.woff2` (neu, 11 Dateien),
+  `demo/ui/css/styles.css`, `demo/ui/index.html`, `demo/ui/review.html`,
+  `demo/ui/dashboard.html`, `demo/ui/scripts/shell.js`, `demo/web_server.py`
+
+**1+2) Schriften und Icons werden selbst ausgeliefert.** Vorher Googles CDN. Die Icon-Schrift
+war die vollständige variable Fassung: **3872 KB**. Über den `icon_names`-Parameter der Google-
+Fonts-API auf genau die 31 tatsächlich benutzten Symbole reduziert: **4,5 KB**. Inter und
+JetBrains Mono nur latin + latin-ext, `unicode-range` erhalten (latin-ext lädt also nur, wenn
+ein Zeichen daraus vorkommt). Dazu die Klasse `.material-symbols-outlined`, die bisher aus
+Googles Stylesheet kam — ohne sie hätten die Spans gar keine Schriftfamilie. Sie bekommt eine
+feste 1em-Box; die Breite hing vorher am Ligaturnamen. Lizenzen sind in `fonts.css` vermerkt
+(OFL 1.1 bzw. Apache 2.0). `web_server.py`: `mimetypes.add_type('font/woff2', '.woff2')` —
+Windows meldete sonst `application/octet-stream`, was zusammen mit dem gesetzten `nosniff` ein
+Grund zum Ablehnen ist. CSP: Google aus `style-src`/`font-src` entfernt.
+
+**KORREKTUR AN MEINER EIGENEN BEFUNDLISTE:** Punkt 5 („waagrechter Überlauf bei Tabelle und
+Pillen-Navigation") war ein Fehlbefund — es war DIESELBE Ursache. Nach dem Schrift-Fix gemessen:
+kein waagrechter Überlauf mehr auf irgendeiner Seite bei 1440/768/500 px, Icon-Box exakt
+18×18 px. Die Tabelle hatte längst einen eigenen Scrollbereich (`.db-table-wrap`); mein
+Prüfskript hatte nur die Kinder von Scrollbereichen nicht ausgenommen.
+
+**3) Kontrast.** `--muted` #736f63→#6d6a5e (4,48→4,84:1 auf Panel), `--faint` hell
+#9a968a→#7a7668 (2,96→4,55:1), dunkel #6c6f78→#868a95 (3,31→4,82:1), `--amber`
+#b8821f→#976a18 (3,36→4,78:1, verbessert zugleich die weiße Schrift auf der Zählblase).
+
+**4) Tastaturfokus.** Eine durchgängige `:focus-visible`-Regel für alle Bedienelemente
+(2 px Akzentring), eigene Farbe auf der dunklen AK2-Karte. Die drei `outline: none` mit bloßem
+Rahmenwechsel entfernt. Ausnahme mit Begründung: das Chat-Eingabefeld — dort zeigt die ganze
+Zeile den Fokus (`:focus-within`), zwei Ringe ineinander wären Doppelung.
+
+**6) Systemtheme.** `prefers-color-scheme` wird beim ERSTEN Besuch ausgewertet. Eine eigene
+Wahl gewinnt weiterhin immer.
+
+**7) Trefferflächen.** Vorbehalt-Symbole von exakt 24 px (Untergrenze) auf 28 px.
+
+**Zusätzlich vom Nutzer gemeldet und behoben:**
+- Werkzeug-Menü am Plus-Knopf war fest auf `#20222a` verdrahtet — ein schwarzes Menü im hellen
+  Theme, dessen Schrift aus den Theme-Variablen kam und damit dunkel auf dunkel stand. Jetzt
+  `var(--surface)`, dazu die Überschrift „Werkzeuge" und die getönte Symbolkachel wie im Entwurf.
+- Der Plus-Knopf hatte ein `data-tooltip`, aber keine CSS-Regel dazu — die Kurzerklärung
+  erschien dort nie. Die Regel stand stattdessen ZWEIMAL fast wortgleich da (send-btn, mic-btn).
+  Zu einer `[data-tooltip]`-Regel zusammengefasst, die auch bei Tastaturfokus greift.
+  Beschriftung „Werkzeuge" statt „Tools" — der Rest der Oberfläche ist deutsch und der Entwurf
+  selbst schreibt „WERKZEUGE".
+
+**Weitere Reste aus der nur-dunklen Fassung, beim Durchsehen gefunden:**
+- `.send-btn:hover` war `#5558e6` — der Knopf ist seit dem Redesign grün und wechselte beim
+  Überfahren die Farbfamilie nach Indigo.
+- Inline-Code: helles Lavendel (`#a5b4fc`) auf blassem Indigo — im hellen Theme unlesbar.
+- `.selected-tool` (Chip des gewählten Werkzeugs): `#c7d2fe`, praktisch unsichtbar auf Weiß.
+- Codeblöcke, deaktivierte Knöpfe, Scrollbalken-Hover: feste Dunkelwerte → Tokens.
+- `--accent-soft`/`--accent-ink` hatten keine Dunkel-Variante (der Entwurf hat sie auch nicht) —
+  ergänzt, sonst blitzt Hellgrün im dunklen Menü. 8,8:1 auf der Karte.
+
+- **Verifiziert:** Icon-Schrift lädt (`document.fonts.check` = true), Icon-Box 18×18 px, kein
+  waagrechter Überlauf bei 1440/768/500 px auf allen drei Seiten, Werkzeug-Menü in beiden Themes
+  mit gemessenen Farben, Tooltip-Text vorhanden, Fokusring auf Textfeld/Knopf/Pille gemessen,
+  alle Kontraste nachgerechnet, keine Konsolenfehler und keine CSP-Verstöße auf drei Seiten in
+  beiden Themes, kein `fonts.googleapis`-Verweis mehr im Quelltext. Testhilfe entfernt.
+- **OFFEN (nicht angefasst):** Punkt 8 — Suchfeld im Verlauf, Zeitgruppierung der Sitzungen,
+  Kommandopalette, Toasts mit „Rückgängig", Skeleton-Ladezustände. Das sind neue FUNKTIONEN,
+  keine Korrekturen.
+
+---
+
+### 2026-08-02 — UI-Optimierung 7: die fünf fehlenden Entwurfs-Funktionen
+- **Status:** done · **Changed files:** `demo/ui/scripts/shell.js`, `demo/ui/css/styles.css`,
+  `demo/ui/scripts/review.js`, `demo/ui/scripts/dashboard.js`,
+  `demo/ui/fonts/material-symbols-subset.woff2` (neu erzeugt), `demo/ui/css/fonts.css`
+- **Kein Backend angefasst.**
+
+**1) Suche im Verlauf.** Filtert im Browser, nicht über den Server — der Verlauf ist eine
+kurze Liste, die einmal geladen und dann lokal gefiltert wird. Escape leert das Feld.
+Bei aktiver Suche entfallen die Zeitgruppen zugunsten einer Trefferzahl: wer sucht, will
+Treffer sehen und nicht drei Überschriften mit je einem Eintrag darunter.
+
+**2) Zeitgruppen.** Letzte 7 Tage / Letzte 30 Tage / Älter, leere Gruppen fallen weg.
+Sitzungen ohne verwertbaren Zeitstempel landen bei „Älter" — nach unten, nicht fälschlich
+nach oben.
+
+**3) Kommandopalette (Strg/Cmd+K).** Seitenwechsel, neuer Chat, Theme, Leiste ein-/ausklappen,
+dazu die letzten 30 Sitzungen. Die Einträge werden bei JEDEM Öffnen neu gebaut, damit der
+Theme-Eintrag und der Verlauf den aktuellen Stand zeigen statt den beim Seitenaufbau.
+Pfeiltasten, Enter, Escape, Klick auf den Hintergrund.
+
+**4) Meldungen (Toasts).** `AppShell.toast()` und `AppShell.toastAction()` (mit Knopf, bleibt
+länger stehen). Angeschlossen an: Entscheidung im Review Board, Snapshot-ID kopiert,
+ausdrückliches „Neu laden" im Dashboard (NICHT beim Filterwechsel — dort wäre es Lärm).
+Bewusst NICHT für Fehler: die gehören an die Stelle, an der sie entstanden sind, und dürfen
+nicht nach Sekunden verschwinden.
+- **GRUNDSATZENTSCHEIDUNG:** Der Entwurf hängt an die Freigabe eines Vorschlags ein
+  „Rückgängig". Das haben wir NICHT übernommen. Eine Entscheidung ist in der Datenbank, im
+  Gedächtnis und im Snapshot gelandet; ein Knopf, der so tut, als ließe sich das mit einem
+  Klick zurücknehmen, wäre eine Lüge über den Zustand des Systems — und `memory_items` ist
+  hier die Wahrheitsinstanz. Der Mechanismus für einen Aktionsknopf ist vorhanden und wird
+  benutzt, sobald es eine wirklich umkehrbare Aktion gibt.
+- Die zweite Verwendung des Entwurfs (Sitzung löschen mit „Rückgängig") ist mangels
+  DELETE-Endpunkt für Sitzungen ohnehin nicht möglich; ein solcher wurde NICHT gebaut.
+
+**5) Ladeplatzhalter.** Schimmernde Platzhalter in der FORM des späteren Inhalts, in der
+Verlaufsleiste und im Review Board (drei Karten). Dadurch springt das Layout beim Eintreffen
+der Daten nicht. Der Ladetext bleibt als `sr-only` stehen — ein Schimmern allein sagt einem
+Vorleseprogramm nichts. `prefers-reduced-motion` schaltet das Schimmern ab.
+
+**Zwei Fehler, die erst der Screenshot gezeigt hat:**
+- Die Kommandopalette lag UNTER der Chat-Eingabezeile (`.input-area`, `fixed`, z-index 100).
+  Ein modaler Dialog, den ein Bedienelement der Seite überdeckt, ist kaputt. Palette jetzt
+  auf 190/191.
+- Das Lupensymbol fehlte — `search` war nicht im Icon-Subset, weil ich die Symbolliste VOR
+  dem Bau dieser Funktionen erzeugt hatte. Genau die Falle, die im Kommentar von `fonts.css`
+  steht. Subset neu erzeugt (33 Symbole, 4,6 KB), Liste im Kommentar nachgezogen.
+
+- **Verifiziert:** Klicktest über eine echte .js-Datei — Suche („duu" → 1 Treffer, Kopfzeile
+  „1 Treffer", X sichtbar; ohne Treffer die richtige Meldung; nach Leeren wieder 24 Sitzungen
+  in 2 Zeitgruppen), Toast mit gemessener Fläche, Aktionsknopf „Rückgängig", Palette (30
+  Einträge, Fokus im Feld, „dash" → genau 1 Treffer „Management Dashboard öffnen", Escape
+  schließt). Toasts auch auf der Review-Seite verfügbar. Keine Konsolenfehler auf drei Seiten
+  in beiden Themes. Testhilfe entfernt.
+
+---
+
+### 2026-08-02 — UI-Optimierung 8: Review-Detailansicht zweispaltig
+- **Status:** done · **Changed files:** `demo/ui/scripts/review.js`, `demo/ui/css/styles.css`,
+  `demo/ui/fonts/material-symbols-subset.woff2` (neu erzeugt), `demo/ui/css/fonts.css`
+- **Kein Backend, keine neuen Daten.** Alle Bausteine gab es schon; sie standen nur
+  untereinander statt nebeneinander.
+
+**Neue Anordnung:** links der BEFUND (Kontext, Vorher/Nachher, Begründung, Fehlerstelle im
+Original), rechts die BELASTBARKEIT und die Entscheidung (Konfidenz, Belegprüfung,
+Präzedenzfälle, frühere Entscheidungen, Entscheidungspanel). Die Seitenspalte klebt beim
+Scrollen oben — das ist der eigentliche Gewinn: vorher lagen die Entscheidungsknöpfe so weit
+unter der Konfidenz, dass man beim Klicken nicht mehr sah, worauf sie sich stützt.
+Unter 1100 px fällt das Raster auf eine Spalte zurück, die Reihenfolge im Markup ist deshalb
+auch gestapelt sinnvoll: Befund → Belastbarkeit → Entscheidung.
+
+**Breite:** Die LISTE bleibt bei 900 px — eine Spalte Karten liest sich breiter nicht besser.
+Nur die Detailansicht darf auf 1320 px (`body.review-page:has(#detailView:not([hidden]))`),
+sonst blieben der Hauptspalte neben den 360 px der Seitenspalte gemessene 480 px, und genau
+dort stehen die Diff-Tabellen und der JSON-Auszug.
+
+**Konfidenz-Ring** statt Balken — aber NUR in der Detailansicht. In der Liste bleibt der
+Balken: dort stehen viele Vorschläge untereinander, und ein Balken lässt sich zeilenweise
+vergleichen. Die Farbschwellen sind dieselben, damit dieselbe Zahl nicht an zwei Stellen
+verschieden eingefärbt wird.
+
+**AKUTER FEHLER, dabei gefunden und behoben:** Die Belegprüfungs-Badges nutzen die Symbole
+`verified` und `history` — beide fehlten im Icon-Subset, wurden also seit heute Vormittag
+falsch gerendert. Ursache war meine Extraktion: sie fand nur Symbole, die direkt im Span
+stehen, nicht solche aus Variablen (`const memIcon = ... ? 'verified' : 'history'`), und
+`\bicon\b` traf „memIcon" wegen der Wortgrenze nicht. Extraktion korrigiert (Teilstring
+statt Wortgrenze), Subset auf 35 Symbole neu erzeugt.
+- **Dauerhafte Absicherung:** Es gibt jetzt eine belastbare Prüfung dafür — fehlt eine
+  Ligatur, rendert der Browser den NAMEN als Text; wegen `overflow:hidden` sieht man das
+  nicht, aber `scrollWidth > clientWidth` verrät es. Über alle Seiten inkl. geöffneter
+  Detailansicht laufen lassen: 13 + 8 + 31 Symbole geprüft, keine fehlenden.
+- **Verifiziert:** nebeneinander bei 1440 px (900 px links, 360 px rechts, Seitenspalte
+  klebt), einspaltig bei 1024 und 760 px (klebt dann nicht mehr), kein waagrechter Überlauf
+  auf keiner Breite, Ring zeigt 90 % in der richtigen Farbstufe, Screenshots hell und dunkel,
+  keine Konsolenfehler auf drei Seiten in beiden Themes. Testhilfe entfernt.
+
+---
+
+### 2026-08-02 — Nachprüfung: zwei Fehler im heute gebauten Code behoben
+- **Status:** done · **Changed files:** `demo/ui/css/styles.css`, `demo/ui/scripts/shell.js`
+
+**1) Toast-Akzentfarbe war invertiert — im dunklen Theme 1,58:1.** Die Meldung ist eine
+UMGEKEHRTE Fläche (`background: var(--ink)`): im hellen Theme dunkel, im dunklen hell. Ihre
+Akzentfarbe muss deshalb GEGEN das Theme laufen. Ich hatte sie mit dem Theme laufen lassen —
+im dunklen Theme stand damit helles Grün auf hellem Grund. Jetzt fest #8fc9a6 bzw. #2c5842:
+gemessen 8,53:1 (hell) und 6,76:1 (dunkel).
+
+**2) Kommandopalette hatte keine Tastaturfalle.** `aria-modal="true"` behauptet gegenüber
+Screenreadern, der Rest der Seite sei stillgelegt — gemessen blieben aber 13 Elemente HINTER
+der Verdunkelung mit Tab erreichbar. Das war schlicht eine Falschaussage im Markup. Der Fokus
+läuft jetzt im Kreis innerhalb des Dialogs, und beim Schließen kehrt er zu dem Element zurück,
+von dem aus geöffnet wurde.
+- **Verifiziert:** Tab am Ende springt an den Anfang, Shift+Tab am Anfang ans Ende, Fokus
+  kehrt zum Öffner zurück — in beiden Themes.
+
+**Nebenbei:** doppelter Selektor `.tool-picker-btn` zusammengeführt (`position: relative` stand
+als eigene Regel daneben).
+
+**Aufgenommen, NICHT umgesetzt (Befundliste für den Nutzer):** tote CSS-Regeln aus der Zeit vor
+dem Redesign (`sb-nav`, `sb-badge`, `sb-soon`, `review-logo`, `review-nav-link`, `rb-diff-old`,
+`rb-diff-new`, `db-flags-more`), fehlende Druckregeln (`@media print` = 0 Vorkommen), Umbenennen
+und Löschen von Sitzungen (braucht einen Backend-Endpunkt), `styles.css` mit 2388 Zeilen in
+einer Datei.
+
+---
+
+### 2026-08-02 — UI-Optimierung 9: Sitzungsverwaltung, Rückgängig, Druck, Aufräumen
+- **Status:** done (bis auf das Aufteilen von `styles.css`, siehe unten)
+- **Changed files:** `demo/alembic/versions/9b1e40c7d2a3_*.py` (neu), `demo/db/models.py`,
+  `demo/db/repository.py`, `demo/web_server.py`, `demo/ui/scripts/shell.js`,
+  `demo/ui/scripts/review.js`, `demo/ui/css/styles.css`, `demo/ui/css/fonts.css`,
+  `demo/ui/fonts/material-symbols-subset.woff2`
+
+**1) Sitzungen umbenennen und ausblenden — mit einem BEFUND, der die Umsetzung geändert hat.**
+Beim Lesen des Modells zeigte sich: es gibt gar keine `title`-Spalte (der Titel wird aus der
+ersten Nachricht abgeleitet), UND ein echtes DELETE auf `sessions` würde über
+`cascade="all, delete-orphan"` auch `agent_runs` mitnehmen. Genau daraus rechnet das
+Management Dashboard Tokens, Kosten und Validierungen — eine gelöschte Unterhaltung hätte die
+Projektkennzahlen rückwirkend verändert, ohne dass es jemand merkt.
+Deshalb: Migration `9b1e40c7d2a3` mit zwei nullbaren Spalten, `title` und `hidden_at`.
+Ausgeblendet statt gelöscht. Es gibt bewusst KEINE DELETE-Route.
+Endpunkt: `PATCH /api/sessions/<id>` mit `{"title": …}` und/oder `{"hidden": true|false}`.
+Leerer Titel setzt auf den abgeleiteten zurück — die einzige Art, eine Umbenennung
+rückgängig zu machen, ohne den alten Text zu kennen.
+- **Verifiziert am laufenden Server:** umbenennen → Liste zeigt neuen Titel; ausblenden →
+  aus der Liste (23 statt 24); wieder einblenden → zurück, Titel wieder abgeleitet;
+  Dashboard-Kennzahlen davor und danach identisch (137 Agent-Läufe, 2.484.471 Tokens).
+  Danach den Testtitel zurückgesetzt.
+
+**2) „Rückgängig" bei einer Entscheidung — als WARTEFENSTER, nicht als Rücknahme.**
+Auf ausdrücklichen Wunsch umgesetzt, aber anders als im Entwurf, und der Unterschied ist
+wesentlich. Eine Freigabe schreibt DREI Dinge: Review-Eintrag, Gedächtniseintrag, Korrektur
+in der Snapshot-Datei samt Revalidierung. Eine nachträgliche Rücknahme müsste den Snapshot
+rückwärts schreiben und einen Gedächtniseintrag tilgen — eine Fälschung der Historie an
+genau der Instanz, an der spätere Vorschläge gemessen werden.
+Stattdessen passiert die Entscheidung erst NACH 6 Sekunden. Wer abbricht, nimmt nichts
+zurück: es ist schlicht noch nichts passiert. Danach ist sie endgültig.
+Fehlender Kommentar beim Ablehnen wird SOFORT gemeldet, nicht erst nach sechs Sekunden.
+- **Verifiziert:** Freigabe geklickt → Knöpfe gesperrt, Status „wird in wenigen Sekunden
+  ausgeführt", Toast mit „Rückgängig"; abgebrochen → Knöpfe wieder frei, Status „Abgebrochen
+  — es wurde nichts angewendet", und die API meldet weiterhin 3 offene Vorschläge im Status
+  `pending_review`. Es wurde also tatsächlich nichts geschrieben.
+
+**3) Druckregeln.** `@media print` gab es bisher nicht. Die Review-Detailansicht ist das, was
+für einen Bericht als PDF gesichert wird. Bedienelemente fliegen raus (Topbar, Verlaufsleiste,
+Filter, Entscheidungsknöpfe, Meldungen), der Befund bleibt. Drei Dinge, die sonst kaputtgehen:
+gescrollte Bereiche drucken nur ihre erste Seite (`overflow: visible`), die klebende
+Seitenspalte erschiene auf jeder Seite neu (`position: static`), und der Browser wirft
+Hintergrundfarben weg — also `print-color-adjust: exact`, sonst ist der Vorher/Nachher-Diff
+auf Papier farblos. Code-Auszüge brechen um statt abzuschneiden.
+
+**4) Tote CSS-Regeln entfernt:** 22 Blöcke aus der Zeit vor dem Redesign (`sb-nav`, `sb-badge`,
+`sb-soon`, `review-logo`, `review-nav-link`, `rb-diff-old/new`, `db-flags-more`).
+Nebenbei: die Schmalansicht (≤ 860 px) blendete `.sb-sessions` aus, aber nicht das neue
+Suchfeld — bei 60 px Leistenbreite ein Eingabefeld für zwei Zeichen. Jetzt mit ausgeblendet.
+
+**Icon-Subset** dreimal nachgezogen (`delete`, `hourglass_top`, `undo`) — jedes Mal von der
+scrollWidth-Prüfung gefunden, bevor es im Bild landete. Jetzt 38 Symbole, 4,8 KB.
+
+**NICHT gemacht: `styles.css` in mehrere Dateien aufteilen.** Nach einem Tag mit sehr vielen
+Änderungen an dieser Datei ist ein rein mechanisches Zerlegen von 2400 Zeilen die Aktion mit
+dem schlechtesten Verhältnis aus Nutzen und Regressionsrisiko — sichtbar ändert sich nichts,
+kaputtgehen kann die Kaskadenreihenfolge. Sollte als eigener, ruhiger Schritt passieren.
+
+---
+
+### 2026-08-02 — Repository neu geordnet: Stufe 1 + 2
+- **Status:** done · Stufe 3 (`smart-planning/` + `Snapshots/` nach `tools/` bzw. `data/`)
+  bewusst offen, siehe unten.
+- **Changed files:** Verzeichnisumbenennung (99 Dateien), `.gitignore`, `CLAUDE.md`,
+  beide GitHub-Workflows, `app/README.md`, `app/deploy/Dockerfile`, `app/main.py`,
+  `app/web_server.py`, 12 Importstellen, `app/core/*` (neu)
+
+**Stufe 1**
+- `Demo/` → `app/`. **Die angekündigte Falle war real:** git kannte den Ordner als `Demo/`
+  (großes D), die Platte als `demo/`. `git mv demo app` scheiterte mit „source directory is
+  empty" — erst `git mv Demo app` funktionierte. Wer das mit dem Explorer gemacht hätte,
+  hätte eine halb umbenannte Struktur eingecheckt, die auf einer Linux-CI auseinanderfällt.
+  Ergebnis geprüft: 99 Umbenennungen von git erkannt, 0 Reste unter `Demo`/`demo`.
+- `ui/logo-agentic.png` (7,1 MB, 2816×1536) entfernt — getrackt, aber nirgends im Code
+  referenziert; das Logo der Oberfläche ist ein Inline-SVG. War 60 % des getrackten Repos.
+- `logs/` → `data/logs/`, UI-Backup → `data/archive/`, leeres `config/` entfernt.
+  `.gitignore` auf die neuen Pfade gezogen, tote `zArchive`-Zeilen raus.
+- **Nichts gelöscht außer dem Logo.** Das UI-Backup wurde verschoben, nicht entsorgt.
+
+**Stufe 2**
+- `core/` — `agent_config`, `cost_model`, `storage_manager`, `rulebook_loader`.
+  12 Aufrufer angepasst, davon **vier in den Runtime-Skripten**: die laufen als Subprozess
+  und legen sich `app/` selbst auf `sys.path`, deshalb funktioniert dort `from core.x import`.
+  `import agent_config` in `main.py` wurde zu `import core.agent_config as agent_config`,
+  sonst wären die späteren Attributzugriffe gebrochen.
+  **Kritisch und leicht zu übersehen:** `rulebook_loader.DEMO_ROOT` war
+  `Path(__file__).resolve().parent`. Eine Ebene tiefer zeigte der Anker auf `core/` statt auf
+  `app/` — weder die 12 Lernkarten unter `skills/` noch das Monolith-Regelwerk wären auffindbar
+  gewesen. Jetzt `APP_ROOT` mit `.parent.parent`; nachgeprüft: 12 Karten, Kartenindex und
+  Regelwerk laden. CLI ist jetzt `python -m core.rulebook_loader`.
+- `deploy/` mit Dockerfile, gunicorn.conf.py und beiden requirements.
+  **Bewusst UNTER `app/`, nicht auf Repository-Ebene:** `.dockerignore` muss im Wurzelverzeichnis
+  des Build-Kontexts liegen, und ihre 20+ Regeln sind relativ zu `app/` geschrieben — darunter
+  die Ausschlüsse für `.env`, `.venv` und `smart-planning/Snapshots/`. Ein Verlegen des Kontexts
+  auf die Repository-Ebene hätte diesen Schutz stillschweigend ausgehebelt und im schlimmsten
+  Fall die `.env` ins Image kopiert.
+- README: die Projektstruktur beschrieb den alten Aufbau und war damit aktiv falsch. Neu
+  geschrieben, mit Verweis auf `README-PT4.md`. Die beiden Dokumente wurden NICHT verschmolzen
+  — das sind 440 Zeilen inhaltlicher Text, ein Zusammenschreiben wäre eine Neufassung mit dem
+  Risiko, Details zu verlieren, keine Umsortierung.
+
+**FEHLER, den erst die Nachprüfung gefunden hat:** Der Patch auf `logs_dir` in `main.py` und
+`web_server.py` war nie gelaufen — die `&&`-Kette im Skript war nach einem fehlgeschlagenen
+`mv` (Log-Datei noch von einem Python-Prozess gehalten) abgebrochen, und die nachfolgenden
+Befehle wurden stillschweigend übersprungen. Der Server legte `app/logs/` einfach neu an.
+Nachgeholt und verifiziert: kein `app/logs` mehr, `data/logs/web_20260802.log` wächst.
+
+**Verifiziert nach dem Umbau:** alle Module importierbar (`core.*`, `web_server`, `main`),
+alle fünf Runtime-Skripte importierbar, Lernkarten und Regelwerk laden, `alembic` funktioniert,
+Server startet fehlerfrei, acht Endpunkte HTTP 200, keine Konsolenfehler auf drei Seiten in
+beiden Themes. Docker-Build NICHT geprüft — der Daemon läuft auf diesem Rechner nicht;
+stattdessen statisch geprüft: alle COPY-Quellen existieren, `.dockerignore` schließt `.env`,
+`.venv` und `Snapshots/` weiterhin aus, `deploy/` wird nicht versehentlich ausgeschlossen,
+gunicorn-Konfiguration ladbar, CMD-Pfad stimmt mit der Datei überein.
+
+---
+
+### 2026-08-02 — Repository Stufe 3: Daten raus, Werkzeuge gruppiert
+- **Status:** done · **Changed files:** Verzeichnisverschiebungen, 23 Pfadanker in 12
+  Runtime-Skripten, 12 Aufrufer, `core/storage_manager.py`, `app/.env` (nur eine Zeile),
+  `.dockerignore`, `.gitignore`, `app/README.md`
+
+**ABWEICHUNG VOM PLAN — mit Grund.** Vorgesehen war `smart-planning/` nach `tools/` auf
+Repository-Ebene. Beim Prüfen kam heraus: das Dockerfile macht `COPY . .` mit Build-Kontext
+`app/`. Läge `smart-planning/` daneben, wären die Runtime-Skripte **nicht im Image** — der SP
+Agent bräche in Produktion, und weder hier noch in einem Test wäre das aufgefallen. Ein
+Verlegen des Kontexts auf Repository-Ebene war letzte Runde bereits aus Sicherheitsgründen
+verworfen worden (`.dockerignore` schützt `.env` relativ zu `app/`).
+Deshalb: `app/tools/smart-planning/` — die oberste Ebene von `app/` wird aufgeräumt, der
+Build-Kontext bleibt korrekt. `.dockerignore` entsprechend nachgezogen.
+
+**Was verschoben wurde**
+- `app/smart-planning/Snapshots/` (608 MB) → `data/snapshots/`. Das war das eigentliche Ziel:
+  Daten gehören nicht in den Code-Baum. `app/` ist damit von 615 MB auf ~9 MB geschrumpft.
+- `app/smart-planning/` → `app/tools/smart-planning/`.
+
+**Pfadanker: 23 Stellen in 12 Runtime-Skripten.** Die Skripte lagen eine Ebene höher und
+fanden `app/` über `Path(__file__).parent.parent.parent`. Jetzt eine Ebene tiefer. Statt eine
+vierte `.parent` anzuhängen wurde auf `parents[3]` umgestellt — bei vier Stufen ist die Kette
+nicht mehr lesbar, und genau dort entsteht der Fehler, der erst zur Laufzeit auffällt.
+Gegengeprüft: 0 verbliebene Vorkommen der alten Kette, alle 13 Runtime-Skripte importierbar.
+
+**ZWEI FEHLER, die erst die Nachprüfung gefunden hat**
+1. `StorageManager` zeigte nach dem Umbau weiterhin auf `app/smart-planning/Snapshots` und
+   legte diesen Ordner sogar leer NEU an (`mkdir(parents=True)` in Zeile 73). Ursache war
+   nicht der Code, sondern `LOCAL_STORAGE_PATH` in `app/.env`. Der Wert überschrieb den
+   korrigierten Standard.
+2. Erster Korrekturversuch war `LOCAL_STORAGE_PATH=../data/snapshots` — arbeitsverzeichnis-
+   relativ und damit genau die Fragilität, die beseitigt werden sollte. Stattdessen die
+   Variable stillgelegt (auskommentiert mit Begründung); der Standard in `storage_manager.py`
+   ist jetzt dateirelativ (`parents[2] / "data" / "snapshots"`).
+   **Für die Auslieferung wichtig:** Wer `LOCAL_STORAGE_PATH` in Azure oder anderswo gesetzt
+   hat, muss den Wert dort ebenfalls anpassen oder entfernen.
+
+**Verifiziert:** alle Anwendungsmodule importierbar, 13/13 Runtime-Skripte importierbar,
+`rulebook_loader` findet Monolith und alle 12 Lernkarten, `StorageManager` und
+`runtime_storage` zeigen beide auf `data/snapshots` mit 28 gefundenen Snapshot-Ordnern,
+Server startet fehlerfrei, sieben Endpunkte HTTP 200, ein Review-Detail geladen, der
+Code-Auszug liest die Snapshot-Datei am neuen Ort (Zeile 7777 von 165282 — identisch zum Stand
+vor dem Umbau), Gedächtnis-Fälle laden, keine Konsolenfehler auf drei Seiten in beiden Themes.
+Docker-Build weiterhin nicht ausführbar (Daemon läuft nicht) — die COPY-Quellen und die
+`.dockerignore`-Regeln wurden statisch geprüft.
+
+---
+
+### 2026-08-02 — Nachkontrolle des Umbaus
+- **Status:** done · **Changed files:** 17 Dateien, ausschließlich Kommentare/Docstrings
+
+**Gefunden:** Nach dem Umbau standen in 17 Dateien noch Kommentare, die von `demo/` sprachen —
+`# demo/ on sys.path`, `Lade .env aus dem demo-Verzeichnis`, `default: './smart-planning/Snapshots'`.
+Der Code war korrekt (funktional nachgewiesen), aber die Beschreibung daneben zeigte auf einen
+Ordner, den es nicht mehr gibt. Ein Kommentar, der in die Irre führt, ist schlechter als keiner.
+Korrigiert, ohne eine einzige Codezeile anzufassen. Der `--demo`-Schalter in
+`identify_error_llm.py` blieb bewusst stehen: das ist ein Kommandozeilenargument mit der
+Bedeutung „Testmodus", kein Pfadverweis.
+
+**Außerdem:** alle 10 `__pycache__`-Verzeichnisse gelöscht, damit kein Bytecode aus dem alten
+Layout einen gebrochenen Import verdeckt. Danach alles frisch kompiliert.
+
+**Abnahme nach dem gesamten Umbau (Stufe 1–3):**
+- 15/15 Anwendungsmodule und 13/13 Runtime-Skripte importierbar — frisch kompiliert, ohne Cache
+- `rulebook_loader`: 12 Lernkarten, Monolith gefunden
+- `StorageManager`: 28 Snapshot-Ordner unter `data/snapshots`
+- alembic meldet `9b1e40c7d2a3 (head)` aus dem neuen Verzeichnis
+- **Runtime-Skript als echter Subprozess ausgeführt** (`identify_snapshot.py --snapshot <id>
+  --empty demandId`): „Snapshot data loaded successfully", Rückgabecode 0. Das ist der Beweis,
+  dass die ganze Kette trägt — `sys.path` über `parents[3]`, `.env`, `core.storage_manager`
+  und die Snapshot-Auflösung auf `data/snapshots`.
+- Review-Detail über die API geladen, Code-Auszug liest Zeile 7777 von 165282 — identisch zum
+  Stand vor dem Umbau
+- Server startfehlerfrei, sechs Endpunkte HTTP 200, Logs landen in `data/logs`, kein `app/logs`
+- Keine Konsolenfehler auf drei Seiten in beiden Themes
+
+**Weiterhin NICHT nachgewiesen (ehrlich vermerkt):**
+- Der Docker-Build. Der Daemon läuft auf diesem Rechner nicht. Geprüft wurden nur statisch die
+  COPY-Quellen, die `.dockerignore`-Regeln und der CMD-Pfad.
+- Eine vollständige Korrektur-Pipeline (Validieren → Vorschlag → Anwenden). Dafür fehlt die
+  VPN-Verbindung zum ESAROM-Server; die Import- und Lesepfade sind geprüft, ein echter
+  Schreibdurchlauf steht aus.
+- `LOCAL_STORAGE_PATH` in der Azure-Konfiguration. Lokal stillgelegt; ob dort ein Wert gesetzt
+  ist, lässt sich von hier aus nicht sehen.
+
+---
+
+### 2026-08-02 — Backend an die neue Terraform-Infrastruktur angeglichen
+- **Status:** teilweise — alles rund um AI Search und Index ist auf Nutzerwunsch VERTAGT
+  (siehe TODO-Block unten).
+- **Changed files:** `app/deploy/Dockerfile`, `app/deploy/entrypoint.sh` (neu),
+  `app/web_server.py`, `app/main.py`, `app/core/storage_manager.py`
+
+**Vorgehen:** Nicht die Übergabe-Zusammenfassung als Grundlage genommen, sondern die
+Terraform-Quelle gelesen (`infra/main.tf`) und die 32 tatsächlich gesetzten
+Umgebungsvariablen gegen jedes `os.getenv` im Backend abgeglichen.
+
+**Bereits in Ordnung (nichts zu tun):** Kern-App liest ausschließlich aus der Umgebung,
+kein Endpunkt/Schlüssel/Ressourcenname fest codiert; die Alias-Variablen
+(`AZURE_OPENAI_CHAT_*`, `_RAG_*`, `_ORCHESTRATION_*`) werden bereits benutzt und mit
+`must_env()` hart geprüft; `DATABASE_URL` wird als Ganzes gelesen (nichts wird aus
+Einzelteilen gebaut, keine `SQL_ADMIN_PASSWORD`-Variable); `pyodbc`, `SQLAlchemy`, `alembic`
+und `azure-communication-email` sind in den Requirements; ACS nutzt `ACS_CONNECTION_STRING`
+und `ACS_SENDER_EMAIL`; `CLIENT_SECRET` wird nur gelesen, nie geloggt; gunicorn bindet auf
+`0.0.0.0:8000`; **der RAG-Agent nutzt keinen Semantic Ranker** (reine Vektorsuche, damit
+Free-SKU-tauglich); keine Hintergrund-Threads oder Scheduler.
+
+**Behoben**
+1. **ODBC Driver 18 fehlte im Image.** `pyodbc` war installiert, der Treiber nicht — der
+   Container wäre gestartet und erst beim ersten Request umgefallen. `msodbcsql18` +
+   `unixodbc` in der Production-Stage, `unixodbc-dev` im Builder.
+2. **Migrationen liefen nirgends.** Terraform legt eine LEERE Datenbank an; ohne
+   `alembic upgrade head` hätte die Anwendung keine Tabellen. Neuer `deploy/entrypoint.sh`
+   migriert vor dem Start und ruft danach gunicorn per `exec` auf. Bewusst hart abbrechend:
+   eine Anwendung auf halb migriertem Schema richtet mehr Schaden an als eine, die sichtbar
+   nicht hochkommt. Sicher, weil `max_replicas = 1`; über `SKIP_MIGRATIONS=1` abschaltbar,
+   falls die Migration je in einen eigenen Container-Apps-Job wandert.
+3. **Speech-Region hatte den falschen Standardwert** (`westeurope`, Ressource liegt in
+   `swedencentral`). Standard entfernt — eine fehlende Variable ist ein Konfigurationsfehler
+   und soll sichtbar sein, statt still gegen eine fremde Region zu sprechen. Der Wächter
+   prüft jetzt Schlüssel UND Region und protokolliert nur die NAMEN der fehlenden Variablen.
+
+**ZWEI FEHLER AUS MEINEM EIGENEN REPOSITORY-UMBAU, hier gefunden.** Beide hätten erst in
+Produktion zugeschlagen, weil sie lokal korrekt aussehen:
+- `logs_dir` war `Path(__file__).parent.parent / "data" / "logs"`. Im Container liegt die
+  Anwendung auf `/app`, der Pfad daneben ist also die DATEISYSTEMWURZEL — `/data/logs`, wohin
+  `appuser` nicht schreiben darf. Jetzt über `LOG_DIR` steuerbar, das Image setzt `/app/logs`.
+- Derselbe Denkfehler im `StorageManager` (`parents[2] / "data" / "snapshots"` → `/data/…`).
+  Das Image setzt jetzt `LOCAL_STORAGE_PATH=/mnt/snapshots` — der Mountpunkt existierte längst.
+  Im Regelfall läuft dort `STORAGE_MODE=AZURE`, aber der LOCAL-Fallback greift, sobald die
+  Verbindungszeichenfolge fehlt, und darf dann nicht ins Leere zeigen.
+
+- **Verifiziert:** Entrypoint-Logik lokal durchgespielt (mit und ohne `SKIP_MIGRATIONS`),
+  `alembic upgrade head` zweimal hintereinander → idempotent, bleibt auf `9b1e40c7d2a3 (head)`;
+  `entrypoint.sh` wird nicht von `.dockerignore` ausgeschlossen; Python-Syntax aller
+  geänderten Dateien geprüft. **Der Docker-Build selbst ist weiterhin ungeprüft** — der Daemon
+  läuft auf diesem Rechner nicht. Der ODBC-Installationsblock ist der übliche Weg für
+  Debian bookworm, aber er ist NICHT ausgeführt worden.
+
+---
+
+## TODO — AI Search, Index und Dokumente (vertagt am 2026-08-02 auf Nutzerwunsch)
+
+Bewusst NICHT angefasst, gehört zusammen und wird später am Stück gemacht:
+
+1. **`index/ingest_docs.py` liest die falsche Variable.** Zeile 21: `os.getenv("AZURE_OPENAI_KEY")`
+   — Terraform liefert `AZURE_OPENAI_API_KEY`. Der Wert wäre `None`, der Client bricht ab.
+2. **`index/ingest_docs.py` hat einen fest codierten Windows-Pfad.** Zeile 26 zeigt auf
+   `C:\Projektarbeiten\agentic-ai-mfg\docs\basic-docs`. Im Container existiert der nicht; die
+   PDFs liegen jetzt im Storage `saagenticaimfg/basic-ai-informations`.
+3. **`index/create_index.py` ist nicht idempotent.** Zeile 106 ruft `create_index()`, das beim
+   zweiten Lauf fehlschlägt. Für „prüfen und bei Bedarf anlegen" braucht es
+   `create_or_update_index()`.
+4. **`process-docs-index` existiert in Azure nicht.** Terraform erstellt den Search Service,
+   aber nicht den Index und nicht die Dokumente. Solange der Index fehlt, liefert der RAG-Agent
+   Fehler statt Antworten.
+5. **Der Dokumenten-Storage wird nicht ans Backend übergeben.** Für `basic-ai-informations`
+   gibt es keine Umgebungsvariable. Punkt 2 lässt sich erst abschließen, wenn die
+   Infrastruktur Managed-Identity-Zugriff und Storage-Variablen nachliefert.
+6. **Semantic Search bleibt aus**, solange Search auf dem Free-SKU läuft. Aktuell erfüllt —
+   der RAG-Agent nutzt reine Vektorsuche, keinen Semantic Ranker. Beim Wiederaufbau des Index
+   nicht versehentlich eine Semantic Configuration hinzufügen.
+
+## TODO — Betrieb (aus dem Infrastruktur-Abgleich)
+
+7. **Scale-to-Zero und die Korrektur-Pipeline vertragen sich schlecht.** Die Pipeline ruft
+   Runtime-Skripte als Subprozess auf und läuft mehrere Minuten (gunicorn-Timeout: 600 s). Bei
+   `max_replicas = 1` blockiert ein Durchlauf die einzige Instanz für die gesamte Dauer.
+   Vor dem Produktivbetrieb klären: eigener Container-Apps-Job oder asynchrone Ausführung.
+8. **`LOCAL_STORAGE_PATH` in der Azure-Konfiguration prüfen.** Lokal stillgelegt; falls dort
+   noch ein Wert auf den alten Pfad zeigt, muss er weg. Das Image setzt ihn selbst.
+
+---
+
+### 2026-08-02 — gpt-4.1 statt gpt-4o, Scale-to-Zero abgeschaltet
+- **Status:** done · **Changed files:** `app/core/cost_model.py`, `app/routes/dashboard.py`,
+  `app/.env` (lokal), sowie im INFRA-Repository `infra/terraform.tfvars` und
+  `infra/variables.tf`
+
+**Scale-to-Zero aus.** `min_replicas` von 0 auf 1 (tfvars und Standardwert in variables.tf).
+Begründung im tfvars vermerkt — inklusive der Einschränkung, die BLEIBT: `max_replicas` ist
+weiterhin 1, ein mehrminütiger Pipeline-Lauf belegt die einzige Instanz also nach wie vor
+für die gesamte Dauer. Der Kaltstart ist weg, das Nebenläufigkeitsproblem nicht.
+
+**gpt-4.1.** In Terraform genügte EINE Zeile: `azure_openai_deployment` speist über das
+Key-Vault-Secret `azure-openai-deployment` alle drei Alias-Variablen (CHAT, RAG,
+ORCHESTRATION). Das Deployment `gpt-4.1` wird vom `manual_resources`-Modul bereits verwaltet,
+und die Validierungsliste in `variables.tf` ließ den Wert schon zu. `terraform fmt` und
+`terraform validate` laufen sauber.
+
+**Kostenmodell nachgezogen** — sonst hätte das Dashboard weiter mit den Preisen von gpt-4o
+gerechnet und dabei behauptet, das Modell sei bekannt. `gpt-4.1` mit $2.00/$8.00 je 1M
+eingetragen, `DEFAULT_PRICES` und der Standardwert von `active_model()` ebenfalls auf 4.1
+umgestellt, Hinweistext im Dashboard modellunabhängig formuliert.
+- **BEWUSST NICHT eingetragen:** `gpt-5.1` und `gpt-5.2-chat`. Beide sind deployt, aber ich
+  kenne ihre Listenpreise nicht belastbar. Einen Preis zu raten wäre schlimmer als der
+  ehrliche Hinweis, den `describe_prices()` für unbekannte Modelle ausgibt
+  (`known_model: false`). Nachgeprüft: gpt-5.1 fällt korrekt auf die Standardpreise zurück
+  UND meldet sich als unbekannt.
+- `app/.env` lokal ebenfalls auf gpt-4.1 gesetzt (alle vier Deployment-Variablen), damit die
+  lokale Umgebung dieselben Zahlen zeigt wie die Cloud.
+- **Verifiziert:** Dashboard-API meldet jetzt `model: gpt-4.1, input 0.002, output 0.008,
+  known_model: true`; alle Seiten HTTP 200; `terraform validate` erfolgreich.
+
+---
+
+### 2026-08-03 — Gründliche Nachprüfung des gesamten Umbaus
+- **Status:** Prüfung abgeschlossen · **Changed files:** `app/.dockerignore`,
+  `app/tools/smart-planning/runtime/{validate,update,create,download,rename}_snapshot.py`
+
+**Docker-Daemon gestartet — der größte offene Punkt ist damit belegt.** Das Image baut
+(410 MB), startet, migriert und bedient Anfragen. Nachgewiesen IM Image: ODBC Driver 18
+registriert (`libmsodbcsql-18.6.so.2.1`), 14 Lernkarten vorhanden, kein `.env`, kein `.venv`,
+kein `/data` am Wurzelverzeichnis, `LOG_DIR=/app/logs` und `LOCAL_STORAGE_PATH=/mnt/snapshots`
+beschreibbar, Prozess läuft als `appuser`. Entrypoint führt `alembic upgrade head` aus,
+gunicorn lauscht auf `0.0.0.0:8000`, Healthcheck grün, alle Seiten und APIs HTTP 200.
+Damit sind auch die beiden Pfadfehler aus dem Repository-Umbau abschließend widerlegt.
+
+**Behoben: Monolith-Regelwerk fehlte im Image.** `.dockerignore` schloss
+`runtime-files/` aus (dort liegen Laufzeitdateien) — darin liegt aber auch das statische
+Monolith-Regelwerk. Der A/B-Schalter `RULEBOOK_MODE=monolith` wäre in Produktion mit einem
+`FileNotFoundError` gestorben. Ausnahmeregel ergänzt, am neu gebauten Image geprüft.
+
+**Behoben: ESAROM-Endpunkt war in fünf Dateien fest verdrahtet.** `base_uri`, `client_id`
+(`apiClient-test`) und der Keycloak-Realm standen im Code. Beide Werte tragen „test" im
+Namen — in Azure ausgerollt hätte das Produktiv-Backend gegen die ESAROM-TESTUMGEBUNG
+gesprochen, ohne dass es jemandem auffällt. Jetzt über `SMART_PLANNING_BASE_URI`,
+`SMART_PLANNING_CLIENT_ID` und `SMART_PLANNING_REALM` konfigurierbar, mit den bisherigen
+Werten als Standard. Beide Richtungen geprüft: ohne Variablen unverändert, mit Variablen
+greifen sie durch (Token-URL, API-Basis, Client-ID).
+
+**Migrationen gegen Azure SQL geprüft — ohne Datenbank.** `alembic upgrade head --sql` mit
+MSSQL-Dialekt erzeugt alle 7 Schritte als gültiges T-SQL; `IDENTITY`, `DATETIMEOFFSET`,
+keine SQLite-Konstrukte. Meine neue Migration wird zu zwei sauberen `ALTER TABLE ... ADD`.
+
+**OFFENER BEFUND (Entscheidung nötig): nicht-Unicode-Spalten.** Das T-SQL erzeugt `VARCHAR`
+und `TEXT` statt `NVARCHAR`. Zwei Folgen: `TEXT` ist in SQL Server seit Langem abgekündigt,
+und `VARCHAR` speichert unter der Azure-Standardkollation nur CP1252. Deutsche Umlaute und
+Gedankenstriche sind darin enthalten, ein Pfeil („→"), ein Emoji oder kyrillische Zeichen
+NICHT — die würden beim Speichern zu „?". Betroffen sind u. a. `messages.content` (freier
+Nutzertext) und `reviews.comment` (die Begründung des Menschen, also der Prüfnachweis).
+Geprüft: die vorhandenen Daten enthalten aktuell KEIN solches Zeichen. Zwei Wege, beide
+jetzt billig, weil die Azure-Datenbank leer ist — später teuer.
+
+**Weitere Befunde ohne Handlungsbedarf, aber dokumentiert:**
+- 13 Stellen rufen ESAROM mit `verify=False` auf (TLS-Prüfung aus). Vermutlich wegen eines
+  internen Zertifikats. Nicht angefasst — ein Umstellen ohne Kenntnis der Zertifikatslage
+  würde die Verbindung brechen.
+- `NOTIFICATION_RECIPIENT_EMAIL` wird von Terraform gesetzt, aber vom Code NICHT gelesen:
+  der E-Mail-Agent nimmt den Empfänger aus dem Gesprächsverlauf. Kein Fehler, aber die
+  Infrastruktur erwartet offenbar einen festen Standardempfänger.
+- Von Terraform NICHT gesetzt und damit auf Standardwerten: `HUMAN_IN_THE_LOOP` (true),
+  `RULEBOOK_MODE` (cards), die drei neuen `SMART_PLANNING_*`, sowie `LOG_DIR` und
+  `LOCAL_STORAGE_PATH` (setzt das Image selbst). `AZURE_OPENAI_KEY` gehört zum
+  vertagten Search-/Index-Block.
+
+**Heutige UI-Arbeit erneut geprüft:** alle Seiten und APIs 200, Sitzungs-PATCH
+(umbenennen, ausblenden, zurücksetzen) funktioniert, keine Konsolenfehler in beiden Themes.
+
+---
+
+### 2026-08-03 — 401 im Chat: veraltete Zugangsdaten nach der Terraform-Übernahme
+- **Status:** behoben · **Changed files:** `app/.env` (lokal, nicht versioniert)
+
+**Symptom:** Jede Chatfrage endete mit `[INTERPRETATION ERROR] Error code: 401 — Access denied
+due to invalid subscription key or wrong API endpoint`.
+
+**Vorgehen — erst eingrenzen, nicht raten.** Die Fehlermeldung nennt zwei mögliche Ursachen
+(Schlüssel ODER Endpunkt). Statt zu tippen, zwei getrennte Sonden gefahren: das bloße
+Auflisten der Deployments (braucht nur den Schlüssel) scheiterte ebenfalls mit 401 — damit
+war das Deployment `gpt-4.1` als Ursache ausgeschlossen und die Sache auf das Paar
+Schlüssel/Endpunkt eingegrenzt. Danach den echten Schlüssel über `az` geholt und beide
+Kandidaten geprüft: mit dem Azure-Schlüssel antworten BEIDE Endpunktformen
+(`openai.azure.com` und `cognitiveservices.azure.com`) mit HTTP 200.
+
+**Ursache:** Der Schlüssel in `app/.env` stammte aus der Zeit vor der Terraform-Übernahme.
+Verglichen wurde über SHA-256-Fingerabdrücke (`1fd00c52…` in `.env` gegen `9bfeac2c…` in
+Azure) — so ließ sich die Ungleichheit belegen, ohne einen Schlüsselwert auszugeben.
+Der Endpunkt war korrekt, entgegen dem, was die Fehlermeldung nahelegt.
+
+**Dieselbe Ursache traf zwei weitere Dienste.** Nach dem Fund gezielt alle Zugangsdaten
+gegen Azure geprüft, statt auf den nächsten 401 zu warten:
+- `AZURE_SEARCH_ADMIN_KEY` — veraltet, nachgezogen. Search authentifiziert jetzt und
+  bestätigt zugleich den bekannten TODO-Punkt: **kein einziger Index vorhanden**.
+- `AZURE_SPEECH_KEY` — veraltet, nachgezogen.
+- `AZURE_OPENAI_{API,CHAT,RAG,ORCHESTRATION}_KEY` — alle vier auf den aktuellen Wert gesetzt.
+
+**Nebenbei gefunden:** `APP_BASE_URL` stand auf `http://http://localhost:8000` — doppeltes
+Schema. Der E-Mail-Agent baut daraus die Links zum Review Board; die wären unklickbar
+gewesen. Korrigiert.
+
+**Verifiziert:** Direkter Aufruf gegen `gpt-4.1` liefert `gpt-4.1-2025-04-14` und eine
+Antwort; eine echte Chatfrage durch den vollen Stack (neue Session, `/api/chat`) wird vom
+Chat-Agenten beantwortet, ohne Fehler in der Antwort.
+
+**Wichtig für die Auslieferung:** Betroffen war NUR die lokale `.env`. In Azure zieht die
+Container App ihre Werte über Managed Identity aus dem Key Vault, dort sind sie aktuell.
+Die Konsequenz gilt aber allgemein: nach jedem `terraform apply`, der Ressourcen neu anlegt
+oder Schlüssel rotiert, ist die lokale `.env` veraltet. Ein kleines Skript, das sie aus dem
+Key Vault auffrischt, wäre die naheliegende Vorsorge — noch nicht gebaut.

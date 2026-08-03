@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs echo \"  Stellen mit deaktivierter Zertifikatspruefung:\")",
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(curl -s -o /dev/null -w \"port8000: %{http_code}\\\\n\" http://localhost:8000/ --max-time 5)",
+      "Bash(./app/.venv/Scripts/python.exe -c ' *)",
+      "Bash(az --version)",
+      "Bash(az account *)",
+      "Bash(az cognitiveservices *)",
+      "Bash(app/.venv/Scripts/python.exe -c ' *)"
+    ]
+  }
+}

@@ -4,23 +4,23 @@
 __pycache__
 
 # Secrets
-demo/.env
+app/.env
 
 # OS
-demo/.DS_Store
+app/.DS_Store
 
-# Logs 
-demo/logs/
+# Laufzeitdaten (liegen seit 2026-08-02 unter data/, nicht mehr im Code)
+data/
 
 # Smart Planning
-demo/zArchive/smart-planning_v1
-demo/zArchive/smart-planning_v2
-demo/smart-planning/docs
-demo/smart-planning/Snapshots
+app/tools/smart-planning/docs
 
 # Local database (AP2 persistence layer) — Alembic migrations ARE tracked
-demo/db/*.sqlite3
+app/db/*.sqlite3
 
 docs/Expose
 docs/snapshots
 .github/instructions/
+
+
+app/ui/.ui-backup-20260802-123743

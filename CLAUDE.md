@@ -10,13 +10,15 @@ applyTo: "**"
 # PT4 Project — Agent Instructions
 
 ## Project context
-This repository (`demo/`) contains a multi-agent system for Smart Planning snapshot
+This repository (`app/`) contains a multi-agent system for Smart Planning snapshot
 validation and correction. Phase 3 is complete (autonomous correction). We are now in
 **PT4**, evolving it into an enterprise solution with Human-in-the-Loop governance,
 confidence scoring, MCP integration, monitoring dashboard, and a memory system.
 
-All application code lives under `demo/`. There is NO `src/` layout. Runtime tools are
-under `demo/smart-planning/runtime/` and are invoked via subprocess by `sp_agent.py`.
+All application code lives under `app/` (renamed from `demo/` on 2026-08-02 — it is no
+longer a demo). There is NO `src/` layout. Runtime tools are under
+`app/smart-planning/runtime/` and are invoked via subprocess by `sp_agent.py`.
+Laufzeitdaten (Logs, Archiv) liegen NEBEN dem Code unter `data/` und sind gitignoriert.
 
 ## How to work — hard rules
 1. **Read `docs/PT4_PLAN.md` before starting any work package.** It defines milestones,
@@ -40,7 +42,7 @@ under `demo/smart-planning/runtime/` and are invoked via subprocess by `sp_agent
 - One confidence score and one approval per whole proposal (including additional_updates).
 
 ## Security note
-`demo/.env` currently holds secrets in plaintext. Never print secret values in output.
+`app/.env` currently holds secrets in plaintext. Never print secret values in output.
 Never commit `.env`.
 
 ## Reporting — keep it short (token discipline)

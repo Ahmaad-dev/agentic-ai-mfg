@@ -1,0 +1,2411 @@
+/* =========================================================================
+   DESIGN TOKENS  (Redesign 2026-08-02)
+   -------------------------------------------------------------------------
+   Quelle der Wahrheit sind die NEUEN Tokens (--bg, --ink, --accent, ...) aus
+   dem Design "Agentic AI — Demo". Die ALTEN Namen (--bg-color, --text-main,
+   ...) bleiben als ALIASE bestehen: die vorhandenen ~250 Verwendungen im
+   restlichen Stylesheet funktionieren unverändert weiter und übernehmen
+   automatisch die neue Palette. Kein Suchen-und-Ersetzen über 58 KB CSS,
+   keine kaputten Regeln.
+
+   Theme: Light ist der Standard (wie im Design). Dark wird über
+   `<html data-theme="dark">` gesetzt — der Umschalter sitzt in shell.js und
+   merkt sich die Wahl in localStorage.
+   ========================================================================= */
+:root {
+    /* ---- Neue Design-Tokens: Light ---- */
+    --bg:#faf9f7; --panel:#f4f2ec; --surface:#ffffff;
+    --border:#e7e4da; --border-soft:#eeece4; --border-hover:#d7d2c4;
+    /* Kontrast nachgerechnet, nicht geschaetzt (2026-08-02). Vorher: --muted #736f63
+       lag auf --panel bei 4,48:1 und --faint #9a968a auf weiss bei 2,96:1 — Letzteres
+       verfehlt sogar die 3:1 fuer Grosstext. Betroffen waren u. a. der Platzhalter im
+       Eingabefeld und die Leerzustaende. Jetzt: --muted 4,84:1 auf Panel, --faint 4,55:1
+       auf weisser Karte. */
+    --ink:#20211f; --ink2:#3a3b36; --muted:#6d6a5e; --faint:#7a7668;
+    --hover:#ece9e0; --hover-soft:#e6e2d7; --empty-ic:#cfcabb;
+    --scroll:#dcd8cc; --scroll-h:#c9c4b5; --shadow:rgba(40,40,30,.07);
+    --accent:#3f7d5c; --accent-ink:#2c5842; --accent-soft:#eaf1eb; --accent-line:#cfe0d3;
+    --brand-grad:linear-gradient(140deg,#3f7d5c,#8fae5d);
+    --bubble-bg:#20211f; --bubble-fg:#faf9f7;
+    /* #b8821f hatte auf weiss nur 3,36:1 — betraf den Status „wartet auf Review" und die
+       Zaehlblase in der Navigation (weisse Schrift auf Bernstein). Jetzt 4,78:1 in beide
+       Richtungen. Die getoenten FLAECHEN nutzen eigene rgba-Werte und bleiben unberuehrt. */
+    --amber:#976a18; --amber-soft:#f7efdd; --amber-line:#ecdcb4;
+    --red:#bb5546; --red-soft:#f7e8e4; --red-line:#eccabf;
+    --indigo:#5b63c4; --indigo-soft:#ebecf8; --indigo-line:#d3d5f0;
+    --blue:#4d6fa8; --blue-soft:#e9eef6;
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+
+    /* ---- Aliase: alte Namen -> neue Tokens (nicht entfernen) ---- */
+    --bg-color: var(--bg);
+    --code-ink:#3a3b36;   /* Schrift auf Codeflaechen; --code-bg steht weiter unten */
+    --input-bg: var(--surface);
+    --text-main: var(--ink);
+    --text-sub: var(--muted);
+    --accent-primary: var(--accent);
+    --accent-secondary: #8fae5d;
+    --user-bubble-bg: var(--bubble-bg);
+    --user-bubble-border: var(--border);
+    --code-bg: var(--panel);
+    --border-color: var(--border);
+    --font-body: var(--font);
+    --font-code: var(--mono);
+    --font-main: var(--font);      /* war nie definiert -> stiller Fallback, jetzt korrekt */
+    --rb-card-bg: var(--surface);
+    --rb-chip-bg: var(--panel);
+
+    /* ---- Chart-Farben (Dashboard) ----
+       Die Kartenfläche ist jetzt themeabhängig, deshalb sind es die Chart-Farben auch.
+       LIGHT: die Design-Palette (dunkel genug für Vollflächen auf Weiß).
+       DARK:  die zuvor mit dem Paletten-Validator geprüften Werte (Helligkeitsband,
+              Chroma, CVD-Trennung ΔE 95, Kontrast — alle PASS gegen die dunkle Karte).
+       Die Farbfamilien bleiben in beiden Themes dieselben wie im Review Board
+       (grün = freigegeben, indigo = korrigiert, rot = verworfen). */
+    --chart-bar: #4d6fa8;
+    --chart-legacy: #b8821f;
+    --chart-approve: #3f7d5c;
+    --chart-modify: #5b63c4;
+    --chart-reject: #bb5546;
+    --chart-grid: #e7e4da;
+    --chart-axis: #736f63;
+
+    /* Breite der App-Shell-Sidebar (AP4.6). Auch die `fixed` positionierte Eingabezeile
+       braucht sie, sonst zentriert sie sich am Viewport statt am Inhaltsbereich. */
+    --sidebar-w: 264px;
+}
+
+/* ---- Dark Theme ---- */
+:root[data-theme="dark"] {
+    --bg:#0f1115; --panel:#181a20; --surface:#1c1e25;
+    --border:#2c2f38; --border-soft:#23262e; --border-hover:#454a56;
+    /* --faint lag hier bei 3,31:1 auf der Karte; jetzt 4,82:1. */
+    --ink:#e9eaed; --ink2:#c3c6cd; --muted:#9a9ea7; --faint:#868a95;
+    --hover:#23262e; --hover-soft:#2a2d36; --empty-ic:#4a4e58;
+    --scroll:#3a3d46; --scroll-h:#4a4e58; --shadow:rgba(0,0,0,.4);
+    --bubble-bg:#2a2d36; --bubble-fg:#eef0f3;
+    /* Der Entwurf laesst die Akzent-Toene im Dunkelmodus unveraendert — dort waere ein
+       hellgruener Chip im dunklen Menue aufgeblitzt. Wir haben ein echtes dunkles Theme,
+       das benutzt wird, also bekommt der Akzent hier eigene Werte: getoente Flaeche statt
+       heller Flaeche, helle Schrift statt dunkler. 8,8:1 auf der Karte. */
+    --code-ink:#e3e3e3;
+    --accent-ink:#8fc9a6; --accent-soft:rgba(63,125,92,.18); --accent-line:rgba(63,125,92,.42);
+    --amber-soft:rgba(184,130,31,.16); --amber-line:rgba(184,130,31,.4);
+    --red-soft:rgba(187,85,70,.16); --red-line:rgba(187,85,70,.42);
+    --indigo-soft:rgba(123,131,224,.18); --indigo-line:rgba(123,131,224,.42);
+    --blue-soft:rgba(90,120,180,.2);
+    /* Im Dark Theme ist die Code-Fläche dunkler als das Panel */
+    --code-bg:#22252d;
+
+    /* Chart-Farben: die validierten Dark-Werte (siehe Kommentar oben) */
+    --chart-bar: #818cf8;
+    --chart-legacy: #eab308;
+    --chart-approve: #16a34a;
+    --chart-modify: #6366f1;
+    --chart-reject: #ef4444;
+    --chart-grid: #2e3036;
+    --chart-axis: #949ba4;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--ink);
+    height: 100vh;
+    height: 100dvh; /* Mobile-optimiert */
+    overflow: hidden;
+    font-size: 15px;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;   /* Topbar oben, darunter .app-row */
+    align-items: stretch;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* =============================================================================
+   APP-SHELL — Redesign 2026-08-02
+   Die Navigation sitzt jetzt in einer Topbar (Pill-Nav) statt in der linken
+   Sidebar. Darunter liegt `.app-row`: auf der Chat-Seite (Drawer + Inhalt), auf
+   Review/Dashboard nur der Inhalt — die bekommen dadurch die volle Breite.
+   shell.js baut diese Struktur zur Laufzeit auf und VERSCHIEBT die vorhandenen
+   Knoten hinein, damit alle Referenzen in chat.js/review.js gültig bleiben.
+   ============================================================================= */
+.topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 22px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border-soft);
+    z-index: 20;
+}
+
+.brand {
+    display: flex; align-items: center; gap: 11px;
+    font-weight: 600; font-size: 15px; letter-spacing: -0.01em;
+    color: inherit; text-decoration: none;
+    border-radius: 10px; padding: 2px 6px 2px 2px;
+    transition: background 0.14s ease;
+}
+.brand:hover { background: var(--surface); }
+.brand-mark { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+
+.pillnav {
+    margin-left: 8px;
+    display: flex; gap: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px;
+}
+.pill {
+    position: relative;
+    display: flex; align-items: center; gap: 7px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    color: var(--muted);
+    font: 500 13.5px var(--font);
+    text-decoration: none;
+    transition: color 0.16s ease, background 0.16s ease;
+}
+.pill:hover { color: var(--ink); }
+.pill.active { background: var(--ink); color: var(--bg); }
+.pill .material-symbols-outlined { font-size: 18px; }
+.pill-badge {
+    min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 9px; background: var(--amber); color: #fff;
+    font: 600 10px/18px var(--font); text-align: center;
+}
+.pill.active .pill-badge { background: var(--bg); color: var(--ink); }
+
+.topbar-sp { flex: 1; }
+
+.top-icon {
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 11px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.top-icon:hover { border-color: var(--border-hover); color: var(--ink); }
+.top-icon .material-symbols-outlined { font-size: 19px; }
+
+.app-row {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
+}
+
+.app-main {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;   /* Bezugsrahmen für das absolut positionierte Welcome-Panel */
+    overflow: hidden;
+}
+
+.app-sidebar {
+    flex: 0 0 var(--sidebar-w);
+    width: var(--sidebar-w);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px 12px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    transition: flex-basis 0.24s ease, width 0.24s ease, padding 0.24s ease;
+}
+
+/* --- Verlaufsleiste ein-/ausklappen -------------------------------------------
+   EIN Hebel: die Body-Klasse setzt `--sidebar-w` auf 0. Weil die Eingabezeile
+   (.input-area, position:fixed) sich über dieselbe Variable ausrichtet, folgt sie
+   automatisch mit — sonst bliebe sie um die alte Leistenbreite verschoben stehen. */
+body.sidebar-collapsed { --sidebar-w: 0px; }
+body.sidebar-collapsed .app-sidebar {
+    padding-left: 0;
+    padding-right: 0;
+    border-right: none;
+    overflow: hidden;
+}
+
+.sb-foot {
+    flex: 0 0 auto;
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+}
+.sb-collapse {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 38px;
+    padding: 0 11px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font: 500 12.5px var(--font);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.sb-collapse:hover { background: var(--surface); border-color: var(--border); color: var(--ink); }
+.sb-collapse .material-symbols-outlined { font-size: 20px; }
+
+/* Wiedereinblenden: schwebt unten links im Inhaltsbereich, sobald die Leiste zu ist.
+   z-index MUSS über der Eingabezeile liegen: sobald der Chat läuft, wird `.input-area`
+   zu einem `fixed` Balken über die volle Breite mit z-index 100 — der Knopf lag darunter
+   und verschwand, sobald die erste Nachricht getippt war. Er schwebt jetzt über dem
+   leeren linken Rand des Balkens (das Eingabefeld selbst ist mittig auf 850px begrenzt). */
+.sb-reopen {
+    position: absolute;
+    left: 14px;
+    bottom: 18px;
+    z-index: 101;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--faint);
+    cursor: pointer;
+    box-shadow: 0 2px 10px var(--shadow);
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.sb-reopen:hover { border-color: var(--accent); color: var(--accent-ink); }
+.sb-reopen .material-symbols-outlined { font-size: 20px; }
+body.sidebar-collapsed .sb-reopen { display: flex; }
+
+/* --- Tastaturfokus ------------------------------------------------------------
+   Vorher gab es GENAU EINE :focus-visible-Regel im ganzen Stylesheet; alles andere
+   hing am Browser-Standardring, und an drei Stellen wurde er sogar abgeschaltet und
+   nur durch eine Rahmenfarbe ersetzt. Auf dem Review Board gibt ein Mensch frei oder
+   verwirft — dort muss ohne Zweifel sichtbar sein, worauf man steht, BEVOR man Enter
+   drueckt. `:focus-visible` (nicht `:focus`) heisst: nur bei Tastaturbedienung, ein
+   Mausklick loest den Ring nicht aus. */
+:where(a, button, select, textarea, input, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+/* Auf der dunklen AK2-Karte geht Gruen auf Dunkelgruen unter. */
+.db-hero :focus-visible { outline-color: #a3cf6f; }
+
+.sb-new {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.sb-new:hover { border-color: var(--accent); background: var(--accent-soft); }
+.sb-new .material-symbols-outlined { font-size: 18px; }
+
+
+
+.sb-section-label {
+    padding: 6px 10px 0;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-sub);
+}
+
+.sb-sessions {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 2px;
+}
+.sb-sessions::-webkit-scrollbar { width: 6px; }
+.sb-sessions::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 999px; }
+
+.sb-session {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--text-sub);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.sb-session:hover { background: var(--hover); color: var(--text-main); }
+.sb-session.active { background: var(--hover-soft); color: var(--text-main); }
+.sb-session-title {
+    font-size: 0.86rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sb-session-meta { font-size: 0.72rem; color: var(--text-sub); }
+.sb-muted { padding: 8px 10px; font-size: 0.82rem; color: var(--text-sub); }
+
+@media (max-width: 860px) {
+    :root { --sidebar-w: 60px; }   /* die Eingabezeile folgt automatisch */
+    .app-sidebar { padding: 14px 8px; }
+    /* Bei 60 px Leistenbreite bleiben nur Symbole. Das Suchfeld muss mit weg — ein
+       Eingabefeld, in das zwei Zeichen passen, ist schlechter als keines. */
+    .sb-new span:not(.material-symbols-outlined),
+    .sb-section-label, .sb-sessions, .sb-search,
+    .sb-collapse span:not(.material-symbols-outlined) { display: none; }
+    /* Topbar: Markentext und Pill-Beschriftung weichen, die Icons bleiben —
+       sonst schiebt die Pill-Navigation die Aktionen rechts aus dem Bild. */
+    .topbar { gap: 10px; padding: 10px 14px; }
+    .brand-text { display: none; }
+    .pillnav { margin-left: 0; }
+    .pill { padding: 8px 11px; }
+    .pill:not(.active) span:not(.material-symbols-outlined):not(.pill-badge) { display: none; }
+}
+
+/* --- WELCOME SCREEN (Zentriert, verschwindet beim ersten Chat) --- */
+.welcome-screen {
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: left;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    z-index: 1;
+    width: 100%;
+    max-width: 800px;
+    padding: 0 20px;
+}
+
+.welcome-logo svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 24px;
+}
+
+.welcome-text h1 {
+    font-size: 1.5rem;
+    color: var(--accent);
+    margin-bottom: 1px;
+    font-weight: 500;
+}
+
+/* War fest #ffffff (nur auf dunklem Grund lesbar) — jetzt themeabhängige Tinte. */
+.welcome-text .big-title {
+    font-size: 2.5rem;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+    font-weight: 600;
+    display: block;
+}
+
+.welcome-text p {
+    color: var(--text-main);
+    font-size: 1rem;
+    line-height: 1.7;
+    margin-bottom: 12px;
+}
+
+.welcome-text p.subtitle {
+    margin-top: 20px;
+}
+
+.welcome-text ul {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 20px 0;
+    color: var(--text-sub);
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.welcome-text ul li {
+    margin: 4px 0;
+}
+
+/* --- CHAT CONTAINER (Anfangs unsichtbar) --- */
+.chat-container {
+    flex: 1;
+    width: 100%;
+    max-width: 100%;
+    padding: 40px 20px;
+    padding-bottom: 140px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease 0.3s;
+    scroll-behavior: smooth;
+}
+
+.message {
+    display: flex;
+    gap: 16px;
+    animation: fadeIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    width: 100%;
+    max-width: 900px;
+}
+
+.message.user {
+    justify-content: flex-end;
+}
+
+.avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px; /* Squircle shape */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    font-size: 18px;
+}
+
+.avatar.agent { 
+    background: var(--hover);
+    border: 1px solid var(--border);
+    color: white;
+}
+
+.avatar.user { 
+    background-color: var(--user-bubble-bg);
+    color: var(--text-sub);
+    border: 1px solid var(--user-bubble-border);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* --- BUBBLES --- */
+.bubble {
+    max-width: 85%;
+    padding: 0 10px;
+    color: var(--text-main);
+}
+
+/* Nutzerblase: dunkle Fläche mit heller Schrift (Design). `--bubble-fg` muss mitgesetzt
+   werden — sonst erbt sie `--ink` und wäre im Light-Theme dunkel auf dunkel. */
+.message.user .bubble {
+    background-color: var(--bubble-bg);
+    color: var(--bubble-fg);
+    border: 1px solid transparent;
+    padding: 12px 20px;
+    border-radius: 18px 4px 18px 18px;
+    box-shadow: 0 2px 6px var(--shadow);
+}
+.message.user .bubble p,
+.message.user .bubble li,
+.message.user .bubble li::marker { color: var(--bubble-fg); }
+
+.message.agent .bubble {
+    background: transparent;
+    padding: 4px 0; /* Align text visually with avatar */
+}
+
+/* --- AGENT LABELS --- */
+.agent-label {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    background: var(--hover);
+    border: 1px solid var(--border);
+    color: var(--text-sub);
+}
+
+.agent-label::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.agent-label.chat::before { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.agent-label.rag::before { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+.agent-label.spagent::before,
+.agent-label.sp::before { background: #9C27B0; box-shadow: 0 0 8px #9C27B0; }
+.agent-label.orchestrator::before { background: #2196F3; box-shadow: 0 0 8px #2196F3; }
+.agent-label.error::before { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+/* --- MARKDOWN STYLING OPTIMIZED --- */
+.bubble p { margin: 0.8em 0; line-height: 1.7; }
+.bubble p:first-child { margin-top: 0; }
+.bubble p:last-child { margin-bottom: 0; }
+
+.bubble ul, .bubble ol { 
+    margin: 0.8em 0; 
+    padding-left: 1.5em;
+    color: var(--text-main);
+}
+
+.bubble li { margin: 0.4em 0; padding-left: 0.2em; }
+.bubble li::marker { color: var(--text-main); }
+
+.bubble h1, .bubble h2, .bubble h3 {
+    margin: 1.5em 0 0.5em 0;
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: -0.5px;
+}
+
+.bubble h1 { font-size: 1.6em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
+.bubble h2 { font-size: 1.3em; }
+.bubble h3 { font-size: 1.1em; }
+
+/* Inline Code */
+.bubble code {
+    /* War helles Lavendel auf blassem Indigo — im hellen Theme praktisch unlesbar. */
+    background-color: var(--code-bg);
+    color: var(--accent-ink);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-code);
+    font-size: 0.9em;
+}
+
+/* Code Block */
+.bubble pre {
+    background-color: var(--code-bg);
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 1em 0;
+    border: 1px solid var(--border-color);
+    position: relative;
+}
+
+.bubble pre code {
+    background: transparent;
+    padding: 0;
+    color: var(--code-ink);
+    font-size: 13px;
+}
+
+.bubble blockquote {
+    border-left: 4px solid var(--accent-primary);
+    background: linear-gradient(to right, rgba(99,102,241,0.1), transparent);
+    padding: 12px 18px;
+    margin: 1em 0;
+    border-radius: 0 8px 8px 0;
+    font-style: italic;
+    color: var(--text-sub);
+}
+
+.bubble a {
+    color: var(--accent-primary);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.bubble a:hover { border-bottom-color: var(--accent-primary); }
+
+.bubble hr {
+    border: none;
+    height: 1px;
+    background: var(--border-color);
+    margin: 2em 0;
+}
+
+/* Tables */
+.bubble table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    margin: 1.5em 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.95em;
+}
+
+.bubble table th, .bubble table td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.bubble table th {
+    background-color: var(--panel);
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.bubble table tr:last-child td { border-bottom: none; }
+.bubble table tr:hover td { background-color: var(--hover); }
+
+/* --- TYPING INDICATOR --- */
+.typing-indicator {
+    display: inline-flex;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.typing-indicator span {
+    width: 6px;
+    height: 6px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    animation: typing 1.4s ease-in-out infinite both;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+}
+
+/* --- INPUT BEREICH (Startet in der Mitte, wandert nach unten) --- */
+/* AP4.6-Fix: die Eingabezeile ist `fixed` und richtete sich damit am VIEWPORT aus — seit
+   die Sidebar existiert, war sie um deren halbe Breite nach links verschoben (der
+   Willkommenstext daneben sitzt korrekt in .app-main). Sie beginnt jetzt hinter der
+   Sidebar und zentriert sich im Inhaltsbereich. */
+.input-area {
+    position: fixed;
+    left: var(--sidebar-w);
+    width: calc(100% - var(--sidebar-w));
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    top: 55%;
+    transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+    z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.input-wrapper {
+    width: 100%;
+    max-width: 800px;
+    background-color: var(--input-bg);
+    border-radius: 24px;
+    display: flex;
+    align-items: flex-end; /* Buttons bleiben unten, wenn die Textarea mehrzeilig wächst */
+    padding: 12px 20px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    position: relative;
+}
+
+.tool-picker { position: relative; align-self: flex-end; margin-right: 12px; }
+.tool-picker-btn {
+    position: relative;   /* Bezugsrahmen fuer die Kurzerklaerung (::after) */
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    background: var(--hover);
+    color: var(--text-sub);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.tool-picker-btn:hover, .tool-picker-btn[aria-expanded="true"] {
+    color: var(--text-main);
+    border-color: var(--accent-primary);
+    background: rgba(99,102,241,0.12);
+}
+/* Die Flaeche war fest auf #20222a verdrahtet — ein Rest aus der Zeit, als die Oberflaeche
+   nur dunkel war. Im hellen Theme stand dadurch ein schwarzes Menue vor einer hellen Seite,
+   und die Schrift darin kam aus den Theme-Variablen, war also dunkel auf dunkel. */
+.tool-picker-menu {
+    position: absolute;
+    left: 0;
+    bottom: 48px;
+    width: 280px;
+    padding: 7px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 18px 44px var(--shadow);
+    z-index: 20;
+}
+/* Ueberschrift wie im Entwurf: das Menue sagt, wovon es eine Liste ist. */
+.tool-picker-menu h3 {
+    margin: 0;
+    padding: 8px 9px 6px;
+    font-size: 0.69rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--faint);
+}
+/* Das Symbol bekommt eine eigene getoente Kachel, sonst schwimmt es neben dem Text. */
+.tool-picker-menu .tp-icon {
+    width: 32px; height: 32px; flex: 0 0 32px;
+    border-radius: 9px;
+    background: var(--accent-soft); color: var(--accent-ink);
+    display: flex; align-items: center; justify-content: center;
+}
+.tool-picker-menu .tp-icon .material-symbols-outlined { font-size: 18px; }
+.tool-picker-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    color: var(--text-main);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    text-align: left;
+    cursor: pointer;
+}
+.tool-picker-menu button:hover { background: var(--accent-soft); }
+.tool-picker-menu strong { font-size: 0.84rem; font-weight: 600; color: var(--text-main); }
+.tool-picker-menu button span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.tool-picker-menu small { color: var(--text-sub); font-size: 0.72rem; }
+/* `#c7d2fe` (helles Lavendel) war ein weiterer Rest aus der nur-dunklen Fassung und
+   stand im hellen Theme praktisch unsichtbar auf Weiss. */
+.selected-tool {
+    width: min(850px, 100%);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--accent-ink);
+    font-size: 0.8rem;
+}
+.selected-tool[hidden] { display: none; }
+.selected-tool > span:first-child { font-size: 17px; }
+.selected-tool button {
+    color: var(--text-sub);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+/* Die ganze Zeile zeigt den Fokus an, nicht das Textfeld darin — deshalb `focus-within`
+   am Rahmen UND eine Ausnahme vom globalen Fokusring weiter unten. Sonst laegen zwei
+   Ringe ineinander. Der Schein war noch indigo (`99,102,241`) aus der Zeit vor dem
+   Redesign; er folgt jetzt dem gruenen Akzent. */
+.input-wrapper:focus-within {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-soft), 0 4px 24px var(--shadow);
+    background-color: var(--panel);
+}
+.input-wrapper textarea:focus-visible { outline: none; }
+
+textarea {
+    flex: 1;
+    align-self: center; /* vertically centre in the input-wrapper row */
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    resize: none;
+    height: 24px;
+    /* Deckel identisch zu autoResize() in chat.js (150px), sonst wächst das Feld
+       optisch weiter, während der Text schon abgeschnitten scrollt. */
+    max-height: 150px;
+    overflow-y: auto;
+    outline: none;
+    font-family: var(--font-body);
+    padding: 0;
+    margin-bottom: 0;
+}
+
+textarea::placeholder { color: var(--faint); }
+
+.send-btn {
+    background: var(--accent-primary);
+    border: none;
+    cursor: pointer;
+    color: white;
+    margin-left: 14px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+}
+
+
+.send-btn:hover { 
+    transform: translateY(-2px);
+    /* War indigo (#5558e6) — der Knopf ist seit dem Redesign gruen und wechselte beim
+       Ueberfahren die Farbfamilie. */
+    background: var(--accent-ink);
+    box-shadow: 0 4px 12px var(--shadow);
+}
+
+.send-btn:active { 
+    transform: translateY(0);
+    transform: scale(0.95); /* Touch-Feedback */
+}
+
+.send-btn:disabled { 
+    background: var(--border); 
+    color: var(--faint); 
+    box-shadow: none; 
+    cursor: not-allowed; 
+    transform: none; 
+}
+
+.send-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+/* Mic Button (Speech-to-Text) */
+.mic-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    color: var(--text-sub);
+    margin-left: 14px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+}
+
+
+.mic-btn:hover {
+    background: var(--hover);
+    color: var(--text-main);
+    border-color: var(--text-sub);
+}
+
+.mic-btn:active {
+    transform: scale(0.95);
+}
+
+.mic-btn.connecting {
+    background: var(--amber);
+    border-color: var(--amber);
+    color: white;
+    /* Kein Blinken, nur statische Farbe */
+}
+
+.mic-btn.connecting:hover {
+    background: var(--amber);
+}
+
+.mic-btn.recording {
+    background: var(--red);
+    border-color: var(--red);
+    color: white;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.mic-btn.recording:hover {
+    background: var(--red);
+}
+
+.mic-btn:disabled {
+    background: transparent;
+    color: var(--faint);
+    border-color: var(--border-hover);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.mic-btn svg { 
+    width: 18px; 
+    height: 18px; 
+    fill: currentColor; 
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
+/* Scrollbar Styling (Minimalist) */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+/* --- CHAT GESTARTET: Zustandsänderung --- */
+body.chat-started .welcome-screen {
+    opacity: 0;
+    transform: translate(-50%, -60%);
+    pointer-events: none;
+}
+
+body.chat-started .input-area {
+    top: auto;
+    bottom: 0;
+    background: linear-gradient(to top, var(--bg-color) 40%, transparent);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px); /* Safari Support */
+}
+
+body.chat-started .input-wrapper {
+    max-width: 850px;
+}
+
+body.chat-started .chat-container {
+    opacity: 1;
+    visibility: visible;
+}
+
+@keyframes fadeIn { 
+    from { opacity: 0; transform: translateY(10px); } 
+    to { opacity: 1; transform: translateY(0); } 
+}
+
+@media (max-width: 600px) {
+    .bubble { max-width: 90%; }
+    .chat-container { padding: 20px 10px; }
+    .input-area { padding: 16px; }
+}
+
+/* =============================================================================
+   REVIEW BOARD (AP4.1) — additive; reuses the existing color scheme/vars.
+   The base `body` is a centered, overflow-hidden flex column (for the chat);
+   the review page needs a normal scrollable document, hence the overrides.
+   ============================================================================= */
+/* Redesign 2026-08-02: die Review-Board-Flächen kommen jetzt aus den zentralen
+   Tokens (oben definiert) und folgen damit automatisch Light/Dark. Die früheren
+   festen Dark-Werte (#171922 / #23262f) sind bewusst entfernt. */
+
+/* Review-Seite in der App-Shell (AP4.6): der Body bleibt die Shell (row, 100vh, kein
+   Scroll) — gescrollt wird der Content-Bereich, sonst würde die Sidebar mitscrollen. */
+body.review-page .app-main {
+    overflow-y: auto;
+    align-items: stretch;
+}
+
+.review-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    width: 100%;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.review-header-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.review-brand { display: flex; align-items: center; gap: 12px; }
+.review-brand h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+
+.review-main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+    width: 100%;
+}
+/* Die LISTE bleibt bei 900 px — eine Spalte Karten, die breiter wird, liest sich schlechter,
+   nicht besser. Die DETAILANSICHT braucht dagegen Platz fuer zwei Spalten: sonst blieben der
+   Hauptspalte neben den 360 px der Seitenspalte nur rund 480 px, und genau dort stehen die
+   Diff-Tabellen und der JSON-Auszug. */
+body.review-page:has(#detailView:not([hidden])) .review-main { max-width: 1320px; }
+
+.review-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.review-subtitle { color: var(--text-sub); font-size: 0.95rem; }
+
+.review-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--input-bg);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.review-refresh:hover:not(:disabled) { border-color: var(--accent-primary); }
+.review-refresh:disabled { opacity: 0.5; cursor: default; }
+.review-refresh .material-symbols-outlined { font-size: 18px; }
+
+.review-list { display: flex; flex-direction: column; gap: 14px; }
+
+/* --- Proposal card --- */
+.rb-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    padding: 17px 19px;
+    transition: border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+.rb-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 8px 24px var(--shadow);
+    transform: translateY(-1px);
+}
+
+.rb-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.rb-error-type {
+    font-family: var(--font-code);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-main);
+    background: rgba(6, 182, 212, 0.10);
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
+.rb-status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.rb-status-pending_review { background: rgba(234, 179, 8, 0.12); color: var(--amber); border: 1px solid rgba(234, 179, 8, 0.3); }
+.rb-status-approved { background: rgba(34, 197, 94, 0.12); color: var(--accent); border: 1px solid rgba(34, 197, 94, 0.3); }
+.rb-status-rejected { background: rgba(239, 68, 68, 0.12); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.3); }
+.rb-status-modified { background: var(--indigo-soft); color: var(--indigo); border: 1px solid var(--indigo-line); }
+.rb-status-applied { background: rgba(148, 163, 184, 0.12); color: var(--text-sub); border: 1px solid var(--border-color); }
+
+.rb-card-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px 24px;
+}
+.rb-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rb-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-sub);
+}
+.rb-value { font-size: 0.9rem; color: var(--text-main); overflow-wrap: anywhere; }
+.rb-mono { font-family: var(--font-code); }
+.rb-muted { color: var(--text-sub); }
+
+/* Snapshot id: full, selectable, with a copy button; spans the full card width */
+.rb-field-wide { grid-column: 1 / -1; }
+.rb-snapshot { display: flex; align-items: center; gap: 8px; }
+.rb-snapshot .rb-value { flex: 1; min-width: 0; }
+.rb-selectable { user-select: all; }  /* one click selects the whole id */
+.rb-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 3px;
+    color: var(--text-sub);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.rb-copy:hover { color: var(--text-main); border-color: var(--accent-primary); }
+.rb-copy.copied { color: var(--accent); border-color: var(--accent-line); }
+.rb-copy .material-symbols-outlined { font-size: 16px; }
+
+/* Confidence bar */
+.rb-confidence { display: flex; align-items: center; gap: 8px; }
+.rb-confidence-track {
+    flex: 1;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.rb-confidence-fill { height: 100%; border-radius: 999px; }
+.rb-confidence-fill.high { background: var(--accent); }
+.rb-confidence-fill.mid { background: var(--amber); }
+.rb-confidence-fill.low { background: var(--red); }
+.rb-confidence-value { font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--text-main); }
+
+/* AP3.5 chips */
+.rb-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color); }
+.rb-chip {
+    font-family: var(--font-code);
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    border-radius: 7px;
+    background: var(--panel);
+    border: 1px solid transparent;
+    color: var(--muted);
+}
+.rb-chip-kind { background: var(--blue-soft); color: var(--blue); }
+.rb-chip-entity { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* Empty / error / loading states */
+.rb-empty, .rb-error, .rb-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+    padding: 60px 20px;
+    border: 1px dashed var(--border-color);
+    border-radius: 12px;
+    color: var(--text-main);
+}
+.rb-empty .material-symbols-outlined,
+.rb-error .material-symbols-outlined { font-size: 40px; opacity: 0.6; }
+.rb-empty p, .rb-error p { font-size: 1.05rem; font-weight: 500; }
+.rb-error { border-color: rgba(239, 68, 68, 0.4); }
+.rb-error .material-symbols-outlined { color: var(--red); }
+.rb-loading { flex-direction: row; border-style: solid; padding: 40px 20px; }
+.rb-spin { animation: rb-spin 1s linear infinite; }
+@keyframes rb-spin { to { transform: rotate(360deg); } }
+
+/* Clickable list cards (AP4.2) */
+.rb-card[data-proposal-id] { cursor: pointer; }
+.rb-card[data-proposal-id]:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+
+/* =============================================================================
+   DETAIL VIEW (AP4.2) — before/after diff. Colour convention: old = red/struck,
+   new = green. Additive; existing chat + list styles untouched.
+   ============================================================================= */
+.rb-detail-topbar { margin-bottom: 20px; }
+
+.rb-detail-context {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.rb-chips-top { margin-top: 0; padding-top: 0; border-top: none; align-items: center; }
+.rb-chip-error {
+    font-family: var(--font-code);
+    color: var(--text-main);
+    background: rgba(6, 182, 212, 0.10);
+    border-color: rgba(6, 182, 212, 0.25);
+}
+
+.rb-detail-section { margin-bottom: 24px; }
+.rb-detail-section h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Diff layout: two side-by-side columns that stack on narrow screens */
+.rb-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.rb-diff-side { min-width: 0; }
+.rb-diff-head {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.rb-diff-head-old { color: var(--red); }
+.rb-diff-head-new { color: var(--accent); }
+
+.rb-empty-before {
+    font-family: var(--font-code);
+    color: var(--text-sub);
+    background: var(--rb-chip-bg);
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+/* Scalar diff (Fall A) */
+.rb-diff-scalar {
+    font-family: var(--font-code);
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-wrap: anywhere;
+}
+.rb-old { background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); color: var(--red); }
+.rb-old s { text-decoration: line-through; }
+.rb-new { background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); color: var(--accent); }
+
+/* Object-array diff table (Fall B) */
+.rb-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    display: block;
+    overflow-x: auto;
+}
+.rb-diff-table th, .rb-diff-table td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+.rb-diff-table th {
+    color: var(--text-sub);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
+}
+
+/* Scalar-array fallback */
+.rb-list-old, .rb-list-new { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rb-list-old li, .rb-list-new li {
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+.rb-list-old li { background: rgba(239, 68, 68, 0.06); text-decoration: line-through; color: var(--red); }
+.rb-list-new li { background: rgba(34, 197, 94, 0.06); color: var(--accent); }
+
+/* Reasoning + code blocks */
+.rb-reasoning {
+    color: var(--text-main);
+    line-height: 1.7;
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+.rb-code {
+    font-family: var(--font-code);
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    background: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+}
+
+/* =============================================================================
+   CODE-KONTEXT (AP4.7) — Fehlerstelle 1:1 aus snapshot-data.json, Diff-Hunk-Optik:
+   Zeilennummern-Spalte links, betroffene Zeilen rot hinterlegt (wie ein Review-Diff).
+   ============================================================================= */
+.rb-codeview {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--code-bg);
+}
+.rb-code-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    background: var(--hover);
+    border-bottom: 1px solid var(--border-color);
+}
+.rb-code-head .material-symbols-outlined { font-size: 16px; }
+.rb-code-head .rb-muted { margin-left: auto; }
+
+.rb-code-body {
+    overflow-x: auto;
+    padding: 6px 0;
+}
+.rb-code-line {
+    display: flex;
+    align-items: flex-start;
+    font-family: var(--font-code);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    white-space: pre;
+}
+.rb-code-num {
+    flex: 0 0 auto;
+    min-width: 72px;
+    padding: 0 12px 0 10px;
+    text-align: right;
+    color: var(--faint);
+    user-select: none;
+    border-right: 1px solid var(--border-color);
+}
+.rb-code-text {
+    padding: 0 16px 0 12px;
+    color: var(--text-sub);
+}
+/* Die betroffene(n) Zeile(n) — rot, mit Markierung am linken Rand wie in einem Diff. */
+.rb-code-line.err { background: rgba(239, 68, 68, 0.13); }
+.rb-code-line.err .rb-code-num {
+    color: var(--red);
+    border-right-color: rgba(239, 68, 68, 0.45);
+    box-shadow: inset 3px 0 0 var(--red);
+}
+.rb-code-line.err .rb-code-text { color: var(--red); }
+.rb-code-foot { padding: 6px 12px; font-size: 0.78rem; border-top: 1px solid var(--border-color); }
+
+/* Confidence breakdown (AP4.5) — the deterministic groundedness signal */
+.rb-grounded {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--rb-card-bg);
+}
+.rb-grounded .material-symbols-outlined { font-size: 22px; flex: 0 0 auto; }
+.rb-grounded p { margin-top: 4px; font-size: 0.86rem; line-height: 1.5; }
+.rb-grounded.ok { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.08); }
+.rb-grounded.ok .material-symbols-outlined { color: var(--accent); }
+.rb-grounded.warn { border-color: rgba(234, 179, 8, 0.45); background: rgba(234, 179, 8, 0.10); }
+.rb-grounded.warn .material-symbols-outlined { color: var(--amber); }
+/* AP7.2 — memory_support = 0 means a missing or NEGATIVE precedent; that must read as a
+   warning, not as a neutral state. Stacked blocks in the confidence section need air. */
+.rb-grounded.err { border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.09); }
+.rb-grounded.err .material-symbols-outlined { color: var(--red); }
+.rb-grounded + .rb-grounded { margin-top: 10px; }
+.rb-conf-rationale { margin-top: 10px; font-size: 0.84rem; line-height: 1.5; }
+
+/* Memory — past human decisions on the same kind of error (AP7.3) */
+.rb-mem-summary { margin-bottom: 10px; font-size: 0.86rem; }
+.rb-mem-summary code {
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--rb-chip-bg);
+    font-size: 0.82rem;
+}
+.rb-mem-list { display: flex; flex-direction: column; gap: 10px; }
+.rb-mem-case {
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    border-left-width: 3px;
+    background: var(--rb-card-bg);
+}
+.rb-mem-case.ok   { border-left-color: var(--accent); }
+.rb-mem-case.warn { border-left-color: var(--amber); }
+.rb-mem-case.err  { border-left-color: var(--red); }
+.rb-mem-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.rb-mem-decision {
+    margin-left: auto;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--rb-chip-bg);
+}
+.rb-mem-decision.ok   { color: var(--accent); }
+.rb-mem-decision.warn { color: var(--amber); }
+.rb-mem-decision.err  { color: var(--red); }
+.rb-mem-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 2px 0;
+    font-size: 0.86rem;
+}
+.rb-mem-row .rb-label { flex: 0 0 108px; }
+.rb-mem-why {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.84rem;
+    line-height: 1.5;
+    font-style: italic;
+}
+
+/* The recorded human decision, shown after a reload (status alone says nothing). */
+.rb-decided {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--rb-card-bg);
+}
+.rb-decided .rb-mem-decision { margin-left: 0; }
+
+/* Snapshot filter (AP4.4) */
+.rb-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.rb-filter-select {
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    color: var(--text-main);
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+/* `outline: none` entfernt — eine Rahmenfarbe allein ist als Fokusanzeige zu schwach.
+   Der Ring kommt aus der :focus-visible-Regel weiter oben. */
+.rb-filter-select:focus { border-color: var(--accent-primary); }
+
+/* =============================================================================
+   DECISION PANEL (AP4.3.1) — approve / reject. Modify is present but disabled
+   until AP4.3.2. Same colour convention as the status badges above.
+   ============================================================================= */
+.rb-actions {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px 18px;
+}
+.rb-actions h3 { border-bottom: none; padding-bottom: 0; margin-bottom: 10px; }
+
+.rb-comment {
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px 12px;
+    font-family: var(--font-main);
+    font-size: 0.9rem;
+    color: var(--text-main);
+    background: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    resize: vertical;
+}
+/* `outline: none` entfernt — eine Rahmenfarbe allein ist als Fokusanzeige zu schwach.
+   Der Ring kommt aus der :focus-visible-Regel weiter oben. */
+.rb-comment:focus { border-color: var(--accent-primary); }
+.rb-comment:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.rb-btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.rb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    font-family: var(--font-main);
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+.rb-btn .material-symbols-outlined { font-size: 18px; }
+.rb-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.rb-btn-approve { color: var(--accent); border-color: rgba(34, 197, 94, 0.4); }
+.rb-btn-approve:hover:not(:disabled) { background: rgba(34, 197, 94, 0.12); }
+.rb-btn-reject { color: var(--red); border-color: rgba(239, 68, 68, 0.4); }
+.rb-btn-reject:hover:not(:disabled) { background: rgba(239, 68, 68, 0.12); }
+.rb-btn-modify { color: var(--text-sub); }
+/* Busy: the icon spins while the (synchronous) apply runs. */
+.rb-btn.busy .material-symbols-outlined { animation: rb-spin 1s linear infinite; }
+
+.rb-hint { font-size: 0.8rem; margin-top: 10px; line-height: 1.5; }
+
+/* Modify editor (AP4.3.2b): final_value is the WHOLE value, so a JSON textarea. */
+.rb-modify-editor {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--code-bg);
+}
+.rb-modify-editor code { font-family: var(--font-code); font-size: 0.85em; }
+.rb-json {
+    width: 100%;
+    margin-top: 6px;
+    padding: 12px;
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    tab-size: 2;
+    color: var(--text-main);
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    resize: vertical;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+}
+/* `outline: none` entfernt — eine Rahmenfarbe allein ist als Fokusanzeige zu schwach.
+   Der Ring kommt aus der :focus-visible-Regel weiter oben. */
+.rb-json:focus { border-color: var(--accent-primary); }
+.rb-json:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.rb-json-hint {
+    margin-top: 8px;
+    font-size: 0.82rem;
+    font-family: var(--font-code);
+    min-height: 1.2em;
+    color: var(--text-sub);
+}
+.rb-json-hint.ok { color: var(--accent); }
+.rb-json-hint.warn { color: var(--amber); }
+.rb-json-hint.error { color: var(--red); }
+
+.rb-decision-status {
+    margin-top: 14px;
+    padding: 12px 14px;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+}
+.rb-decision-status.ok { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.10); }
+.rb-decision-status.warn { border-color: rgba(234, 179, 8, 0.4); background: rgba(234, 179, 8, 0.10); }
+.rb-decision-status.error { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.10); }
+.rb-decision-status.info { color: var(--text-sub); }
+.rb-decision-status code { font-family: var(--font-code); font-size: 0.85em; }
+
+@media (max-width: 600px) {
+    .review-header-inner, .review-main { padding-left: 14px; padding-right: 14px; }
+    .review-toolbar { flex-direction: column; align-items: flex-start; }
+    .rb-card-body { grid-template-columns: 1fr 1fr; }
+    .rb-diff { grid-template-columns: 1fr; }
+}
+
+/* =============================================================================
+   DASHBOARD (AP6.2) — additiv. Nutzt ausschliesslich die vorhandenen Tokens und die
+   Review-Board-Flaechen (--rb-card-bg / --rb-chip-bg); kein neues Farbsystem.
+   Die Seite traegt zusaetzlich .review-page, erbt also deren Scroll-Verhalten.
+
+   Chart-Farben (gegen die Kartenflaeche #171922 nachgerechnet, nicht geschaetzt):
+     Balken  #818cf8 -> 5.87:1   (Marken brauchen >= 3:1)
+     Status  #eab308 -> 9.14:1   (nur fuer "Alt-Label", nie ohne Textmarke)
+     Gitter  #2e3036 -> 1.33:1   (soll zuruecktreten — das ist die Vorgabe)
+   ============================================================================= */
+
+/* --- Belastbarkeits-Block: steht bewusst GANZ OBEN und ausgeklappt ------------ */
+.db-quality {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+}
+.db-section-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 1rem; font-weight: 600; color: var(--text-main); margin: 0 0 4px;
+}
+.db-section-title .material-symbols-outlined { font-size: 20px; color: var(--text-sub); }
+.db-section-sub { color: var(--text-sub); font-size: 0.88rem; margin: 0 0 14px; line-height: 1.5; }
+
+.db-flags { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.db-flag {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+}
+.db-flag .material-symbols-outlined { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.db-flag p { margin: 4px 0 0; font-size: 0.86rem; line-height: 1.55; color: var(--text-main); }
+.db-flag-code {
+    font-family: var(--font-code); font-size: 0.72rem; letter-spacing: 0.03em;
+    color: var(--text-sub);
+}
+.db-flag-warning { border-color: rgba(234, 179, 8, 0.35); background: rgba(234, 179, 8, 0.07); }
+.db-flag-warning .material-symbols-outlined { color: var(--amber); }
+.db-flag-info .material-symbols-outlined { color: var(--text-sub); }
+
+
+/* --- Heldenzahl + Meter (AK2 gegen die Zielmarke) -----------------------------
+   Diese Karte ist IN BEIDEN THEMES dunkel — das ist Absicht des Entwurfs und keine
+   vergessene Theme-Regel. Es gibt genau eine Zahl, an der das Projekt gemessen wird;
+   die dunkle Fläche hebt sie aus der hellen Seite heraus, statt sie zu einer Kachel
+   unter neun anderen zu machen. Folge davon: alle Farben INNERHALB der Karte sind fest
+   und dürfen nicht aus den Theme-Variablen kommen, sonst wird helle Schrift auf heller
+   Fläche gerendert. */
+.db-hero {
+    background: linear-gradient(135deg, #20211f, #2c3a30);
+    border: 1px solid transparent;
+    border-radius: 18px;
+    padding: 24px 26px;
+    margin-bottom: 20px;
+    color: #f4f2ec;
+    overflow: hidden;
+}
+/* Im dunklen Theme darf die Karte nicht heller sein als die Seite — dort ein kühlerer,
+   dunklerer Verlauf mit sichtbarer Kante. */
+:root[data-theme="dark"] .db-hero {
+    background: linear-gradient(135deg, #181a20, #1f2a24);
+    border-color: var(--border);
+}
+.db-hero .db-tile-label { color: #9fb3a4; }
+.db-hero .db-tile-note { color: #c3cfc6; }
+/* Der Vorbehalt-Hinweis erscheint nur, wenn die Kennzahl einen Flag hat — auf der
+   dunklen Fläche braucht er eigene Farben, sonst ist er unlesbar. */
+.db-hero .db-caveat > summary { color: #c3cfc6; }
+.db-hero .db-caveat-body { background: rgba(255, 255, 255, 0.07); color: #e6e3da; }
+.db-hero-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 20px; flex-wrap: wrap; margin-bottom: 18px;
+}
+/* Proportionale Ziffern (kein tabular-nums): bei Displaygroessen wirkt eine Zahl
+   mit Gleichlaufziffern locker und auseinandergerissen. */
+.db-hero-value {
+    font-family: var(--font-body);
+    font-size: 2.9rem; font-weight: 600; line-height: 1;
+    color: #f4f2ec; margin: 8px 0 8px;
+    letter-spacing: -0.03em;
+}
+.db-hero-target {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 14px; border-radius: 12px;
+    font-size: 0.82rem; font-weight: 500; white-space: nowrap;
+}
+.db-hero-target .material-symbols-outlined { font-size: 18px; }
+.db-hero-target strong { font-weight: 600; }
+/* Gruen/Bernstein auf dunklem Grund — nicht die hellen Statusfarben der Seite. */
+.db-hero-target.ok { background: rgba(143, 174, 93, 0.20); color: #c5e08a; }
+.db-hero-target.ok strong { color: #dcefb8; }
+.db-hero-target.below { background: rgba(184, 130, 31, 0.22); color: #f0c874; }
+.db-hero-target.below strong { color: #ffdd9e; }
+
+/* Der Meter: ungefuellte Bahn ist eine Aufhellung der dunklen Karte. `overflow` MUSS
+   sichtbar bleiben — die Zielmarke traegt ihre Beschriftung ueber der Bahn. */
+.db-meter {
+    position: relative; height: 12px; border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    margin-top: 22px;
+    overflow: visible;
+}
+/* Der Balken waechst beim Aufbau aus dem Nichts. `transition: width` reichte NICHT:
+   das Element wird bereits mit seiner Endbreite ins DOM geschrieben, es gibt also keinen
+   Wertwechsel, auf den eine Transition reagieren koennte. Ein Keyframe von 0 laeuft dagegen
+   beim Einfuegen los — dieselbe Loesung wie im Entwurf. */
+@keyframes db-grow-w { from { width: 0; } }
+/* Wer im Betriebssystem reduzierte Bewegung eingestellt hat, bekommt den Balken sofort
+   in Endbreite (das Gegenstück dazu steht in dashboard.js, runCountUps). */
+@media (prefers-reduced-motion: reduce) {
+    .db-meter-fill { animation: none; }
+}
+.db-meter-fill {
+    height: 100%; border-radius: 8px;
+    animation: db-grow-w 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Verlauf statt Vollton: der Balken wird zum Ende hin heller und zeigt damit eine
+   Richtung an. Bernstein bei „nicht erreicht" — dieselbe Familie wie die Plakette
+   daneben; vorher war der Balken indigo und die Plakette bernstein, was so aussah,
+   als redeten die beiden von verschiedenen Dingen. */
+.db-meter-fill.ok { background: linear-gradient(90deg, #6f9c5c, #a3cf6f); }
+.db-meter-fill.below { background: linear-gradient(90deg, #c08a30, #e0b458); }
+.db-meter-target {
+    position: absolute; top: -5px; bottom: -5px; width: 2px;
+    background: #f4f2ec;
+}
+/* Die Marke sagt selbst, was sie ist — dadurch braucht die Legende darunter keinen
+   dritten Eintrag mehr, der ohnehin nie unter der Marke stand. */
+.db-meter-target::after {
+    content: 'Ziel';
+    position: absolute; top: -17px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: #c3cfc6; white-space: nowrap;
+}
+.db-meter-legend {
+    display: flex; justify-content: space-between;
+    margin-top: 10px; font-size: 0.69rem; color: #9fb3a4;
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- KPI-Kacheln -------------------------------------------------------------- */
+.db-tiles {
+    display: grid; gap: 14px; margin-bottom: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.db-tile {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+}
+.db-tile-label {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-sub); font-weight: 500;
+}
+.db-tile-value {
+    font-size: 1.7rem; font-weight: 600; color: var(--text-main);
+    margin: 8px 0 6px; line-height: 1.15;
+}
+.db-tile-note { font-size: 0.78rem; color: var(--text-sub); line-height: 1.5; }
+
+/* --- Chart-Karten ------------------------------------------------------------- */
+.db-card {
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+/* Die Karte waechst mit dem SVG mit (feste Hoehe wuerde die Achsenbeschriftung
+   abschneiden und der Karte einen eigenen Mini-Scrollbalken verpassen). */
+.db-svg { width: 100%; height: auto; display: block; overflow: visible; }
+
+/* --- Tooltip an der Säule ----------------------------------------------------
+   Bezugsrahmen für den absolut positionierten Tooltip. */
+.db-chart-wrap { position: relative; }
+.db-tip {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    margin-top: -8px;
+    z-index: 6;
+    padding: 7px 10px;
+    border-radius: 8px;
+    /* Umgekehrte Flaeche: dunkel im hellen Theme, hell im dunklen. Ein Tooltip soll sich
+       von der Karte abheben, auf der er liegt — nicht mit ihr verschmelzen. */
+    background: var(--ink);
+    color: var(--bg);
+    font-size: 0.69rem; font-weight: 500; line-height: 1.55;
+    white-space: nowrap;
+    pointer-events: none;      /* nie den Zeiger abfangen, sonst flackert der Hover */
+    box-shadow: 0 8px 20px var(--shadow);
+}
+.db-tip b { display: block; margin-bottom: 3px; font-weight: 600; }
+.db-cat, .db-val { font-family: var(--font-body); }
+.db-tick { font-family: var(--font-body); font-variant-numeric: tabular-nums; }
+.db-legacy-tag { fill: var(--amber); font-size: 10px; }
+/* Trefferflaeche: die ganze Gruppe reagiert, nicht nur der schmale Balken.
+   Die ueberfahrene Saeule hellt auf — die Rueckmeldung haengt nicht nur am Tooltip.
+   NUR EINE Regel: vorher stand hier zusaetzlich ein `opacity: 0.82`, das gegen das
+   Aufhellen arbeitete und den Effekt fast auf null brachte. */
+.db-bar-g { cursor: default; }
+.db-bar-g:hover path { filter: brightness(1.14); }
+
+.db-rates { display: flex; gap: 28px; flex-wrap: wrap; }
+.db-rate { display: flex; flex-direction: column; gap: 2px; }
+.db-rate-val { font-size: 1.5rem; font-weight: 600; color: var(--text-main); }
+.db-rate-lbl { font-size: 0.8rem; color: var(--text-sub); }
+
+.db-callout {
+    display: flex; gap: 10px; align-items: flex-start;
+    margin: 16px 0 0; padding: 12px 14px; border-radius: 8px;
+    font-size: 0.86rem; line-height: 1.6; color: var(--text-main);
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+}
+.db-callout .material-symbols-outlined { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.db-callout code { font-family: var(--font-code); font-size: 0.85em; }
+.db-callout.warn { border-color: rgba(234, 179, 8, 0.35); background: rgba(234, 179, 8, 0.07); }
+.db-callout.warn .material-symbols-outlined { color: var(--amber); }
+.db-callout.error { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.10); }
+.db-callout.error .material-symbols-outlined { color: var(--red); }
+
+/* --- Tabelle offener Reviews -------------------------------------------------- */
+.db-table-wrap { overflow-x: auto; }   /* breite Tabelle scrollt in sich, nie die Seite */
+.db-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.db-table th {
+    text-align: left; padding: 10px 12px;
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-sub); font-weight: 500;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+.db-table td {
+    padding: 12px; border-bottom: 1px solid var(--border-color);
+    color: var(--text-main); vertical-align: middle;
+}
+.db-table tr:last-child td { border-bottom: none; }
+.db-table tr:hover td { background: rgba(99, 102, 241, 0.05); }
+.db-num { text-align: right; font-variant-numeric: tabular-nums; }
+.db-ellipsis { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.db-grounded {
+    display: inline-block; padding: 3px 9px; border-radius: 999px;
+    font-size: 0.72rem; white-space: nowrap;
+}
+.db-grounded.ok { background: rgba(34, 197, 94, 0.12); color: var(--accent); border: 1px solid rgba(34, 197, 94, 0.3); }
+.db-grounded.warn { background: rgba(234, 179, 8, 0.12); color: var(--amber); border: 1px solid rgba(234, 179, 8, 0.3); }
+
+.db-link {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--accent-ink); text-decoration: none; white-space: nowrap;
+}
+.db-link:hover { text-decoration: underline; }
+.db-link .material-symbols-outlined { font-size: 16px; }
+
+.db-generated { color: var(--text-sub); font-size: 0.78rem; text-align: right; margin: 0 0 20px; }
+
+/* Nachladen ohne Layout-Sprung: alten Stand gedimmt halten statt Skeleton zu zeigen. */
+.db-loading { opacity: 0.55; transition: opacity 0.15s ease; }
+
+@media (max-width: 600px) {
+    .db-hero-value { font-size: 2.2rem; }
+    .db-rates { gap: 18px; }
+    .db-tiles { grid-template-columns: 1fr 1fr; }
+}
+
+/* =============================================================================
+   DASHBOARD AP6.4b — Filterleiste, Vorbehalte an der Kennzahl, Legende.
+   Ergaenzt den AP6.2-Block; die Reihenfolge der Seite hat sich geaendert
+   (Zahlen zuerst, Belastbarkeits-Block ans Ende und eingeklappt).
+   ============================================================================= */
+
+/* --- Filterleiste: EINE Reihe ueber allem, was sie einschraenkt --------------- */
+.db-filter {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--rb-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+}
+.db-filter-nav { display: flex; align-items: center; gap: 6px; }
+.db-filter-range {
+    font-size: 0.88rem; color: var(--text-main); white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    min-width: 190px; text-align: center;
+}
+.db-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0;
+    border-radius: 8px; cursor: pointer;
+    background: transparent; color: var(--text-sub);
+    border: 1px solid var(--border-color);
+}
+.db-icon-btn:hover { color: var(--text-main); border-color: var(--accent-primary); }
+.db-icon-btn .material-symbols-outlined { font-size: 18px; }
+/* Ausgegraut UND klickunwirksam. Ein Knopf, der sichtbar nichts tut, ist ehrlicher als
+   einer, der bei jedem Klick denselben Zeitraum neu laedt. */
+.db-icon-btn.off { opacity: 0.38; pointer-events: none; }
+
+/* Segment-Umschalter: EIN Element mit vier Zustaenden, nicht vier einzelne Schalter.
+   Die gemeinsame Wanne macht sichtbar, dass sich die vier gegenseitig ausschliessen. */
+.db-filter-presets {
+    display: flex; gap: 3px;
+    background: var(--panel); border-radius: 10px; padding: 3px;
+}
+.db-chip {
+    padding: 6px 13px; border-radius: 7px; cursor: pointer;
+    border: none; background: transparent;
+    font-family: var(--font-body); font-size: 0.78rem; font-weight: 500;
+    color: var(--text-sub);
+    transition: background 0.14s ease, color 0.14s ease;
+}
+.db-chip:hover { color: var(--text-main); }
+.db-chip.active {
+    background: var(--surface); color: var(--text-main);
+    box-shadow: 0 1px 3px var(--shadow);
+}
+
+/* Die Aufloesung ist eine ANZEIGE, kein Bedienelement: sie folgt dem gewaehlten
+   Zeitraum. Deshalb rechtsbuendig abgesetzt und ohne Rahmen — nichts an ihr soll
+   nach „hier kann man klicken" aussehen. */
+.db-filter-gran {
+    display: inline-flex; align-items: center; gap: 7px;
+    margin-left: auto;
+    font-size: 0.78rem; color: var(--text-sub);
+}
+.db-filter-gran .material-symbols-outlined { font-size: 17px; }
+.db-filter-gran b { color: var(--text-main); font-weight: 600; }
+
+.db-filter-note {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.76rem; color: var(--text-sub);
+}
+.db-filter-note .material-symbols-outlined { font-size: 15px; }
+
+/* Leerer Zeitraum: eine Aussage, kein blankes Feld. Sagt auch, was zu tun ist. */
+.db-empty { text-align: center; padding: 48px 20px; color: var(--faint); }
+.db-empty .material-symbols-outlined { font-size: 40px; opacity: 0.55; }
+.db-empty p { font-size: 0.95rem; color: var(--text-sub); margin: 10px 0 3px; font-weight: 500; }
+.db-empty span { font-size: 0.8rem; }
+
+/* --- Vorbehalt AN der Kennzahl (statt Textblock oben) ------------------------ */
+.db-tile-head, .db-card-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+.db-card-head { align-items: center; margin-bottom: 4px; }
+.db-card-head .db-section-title { margin: 0; }
+
+/* Das Symbol ist der Klickpunkt; der Klartext klappt direkt darunter auf. Damit steht
+   die Warnung genau dort, wo die Zahl gelesen wird. */
+.db-caveat { position: relative; flex-shrink: 0; }
+.db-caveat > summary {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 4px 8px 4px 6px; border-radius: 999px;   /* war 2px: Trefferflaeche lag exakt auf der 24px-Untergrenze */
+    cursor: pointer; list-style: none;
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+    color: var(--text-sub);
+}
+.db-caveat > summary::-webkit-details-marker { display: none; }
+.db-caveat > summary:hover { border-color: var(--accent-primary); }
+.db-caveat .material-symbols-outlined { font-size: 15px; }
+.db-caveat-count { font-size: 0.7rem; font-weight: 600; }
+.db-caveat-warning > summary {
+    border-color: rgba(234, 179, 8, 0.4); background: rgba(234, 179, 8, 0.10);
+}
+.db-caveat-warning > summary .material-symbols-outlined { color: var(--amber); }
+.db-caveat-body {
+    margin-top: 8px; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border-color); background: var(--rb-chip-bg);
+}
+.db-caveat-body p {
+    margin: 0 0 8px; font-size: 0.8rem; line-height: 1.55; color: var(--text-main);
+}
+.db-caveat-body p:last-child { margin-bottom: 0; }
+.db-caveat-body code {
+    display: block; font-family: var(--font-code); font-size: 0.68rem;
+    letter-spacing: 0.03em; color: var(--text-sub); margin-bottom: 2px;
+}
+/* In der Kachel darf der aufgeklappte Text die Kachelbreite nicht sprengen. */
+.db-tile .db-caveat[open] .db-caveat-body {
+    position: absolute; right: 0; top: 100%; z-index: 20;
+    width: 300px; max-width: 78vw;
+    background: var(--input-bg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* --- Legende (Pflicht ab 2 Serien) ------------------------------------------- */
+.db-legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin: 4px 0 12px;
+    font-size: 0.8rem; color: var(--text-sub);
+}
+.db-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.db-legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* --- Belastbarkeits-Block: jetzt UNTEN und eingeklappt ------------------------ */
+details.db-quality { padding: 0; margin: 4px 0 20px; }
+details.db-quality > summary {
+    display: flex; align-items: center; gap: 8px;
+    padding: 14px 20px; cursor: pointer;
+    font-size: 0.9rem; color: var(--text-sub);
+}
+details.db-quality > summary:hover { color: var(--text-main); }
+details.db-quality > summary .material-symbols-outlined { font-size: 19px; }
+details.db-quality[open] > summary { border-bottom: 1px solid var(--border-color); }
+details.db-quality .db-section-sub { padding: 14px 20px 0; margin-bottom: 12px; }
+details.db-quality .db-flags { padding: 0 20px 18px; }
+
+/* Nur fuer Screenreader — der Zaehler am Warnsymbol braucht einen Klartext. */
+.sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (max-width: 700px) {
+    .db-filter { gap: 10px; }
+    .db-filter-range { min-width: 0; font-size: 0.8rem; }
+    .db-filter-note { margin-left: 0; }
+}
+
+
+/* --- Kurzerklaerung am Knopf --------------------------------------------------
+   Vorher stand dieser Block ZWEIMAL fast wortgleich im Stylesheet (send-btn, mic-btn),
+   und der Plus-Knopf hatte zwar ein data-tooltip, aber keine Regel dazu — die Erklaerung
+   erschien dort also nie. Jetzt eine Regel fuer alles, was ein data-tooltip traegt.
+   Auch bei Tastaturfokus, nicht nur bei der Maus: wer sich durchtabbt, braucht sie eher. */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--bg);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.69rem;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 30;
+}
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after { opacity: 1; }
+/* Der Plus-Knopf sitzt ganz links im Eingabefeld — mittig zentriert liefe die Erklaerung
+   dort ueber den linken Rand hinaus. */
+.tool-picker-btn[data-tooltip]::after { left: 0; transform: none; }
+
+/* =============================================================================
+   VERLAUFSSUCHE, MELDUNGEN, KOMMANDOPALETTE, LADEPLATZHALTER   (2026-08-02)
+   ============================================================================= */
+
+/* --- Suche in der Verlaufsleiste --------------------------------------------- */
+.sb-search {
+    display: flex; align-items: center; gap: 8px;
+    margin: 11px 0 4px;
+    padding: 7px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    transition: border-color 0.15s ease;
+}
+.sb-search:focus-within { border-color: var(--accent); }
+.sb-search .material-symbols-outlined { font-size: 17px; color: var(--faint); }
+.sb-search input {
+    flex: 1; min-width: 0;
+    border: none; outline: none; background: transparent;
+    font-family: var(--font-body); font-size: 0.81rem; color: var(--text-main);
+}
+/* Das eigene X von type="search" wuerde neben unserem stehen. */
+.sb-search input::-webkit-search-cancel-button { display: none; }
+.sb-search-clear {
+    display: flex; padding: 0; border: none; background: transparent;
+    color: var(--faint); cursor: pointer;
+}
+.sb-search-clear:hover { color: var(--text-main); }
+.sb-search-clear .material-symbols-outlined { font-size: 16px; }
+
+/* --- Ladeplatzhalter ---------------------------------------------------------
+   Ein Schimmern in Form des spaeteren Inhalts. Es zeigt nicht nur „es laedt",
+   sondern auch WIE VIEL kommt — dadurch springt das Layout beim Eintreffen nicht. */
+@keyframes sk-shimmer { to { background-position: -200% 0; } }
+.sk {
+    display: block;
+    background: linear-gradient(90deg,
+        var(--panel) 25%, var(--border-soft, var(--border-color)) 37%, var(--panel) 63%);
+    background-size: 200% 100%;
+    animation: sk-shimmer 1.3s linear infinite;
+    border-radius: 8px;
+}
+.sk-row { display: flex; gap: 10px; align-items: center; padding: 7px 9px; }
+.sk-card {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 15px;
+    padding: 17px 19px;
+    display: flex; flex-direction: column; gap: 11px;
+    margin-bottom: 14px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .sk { animation: none; }
+}
+
+/* --- Meldungen unten rechts ---------------------------------------------------
+   Umgekehrte Flaeche wie beim Saeulen-Tooltip: dunkel im hellen Theme, hell im
+   dunklen. Eine Meldung soll sich von der Seite abheben, nicht mit ihr verschmelzen. */
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(0.96); } }
+.toast-wrap {
+    position: fixed; right: 20px; bottom: 20px; z-index: 120;
+    display: flex; flex-direction: column; gap: 9px; align-items: flex-end;
+    pointer-events: none;            /* der Container faengt nichts ab */
+}
+.toast {
+    pointer-events: auto;            /* die Meldung selbst schon (Knopf!) */
+    display: flex; align-items: center; gap: 10px;
+    max-width: 360px;
+    padding: 11px 15px;
+    border-radius: 12px;
+    background: var(--ink); color: var(--bg);
+    font-size: 0.81rem; font-weight: 500;
+    box-shadow: 0 12px 34px var(--shadow);
+    animation: toast-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast.out { opacity: 0; transform: translateY(8px) scale(0.97); transition: 0.2s ease; }
+/* ACHTUNG: die Meldung ist eine UMGEKEHRTE Flaeche — im hellen Theme dunkel, im dunklen
+   hell. Ihre Akzentfarbe muss deshalb GEGEN das Theme laufen. Gemessen war es vorher
+   andersherum: helles Gruen auf hellem Grund, 1,58:1. Jetzt 6,9:1 (hell) / 6,4:1 (dunkel). */
+.toast .material-symbols-outlined { font-size: 18px; color: #8fc9a6; }
+.toast-msg { flex: 1; }
+.toast-act {
+    flex: none;
+    border: none; background: transparent; cursor: pointer;
+    color: #a3cf6f;
+    font-family: var(--font-body); font-size: 0.81rem; font-weight: 600;
+    padding: 2px 4px; border-radius: 6px;
+    text-decoration: underline;
+}
+:root[data-theme="dark"] .toast .material-symbols-outlined,
+:root[data-theme="dark"] .toast-act { color: #2c5842; }
+@media (prefers-reduced-motion: reduce) {
+    .toast { animation: none; }
+}
+
+/* --- Kommandopalette (Strg/Cmd + K) ------------------------------------------ */
+@keyframes cmd-in { from { opacity: 0; transform: translate(-50%, -8px) scale(0.98); } }
+/* Ueber ALLEM: die Eingabezeile des Chats ist `fixed` mit z-index 100 und lag sonst
+   ueber der Palette. Ein modaler Dialog, den ein Bedienelement der Seite ueberdeckt,
+   ist kaputt — deshalb hier deutlich darueber. */
+.cmd-scrim {
+    position: fixed; inset: 0; z-index: 190;
+    background: rgba(16, 17, 21, 0.42);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+}
+.cmd {
+    position: fixed; left: 50%; top: 16%;
+    transform: translateX(-50%);
+    width: min(600px, 92vw);
+    z-index: 191;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 30px 80px var(--shadow);
+    overflow: hidden;
+    animation: cmd-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cmd-in {
+    display: flex; align-items: center; gap: 11px;
+    padding: 15px 18px;
+    border-bottom: 1px solid var(--border-color);
+}
+.cmd-in > .material-symbols-outlined { font-size: 21px; color: var(--faint); }
+.cmd-in input {
+    flex: 1; min-width: 0;
+    border: none; outline: none; background: transparent;
+    font-family: var(--font-body); font-size: 0.95rem; color: var(--text-main);
+}
+.cmd-in .esc {
+    flex: none;
+    font-family: var(--font-code); font-size: 0.62rem; font-weight: 500;
+    color: var(--text-sub);
+    background: var(--panel); border: 1px solid var(--border-color);
+    padding: 3px 7px; border-radius: 6px;
+}
+.cmd-list { max-height: 340px; overflow-y: auto; padding: 8px; }
+.cmd-item {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 9px 11px;
+    border: none; background: transparent; border-radius: 10px;
+    font-family: var(--font-body); text-align: left; cursor: pointer;
+}
+/* `.sel` folgt den Pfeiltasten, `:hover` der Maus — beide sehen gleich aus, damit
+   Tastatur und Maus dieselbe Sprache sprechen. */
+.cmd-item:hover, .cmd-item.sel { background: var(--accent-soft); }
+.cmd-item .ci {
+    width: 32px; height: 32px; flex: 0 0 32px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 9px;
+    background: var(--panel); border: 1px solid var(--border-color);
+    color: var(--text-sub);
+}
+.cmd-item:hover .ci, .cmd-item.sel .ci { color: var(--accent-ink); border-color: var(--accent-line); }
+.cmd-item .ci .material-symbols-outlined { font-size: 18px; }
+.cmd-item .ct { display: block; font-size: 0.84rem; font-weight: 500; color: var(--text-main); }
+.cmd-item .cd { display: block; font-size: 0.72rem; color: var(--text-sub); }
+.cmd-empty { padding: 26px; text-align: center; color: var(--faint); font-size: 0.81rem; }
+@media (prefers-reduced-motion: reduce) {
+    .cmd { animation: none; }
+}
+
+/* =============================================================================
+   REVIEW-DETAIL: ZWEI SPALTEN   (2026-08-02)
+   Links der Befund (was soll geaendert werden), rechts die Belastbarkeit und die
+   Entscheidung. Die Seitenspalte klebt beim Scrollen oben, damit Konfidenz und
+   Knoepfe sichtbar bleiben, waehrend man links durch Diff und JSON-Auszug liest —
+   das ist der eigentliche Gewinn gegenueber der alten Stapelung.
+   ============================================================================= */
+.rb-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 20px;
+    align-items: start;
+}
+.rb-col-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.rb-col-side {
+    min-width: 0;
+    display: flex; flex-direction: column; gap: 14px;
+    position: sticky; top: 14px;
+}
+/* Die Abstaende kommen jetzt vom Raster — die alte Einzelmarge wuerde sie verdoppeln. */
+.rb-detail-grid .rb-detail-section,
+.rb-detail-grid .rb-detail-context { margin-bottom: 0; }
+
+/* Schmaler als ~1100 px reicht es fuer zwei Spalten nicht: die Diff-Tabellen links
+   brauchen Breite. Dann untereinander, und die Seitenspalte hoert auf zu kleben. */
+@media (max-width: 1100px) {
+    .rb-detail-grid { grid-template-columns: minmax(0, 1fr); }
+    .rb-col-side { position: static; }
+}
+
+/* Ueberschriften mit Symbol wie im Entwurf. */
+.rb-detail-section > h3 {
+    display: flex; align-items: center; gap: 8px;
+}
+.rb-detail-section > h3 .material-symbols-outlined {
+    font-size: 18px; color: var(--text-sub);
+}
+
+/* --- Konfidenz-Ring ---------------------------------------------------------- */
+.rb-conf-head {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 14px;
+}
+.rb-conf-head-text { font-size: 0.78rem; color: var(--text-sub); line-height: 1.5; }
+.rb-conf-head-text b {
+    display: block; margin-bottom: 3px;
+    font-size: 0.84rem; font-weight: 600; color: var(--text-main);
+}
+.rb-conf-ring {
+    position: relative;
+    width: 96px; height: 96px; flex: 0 0 96px;
+    display: flex; align-items: center; justify-content: center;
+}
+/* Der Bogen startet oben statt rechts — sonst laeuft er von 3 Uhr los und liest sich
+   nicht als Fuellstand. */
+.rb-conf-ring svg { transform: rotate(-90deg); }
+.rb-conf-ring-arc { transition: stroke-dashoffset 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* Dieselben Schwellen wie beim Balken in der Liste (hoch/mittel/niedrig). */
+.rb-conf-ring.high .rb-conf-ring-arc { stroke: var(--accent); }
+.rb-conf-ring.mid  .rb-conf-ring-arc { stroke: var(--amber); }
+.rb-conf-ring.low  .rb-conf-ring-arc { stroke: var(--red); }
+.rb-conf-ring-pct {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    line-height: 1.2;
+}
+.rb-conf-ring-pct b {
+    font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text-main);
+}
+.rb-conf-ring-pct small {
+    font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint);
+}
+@media (prefers-reduced-motion: reduce) {
+    .rb-conf-ring-arc { transition: none; }
+}
+
+/* In der schmalen Seitenspalte muessen die Kaesten enger sitzen als in der Hauptspalte. */
+.rb-col-side .rb-detail-section { padding: 18px; }
+.rb-col-side .rb-grounded { align-items: flex-start; }
+
+
+/* --- Sitzungszeile: Umbenennen / Ausblenden ----------------------------------
+   Die Knoepfe erscheinen erst beim Ueberfahren — sonst konkurrieren in einer schmalen
+   Leiste zwei Symbole je Zeile mit dem Titel, den man eigentlich lesen will. Bei
+   Tastaturfokus erscheinen sie ebenfalls, sonst waeren sie per Tab unerreichbar. */
+.sb-session-row { position: relative; display: flex; align-items: stretch; }
+.sb-session-row .sb-session { flex: 1; min-width: 0; }
+.sb-session-act {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    display: flex; gap: 2px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+.sb-session-row:hover .sb-session-act,
+.sb-session-act:focus-within {
+    opacity: 1; pointer-events: auto;
+}
+.sb-session-act button {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0;
+    border: none; border-radius: 7px;
+    background: var(--surface); color: var(--text-sub);
+    cursor: pointer;
+}
+.sb-session-act button:hover { background: var(--hover); color: var(--text-main); }
+.sb-session-act button[data-act="hide"]:hover { color: var(--red); }
+.sb-session-act .material-symbols-outlined { font-size: 16px; }
+/* Damit der Titel nicht unter die Knoepfe laeuft. */
+.sb-session-row:hover .sb-session-title { padding-right: 56px; }
+
+.sb-rename {
+    width: 100%;
+    font-family: var(--font-body); font-size: 0.82rem;
+    color: var(--text-main);
+    background: var(--input-bg);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 2px 6px;
+    outline: none;
+}
+
+
+/* =============================================================================
+   DRUCK / PDF-EXPORT
+   Die Review-Detailansicht ist das, was fuer einen Bericht ausgedruckt oder als PDF
+   gesichert wird. Auf Papier haben Bedienelemente nichts verloren: Topbar, Verlaufsleiste,
+   Filter, Entscheidungsknoepfe und schwebende Meldungen fliegen raus. Uebrig bleibt der
+   BEFUND — Kontext, Diff, Begruendung, Konfidenz und die frueheren Entscheidungen.
+   ============================================================================= */
+@media print {
+    .topbar, .app-sidebar, .sb-reopen, .input-area, .toast-wrap,
+    .cmd-layer, .rb-detail-topbar, .rb-actions, .rb-filter-bar,
+    .db-filter, .review-refresh, .review-toolbar button { display: none !important; }
+
+    /* Bildschirm-Layout aufheben: gescrollte Bereiche wuerden sonst NUR ihre erste Seite
+       drucken, und die klebende Seitenspalte wuerde auf jeder Seite neu erscheinen. */
+    body, .app-row, .app-main, .review-main, .rb-col-side {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        position: static !important;
+    }
+    .app-row { display: block !important; }
+    .review-main { max-width: none !important; padding: 0 !important; }
+
+    /* Zwei Spalten bleiben — nebeneinander ist auch auf Papier die bessere Anordnung. */
+    .rb-detail-grid { grid-template-columns: minmax(0, 1fr) 300px !important; gap: 14px !important; }
+
+    /* Farbflaechen wirklich drucken (Diff-Rot/Gruen, Belegt-Badges). Ohne das wirft der
+       Browser genau die Hintergruende weg, an denen man vorher/nachher unterscheidet. */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+    /* Nichts mitten im Satz umbrechen. */
+    .rb-detail-section, .rb-detail-context, .rb-mem-case, .rb-grounded, .db-card {
+        break-inside: avoid;
+        box-shadow: none !important;
+    }
+    .rb-codeview { break-inside: auto; }
+
+    /* Der Code-Auszug scrollt am Bildschirm; auf Papier muss er umbrechen statt abzuschneiden. */
+    .rb-code-body, .rb-json, pre { white-space: pre-wrap !important; overflow: visible !important; }
+
+    a[href]::after { content: ""; }   /* keine URLs hinter jeden Link drucken */
+}

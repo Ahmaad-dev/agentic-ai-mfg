@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+docs/
+*.md
+
+# CI/CD
+.github/
+
+# Terraform
+infra/
+*.tf
+*.tfvars
+.terraform/
+
+# Development files
+zArchive/
+
+# Runtime files (werden von Blob Storage gemountet)
+tools/smart-planning/runtime/runtime-files/
+# ...ABER das Monolith-Regelwerk ist KEINE Laufzeitdatei, sondern ein statisches Asset,
+# das nur zufaellig in diesem Ordner liegt. Ohne die Ausnahme ist der A/B-Schalter
+# RULEBOOK_MODE=monolith im Image tot (FileNotFoundError). Geprueft am gebauten Image.
+!tools/smart-planning/runtime/runtime-files/llm-validation-fix-rules.md
+tools/smart-planning/runtime/__pycache__/
+agents/__pycache__/
+
+# Index files (werden von Azure AI Search genutzt)
+index/
+config/
+
+# Nur UI-Backup files
+ui/chat_backup.html
