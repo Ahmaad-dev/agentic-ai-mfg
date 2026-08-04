@@ -1,6 +1,6 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import create_engine
 from sqlalchemy import pool
 
 from alembic import context
@@ -19,8 +19,19 @@ from db.session import get_database_url  # noqa: E402
 # access to the values within the .ini file in use.
 config = context.config
 
-# Resolve DB URL from DATABASE_URL env (Key Vault in prod) / SQLite fallback.
-config.set_main_option("sqlalchemy.url", get_database_url())
+# Die Datenbank-URL wird BEWUSST NICHT ueber `config.set_main_option` gesetzt.
+#
+# Alembics Config ist ein `configparser`, und der interpretiert `%` als Platzhalter fuer
+# eine Interpolation. Azure SQL liefert das Passwort URL-kodiert — voller `%21`, `%29`,
+# `%5B` — und configparser bricht dann mit
+#   ValueError: invalid interpolation syntax ... at position 36
+# ab, noch bevor irgendeine Migration laeuft. Lokal faellt das nie auf: die SQLite-URL
+# enthaelt kein einziges Prozentzeichen.
+#
+# Ein Maskieren als `%%` waere fehleranfaellig (die Rueckgabe von `get_main_option` traege
+# dann die Maskierung weiter). Deshalb wandert die URL an configparser vorbei direkt in die
+# beiden Funktionen unten.
+DB_URL = get_database_url()
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -49,9 +60,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=DB_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -68,11 +78,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(DB_URL, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         context.configure(

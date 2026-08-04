@@ -2555,3 +2555,41 @@ Begründung, warum `push` abweichende Karten überspringt, und der Hinweis, dass
 
 `README-PT4.md` behält seinen historischen Charakter; die Dateiliste zeigt die neuen Pfade,
 und ein Abschnitt am Ende nennt, was seit dieser Fassung dazugekommen ist.
+
+---
+
+### 2026-08-04 — Backend startete nicht: Prozentzeichen im SQL-Passwort
+- **Status:** behoben, noch NICHT committet/ausgerollt · **Changed files:** `app/alembic/env.py`
+
+**Symptom:** Die Container App kam nicht hoch. Log:
+```
+[entrypoint] alembic upgrade head
+ValueError: invalid interpolation syntax in 'mssql+pyodbc://...%21x%29T%29B%5B...' at position 36
+```
+
+**Ursache — mein Fehler, durch meinen Entrypoint ans Licht gebracht.** `alembic/env.py` setzte
+die Datenbank-URL über `config.set_main_option("sqlalchemy.url", ...)`. Alembics Config ist ein
+`configparser`, und der deutet `%` als Beginn einer Interpolation. Terraform erzeugt das
+SQL-Passwort zufällig und URL-kodiert es für die Verbindungszeichenfolge — es steckt damit
+voller `%21`, `%29`, `%5B`. configparser bricht ab, bevor irgendeine Migration läuft.
+
+**Warum das nie auffiel:** Lokal ist die URL `sqlite:///…` und enthält kein einziges
+Prozentzeichen. Auch mein Offline-Test von gestern (`alembic upgrade head --sql` mit einer
+MSSQL-URL) lief durch — weil ich dort ein Dummy-Passwort OHNE Sonderzeichen benutzt hatte.
+Die Zeichenklasse war das Entscheidende, nicht der Dialekt. Ein Testwert, der harmloser ist
+als der echte, prüft genau das nicht, worauf es ankommt.
+
+**Behoben:** Die URL geht jetzt an configparser VORBEI. Modulweite Konstante `DB_URL`,
+`run_migrations_offline()` nutzt sie direkt, `run_migrations_online()` baut die Engine mit
+`create_engine(DB_URL, ...)` statt `engine_from_config(...)`. Ein Maskieren als `%%` wäre die
+naheliegende, aber schlechtere Lösung: `get_main_option()` gäbe die Maskierung weiter und der
+Fehler käme an anderer Stelle zurück.
+
+**Verifiziert mit GENAU dem Passwortmuster aus dem Fehlerprotokoll:** offline laufen alle
+sieben Migrationsschritte durch, keine Interpolationsmeldung. Lokal mit SQLite unverändert
+auf `9b1e40c7d2a3 (head)`.
+
+**Positiv anzumerken:** Der Entrypoint bricht bei einer fehlgeschlagenen Migration bewusst
+hart ab. Genau deshalb ist der Fehler sofort und deutlich aufgetreten, statt dass die
+Anwendung auf einem leeren Schema gestartet wäre und bei jedem Request anders gescheitert
+wäre.

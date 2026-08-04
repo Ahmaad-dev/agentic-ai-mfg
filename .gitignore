@@ -2,7 +2,6 @@
 .venv/
 .vscode/
 __pycache__
-.claude
 # Secrets
 app/.env
 
