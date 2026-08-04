@@ -19,88 +19,148 @@ Intelligentes Multi-Agent System mit Orchestrator, RAG, Chat und Smart Planning 
 ### **Intelligente Features**
 - ✅ **Kontextbewusstsein**: 10 Messages Historie mit 1000 Zeichen/Message
 - ✅ **Natürliche Interaktion**: Keine unnötigen Rückfragen bei klaren Anfragen
-- ✅ **Zentrale Konfiguration**: Alle Limits in `agent_config.py`
+- ✅ **Zentrale Konfiguration**: Alle Limits in `core/agent_config.py`
 - ✅ **Robustes Logging**: Vollständige Logs in `logs/`
 
 ## 📦 Installation
 
 ```bash
-cd demo
+cd app
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r deploy/requirements.txt
+pip install -r deploy/requirements-azure.txt   # nur für Azure SQL / Blob / ACS nötig
 ```
 
 ## ⚙️ Konfiguration
 
-### 1. Environment Variables
-Erstelle `.env` im demo-Verzeichnis:
+### 1. Umgebungsvariablen
+
+Alles kommt aus der Umgebung — im Code stehen keine Endpunkte, Schlüssel oder
+Ressourcennamen. Lokal liest die Anwendung `app/.env` (nicht versioniert), in Azure setzt
+Terraform dieselben Variablen an der Container App.
+
 ```env
-# Azure OpenAI
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_API_KEY=your-key
-AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-4o
-AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=text-embedding-ada-002
+# --- Azure OpenAI: EIN Satz je Agent. Alle vier sind PFLICHT (must_env), ein fehlender
+#     Wert bricht den Start ab, statt später mit einer unklaren Meldung zu scheitern.
+AZURE_OPENAI_CHAT_ENDPOINT=https://<ressource>.openai.azure.com
+AZURE_OPENAI_CHAT_KEY=...
+AZURE_OPENAI_CHAT_API_VERSION=2025-01-01-preview
+AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-4.1
 
-# Azure AI Search
-AZURE_SEARCH_ENDPOINT=https://your-search.search.windows.net
-AZURE_SEARCH_API_KEY=your-key
-AZURE_SEARCH_INDEX=your-index
+AZURE_OPENAI_RAG_ENDPOINT=https://<ressource>.openai.azure.com
+AZURE_OPENAI_RAG_KEY=...
+AZURE_OPENAI_RAG_API_VERSION=2025-01-01-preview
+AZURE_OPENAI_RAG_DEPLOYMENT=gpt-4.1
 
-# Smart Planning API (optional)
-SP_API_BASE_URL=https://your-sp-api.com
-SP_CLIENT_ID=your-client-id
-SP_CLIENT_SECRET=your-secret
+AZURE_OPENAI_ORCHESTRATION_ENDPOINT=https://<ressource>.openai.azure.com
+AZURE_OPENAI_ORCHESTRATION_KEY=...
+AZURE_OPENAI_ORCHESTRATION_API_VERSION=2025-01-01-preview
+AZURE_OPENAI_ORCHESTRATION_DEPLOYMENT=gpt-4.1
+
+AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=text-embedding-3-small
+
+# --- Von den Runtime-Skripten benutzt (laufen als Subprozess, eigener Satz)
+AZURE_OPENAI_ENDPOINT=https://<ressource>.openai.azure.com
+AZURE_OPENAI_API_KEY=...
+AZURE_OPENAI_API_VERSION=2025-01-01-preview
+AZURE_OPENAI_DEPLOYMENT=gpt-4.1
+
+# --- Azure AI Search
+AZURE_SEARCH_ENDPOINT=https://<dienst>.search.windows.net
+AZURE_SEARCH_ADMIN_KEY=...
+AZURE_SEARCH_INDEX=process-docs-index
+
+# --- Smart Planning (ESAROM). Nur CLIENT_SECRET ist Pflicht; die übrigen drei haben
+#     Standardwerte, die auf die TESTUMGEBUNG zeigen — für Produktion setzen!
+CLIENT_SECRET=...
+SMART_PLANNING_BASE_URI=https://<host>
+SMART_PLANNING_CLIENT_ID=apiClient-test
+SMART_PLANNING_REALM=Esarom
+
+# --- Datenbank. Fehlt sie, nutzt die Anwendung SQLite unter app/db/pt4.sqlite3.
+DATABASE_URL=mssql+pyodbc://...
+
+# --- Sonstiges
+AZURE_SPEECH_KEY=...
+AZURE_SPEECH_REGION=swedencentral
+NOTIFICATION_CHANNEL=acs
+ACS_CONNECTION_STRING=...
+ACS_SENDER_EMAIL=DoNotReply@<domain>.azurecomm.net
+APP_BASE_URL=http://localhost:8000
 ```
 
-### 2. Storage-Konfiguration (Lokal vs. Cloud)
+> **Nach jedem `terraform apply`**, der Ressourcen neu anlegt oder Schlüssel rotiert, ist die
+> lokale `.env` veraltet. Typisches Symptom: HTTP 401 mit „invalid subscription key or wrong
+> API endpoint" — obwohl der Endpunkt stimmt. Dann die Schlüssel aus Azure nachziehen.
 
-Das System unterstützt zwei Storage-Modi, die über die `.env` Datei gesteuert werden:
+### 2. Storage: lokal gegen Blob
 
-**Lokal (Standard für Entwicklung):**
+`STORAGE_MODE` entscheidet, wohin **zwei verschiedene Dinge** gehen — Snapshot-Daten und
+Lernkarten. Das ist der Punkt, den man leicht übersieht:
+
+| | `STORAGE_MODE=LOCAL` | `STORAGE_MODE=AZURE` |
+|---|---|---|
+| Snapshots | `data/snapshots/` (Standard, dateirelativ) | Blob-Container aus `AZURE_STORAGE_CONTAINER` |
+| Lernkarten | `app/skills/` | Blob-Container aus `AZURE_SKILLS_CONTAINER` |
+
 ```env
+# lokal
 STORAGE_MODE=LOCAL
-LOCAL_STORAGE_PATH=./smart-planning/Snapshots
-```
 
-**Azure Blob Storage (für Cloud-Deployment):**
-```env
+# Cloud
 STORAGE_MODE=AZURE
-AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...
 AZURE_STORAGE_CONTAINER=snapshots
+AZURE_SKILLS_CONTAINER=skills
+RULEBOOK_SKILLS_PREFIX=            # leer: Karten liegen in der Container-Wurzel
 ```
 
-> ⚠️ **Wichtig für Nutzer:** Du musst nichts an deinem Workflow ändern. `web_server.py` starten und chatten funktioniert genauso wie bisher. Der `StorageManager` in `storage_manager.py` entscheidet automatisch anhand von `STORAGE_MODE`, ob lokal oder in die Cloud gespeichert wird.
+**Im Azure-Modus liest der Regelwerk-Lader die Lernkarten NICHT aus dem Container-Image**,
+sondern aus dem Blob Storage. Der Ordner `app/skills/` ist dort unbeteiligt. Fehlen die
+Karten im Blob, stirbt die Korrektur-Pipeline mit
+`FileNotFoundError: _core.md not found` — Chat, Review Board und Dashboard laufen weiter.
 
-#### Wechsel zu Azure Blob Storage (Schritt für Schritt)
+Zwei getrennte Container sind Absicht: Lernkarten sind Konfiguration, keine Daten. Lägen sie
+im Snapshot-Container, würde ein Aufräumen dort das Regelwerk mitlöschen.
 
-1. **Connection String im Azure Portal holen:**  
-   Azure Portal → Storage Account → *Security + Networking* → *Access keys* → `Connection string` kopieren
+### 3. Lernkarten pflegen — ohne Deployment
 
-2. **`.env` aktualisieren:**
-   ```env
-   STORAGE_MODE=AZURE
-   AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net
-   AZURE_STORAGE_CONTAINER=snapshots
-   ```
+Der eigentliche Gewinn des Blob-Ansatzes: eine Karte im Azure-Portal zu bearbeiten ändert das
+Verhalten **sofort**, ohne neues Image und ohne Zugriff auf dieses Repository.
 
-3. **Container im Storage Account anlegen** (einmalig):  
-   Azure Portal → Storage Account → *Containers* → `+ Container` → Name: `snapshots`  
-   *(oder den Namen aus `AZURE_STORAGE_CONTAINER` verwenden)*
+Für den Abgleich mit dem Repository:
 
-4. **`web_server.py` neu starten** – fertig.  
-   Alle neuen Snapshots landen ab jetzt automatisch im Blob Storage.
+```bash
+python -m tools.sync_skills status              # nur anzeigen
+python -m tools.sync_skills push                # fehlende Karten hochladen
+python -m tools.sync_skills pull                # Portal-Änderungen zurückholen
+```
 
-> 💡 **Lokale Snapshots migrieren:** Bestehende Snapshot-Ordner aus `smart-planning/Snapshots/` können manuell über den Azure Storage Explorer in den Container hochgeladen werden. Die Ordnerstruktur (`{snapshot-id}/iteration-1/...`) bleibt dabei identisch.
+`push` lädt **nur fehlende** Karten hoch. Abweichende werden gemeldet und übersprungen — sonst
+würde ein Routine-Abgleich genau die Portal-Korrekturen zerstören, für die der Mechanismus
+gebaut ist. Überschreiben erfordert `--overwrite`.
 
-### 3. Agent Configuration
-Zentrale Einstellungen in `agent_config.py`:
+### 4. Verhaltensschalter
+
+| Variable | Standard | Bedeutung |
+|---|---|---|
+| `HUMAN_IN_THE_LOOP` | `true` | **Sicherheitsschalter.** `false` = Korrekturen werden ohne menschliche Freigabe angewendet. |
+| `RULEBOOK_MODE` | `cards` | `cards` = Lernkarten, `monolith` = die eine große Regeldatei |
+
+Lokal über `.env`, in Azure über Terraform (`variables.tf`) — dort mit Validierung, ein
+ungültiger Wert bricht im `terraform plan` ab.
+
+### 5. Agent-Konfiguration
+
+Zentrale Einstellungen in `core/agent_config.py`:
+
 ```python
 CHAT_HISTORY_CONFIG = {
-    "max_history_pairs": 5,      # 10 Messages gesamt
-    "max_planning_pairs": 2,     # 4 Messages für Planning
+    "max_history_pairs": 5,      # 10 Nachrichten gesamt
+    "max_planning_pairs": 2,     # 4 Nachrichten für die Planung
     "max_message_chars": 1000,   # Token-Kontrolle
-    "max_tokens": 700            # LLM Output
+    "max_tokens": 700            # LLM-Ausgabe
 }
 ```
 
@@ -108,7 +168,7 @@ CHAT_HISTORY_CONFIG = {
 
 ### Web-Interface starten (empfohlen)
 ```bash
-cd demo
+cd app
 python web_server.py
 ```
 Dann Browser öffnen: [http://localhost:8000](http://localhost:8000)
@@ -210,16 +270,20 @@ Human-in-the-Loop, Konfidenz-Score, Datenbankschema und die zugehörigen Schalte
 web_server.py / main.py
         │
         ▼
-  SP_Agent (sp_agent.py)
+  SP_Agent (agents/sp_agent.py)
         │  ruft per subprocess auf
         ▼
-  Runtime-Scripts (create_snapshot.py, validate_snapshot.py, ...)
+  Runtime-Skripte (tools/smart-planning/runtime/*.py)
         │  nutzen
         ▼
-  StorageManager (storage_manager.py)
+  StorageManager (core/storage_manager.py)
         │
-        ├── STORAGE_MODE=LOCAL  →  ./smart-planning/Snapshots/  (Dateisystem)
-        └── STORAGE_MODE=AZURE  →  Azure Blob Storage Container
+        ├── STORAGE_MODE=LOCAL  →  ../data/snapshots/          (Dateisystem)
+        └── STORAGE_MODE=AZURE  →  Blob-Container "snapshots"
+
+  Regelwerk-Lader (core/rulebook_loader.py) nutzt DENSELBEN StorageManager:
+        ├── STORAGE_MODE=LOCAL  →  app/skills/*.md
+        └── STORAGE_MODE=AZURE  →  Blob-Container "skills"  (im Portal editierbar)
 ```
 
 Für dich als Nutzer bedeutet das: Du startest immer `web_server.py` und chattest.

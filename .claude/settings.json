@@ -8,7 +8,23 @@
       "Bash(az --version)",
       "Bash(az account *)",
       "Bash(az cognitiveservices *)",
-      "Bash(app/.venv/Scripts/python.exe -c ' *)"
+      "Bash(app/.venv/Scripts/python.exe -c ' *)",
+      "Bash(az storage *)",
+      "Bash(curl -s -o /dev/null -w \"UI: %{http_code}\\\\n\" http://localhost:8000/ --max-time 5)",
+      "Bash(TF_VAR_rulebook_mode=quatsch terraform validate)",
+      "Bash(TF_VAR_rulebook_mode=monolith TF_VAR_human_in_the_loop=true terraform validate)",
+      "Bash(terraform plan *)",
+      "Bash(TF_VAR_rulebook_mode=quatsch terraform plan -no-color)",
+      "Bash(./.venv/Scripts/python.exe \"C:/Users/ALSAYAD/AppData/Local/Temp/claude/c--Projektarbeiten-agentic-ai-mfg/51187e60-3117-48f8-b9d5-9fbe3bd38b84/scratchpad/set-storage-cs.py\")",
+      "Bash(./.venv/Scripts/python.exe -m tools.sync_skills status)",
+      "Bash(./.venv/Scripts/python.exe -m tools.sync_skills push)",
+      "Bash(STORAGE_MODE=AZURE ./.venv/Scripts/python.exe -c ' *)",
+      "Bash(RULEBOOK_SKILLS_PREFIX='' STORAGE_MODE=AZURE ./.venv/Scripts/python.exe -c ' *)",
+      "Bash(RULEBOOK_SKILLS_PREFIX=\"\" ./.venv/Scripts/python.exe -m tools.sync_skills push)",
+      "Bash(grep -nE \"^#{1,3} \" README.md)",
+      "Bash(./../../../agentic-ai-mfg/app/.venv/Scripts/python.exe -c ' *)",
+      "Bash(./.venv/Scripts/python.exe \"C:/Users/ALSAYAD/AppData/Local/Temp/claude/c--Projektarbeiten-agentic-ai-mfg/51187e60-3117-48f8-b9d5-9fbe3bd38b84/scratchpad/readme-app.py\")",
+      "Bash(grep -nE \"cd demo|demo/|AZURE_SEARCH_API_KEY|SP_API_BASE_URL|SP_CLIENT_ID|SP_CLIENT_SECRET|gpt-4o|ada-002|agent_config\\\\.py\\\\`|smart-planning/Snapshots\" README.md)"
     ]
   }
 }

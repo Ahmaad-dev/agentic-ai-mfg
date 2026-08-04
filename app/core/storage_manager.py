@@ -24,7 +24,7 @@ class StorageManager:
     - LOCAL_STORAGE_PATH: Basispfad für lokale Dateien (default: <repo>/data/snapshots)
     """
 
-    def __init__(self, base_path: Optional[str] = None):
+    def __init__(self, base_path: Optional[str] = None, container: Optional[str] = None):
         from dotenv import load_dotenv
         load_dotenv()
 
@@ -44,8 +44,11 @@ class StorageManager:
              _default_snapshots = Path(__file__).resolve().parents[2] / "data" / "snapshots"
              self.local_base_path = Path(os.getenv("LOCAL_STORAGE_PATH", str(_default_snapshots))).resolve()
 
-        # Azure Konfiguration
-        self.container_name = os.getenv("AZURE_STORAGE_CONTAINER", "snapshots")
+        # Azure Konfiguration.
+        # `container` erlaubt einem Aufrufer, einen ANDEREN Container zu waehlen als den
+        # Standard fuer Snapshots. Gebraucht wird das vom Regelwerk-Lader: Lernkarten sind
+        # Konfiguration, keine Snapshot-Daten, und gehoeren nicht in denselben Behaelter.
+        self.container_name = container or os.getenv("AZURE_STORAGE_CONTAINER", "snapshots")
         self.connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
         self.blob_service_client = None
         self.container_client = None

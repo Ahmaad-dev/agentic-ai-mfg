@@ -25,7 +25,7 @@ PT4 verwandelt das System vom autonomen PoC zur enterprise-fähigen Lösung. All
 
 ## Features (PT4)
 
-- ✅ **Human-in-the-Loop Governance**: Korrekturen werden als Vorschlag eingefroren, nichts wird autonom geschrieben (`HUMAN_IN_THE_LOOP`-Toggle in `agent_config.py`)
+- ✅ **Human-in-the-Loop Governance**: Korrekturen werden als Vorschlag eingefroren, nichts wird autonom geschrieben (`HUMAN_IN_THE_LOOP` — lokal in `.env`, in Azure über Terraform)
 - ✅ **Confidence-Score**: Jeder Korrekturvorschlag trägt einen nachvollziehbaren Score (Formel: `0.5·llm_confidence + 0.3·schema_valid + 0.2·memory`)
 - ✅ **Proposal-Persistenz**: Vorschläge werden zentral als JSON (`_proposals/`) und in der relationalen DB (`proposals`-Tabelle) abgelegt, jeweils mit stabiler `proposal_id`
 - ✅ **Datenbank-Backbone**: SQLAlchemy 2.0 + Alembic-Migrationen; 7 Tabellen
@@ -39,7 +39,7 @@ PT4 verwandelt das System vom autonomen PoC zur enterprise-fähigen Lösung. All
 ## Neue und geänderte Dateien
 
 ```
-demo/
+app/
 ├── db/                        # NEU — Datenbank-Layer
 │   ├── __init__.py
 │   ├── models.py              # SQLAlchemy ORM (7 Tabellen)
@@ -50,17 +50,22 @@ demo/
 │   └── versions/
 │       └── 55f1c1b3…_ap2_initial_schema.py
 ├── alembic.ini                # NEU
-├── agent_config.py            # GEÄNDERT: HUMAN_IN_THE_LOOP-Toggle, COST_PER_1K_TOKENS
+├── core/                      # (seit 02.08.2026 — waren lose im Wurzelverzeichnis)
+│   ├── agent_config.py        # GEÄNDERT: HUMAN_IN_THE_LOOP-Toggle, COST_PER_1K_TOKENS
+│   ├── cost_model.py
+│   ├── storage_manager.py
+│   └── rulebook_loader.py     # AP7: laedt die Lernkarten (lokal ODER aus dem Blob)
 ├── agents/
 │   ├── orchestration_agent.py # GEÄNDERT: HitL-Block + Token-Accumulator (5 LLM-Call-Stellen)
 │   ├── chat_agent.py          # GEÄNDERT: response.usage in metadata
 │   └── rag_agent.py           # GEÄNDERT: response.usage in metadata
-├── smart-planning/
+├── tools/smart-planning/      # (seit 02.08.2026 unter tools/)
 │   ├── runtime/
 │   │   ├── correction_models.py        # GEÄNDERT: confidence_score, status, schema_valid
 │   │   └── generate_correction_llm.py  # GEÄNDERT: Confidence-Formel, Proposal-Record, DB-Write, Token-Lesen
-│   └── Snapshots/
-│       └── _proposals/        # NEU — zentrale JSON-Ablage aller Vorschläge
+│
+│  Snapshots liegen seit 02.08.2026 AUSSERHALB der Anwendung: <repo>/data/snapshots/
+│  (bzw. im Blob-Container "snapshots"), darin _proposals/ als zentrale JSON-Ablage.
 └── web_server.py              # GEÄNDERT: DB-Session/Message/AgentRun + Token/Cost pro Request
 ```
 
@@ -140,7 +145,7 @@ Der Backend-Wechsel erfolgt ausschließlich über eine Umgebungsvariable — kei
 
 ### Lokal (Standard, keine Konfiguration nötig)
 
-SQLite-Datei `demo/db/pt4.sqlite3` wird automatisch angelegt. Kein weiterer Setup nötig.
+SQLite-Datei `app/db/pt4.sqlite3` wird automatisch angelegt. Kein weiterer Setup nötig.
 
 ### Azure SQL (Produktion)
 
@@ -187,7 +192,7 @@ Jeder Chat-Request schreibt einen `agent_runs`-Eintrag mit:
 - `tokens_prompt` / `tokens_completion`: aus `response.usage` der jeweiligen Azure OpenAI-Calls aggregiert
 - `cost_estimate`: `(tokens_total / 1000) × COST_PER_1K_TOKENS`
 
-**Kostenrate anpassen** (Standard: `0.005 USD/1K` — gpt-4o-Schätzung, als Annahme markiert):
+**Kostenrate anpassen** (Standard: `0.005 USD/1K` — Schätzung, als Annahme markiert; im Einsatz ist gpt-4.1):
 
 ```env
 COST_PER_1K_TOKENS=0.005
@@ -211,3 +216,21 @@ Subprocess-Tokens (z. B. aus `generate_correction_llm.py`) werden aus der bereit
 | M6 — Dashboard | AP6 | ⬜ offen |
 | M7 — Memory System | AP7 | ⬜ offen |
 | M8 — Evaluation & Demo | AP-E | ⬜ offen |
+
+
+---
+
+## Was sich seit dieser Fassung geändert hat (Stand 04.08.2026)
+
+Dieses Dokument beschreibt den PT4-Stand. Drei Dinge sind seither dazugekommen und stehen
+ausführlich in `docs/PROJECT_LOG.md`:
+
+- **AP7 — Lernkarten statt Monolith.** `RULEBOOK_MODE` (`cards` | `monolith`) wählt die
+  Quelle. Im Cloud-Betrieb liegen die Karten im Blob-Container `skills` und lassen sich dort
+  bearbeiten, **ohne ein neues Image zu bauen**. Abgleich mit dem Repository über
+  `python -m tools.sync_skills`.
+- **Verzeichnisumbau.** `demo/` heißt `app/`; Querschnittsmodule unter `core/`, Runtime-Skripte
+  unter `tools/`, Auslieferung unter `deploy/`, Laufzeitdaten unter `<repo>/data/`.
+- **Beide Schalter sind in Azure konfigurierbar.** `HUMAN_IN_THE_LOOP` und `RULEBOOK_MODE`
+  stehen im `env`-Block der Container App und sind in Terraform mit einer Wertprüfung
+  abgesichert.

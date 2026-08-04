@@ -43,6 +43,19 @@ MONOLITH_FILE = APP_ROOT / "tools" / "smart-planning" / "runtime" / "runtime-fil
 
 #: Ordner (LOCAL) bzw. Blob-Prefix (AZURE), in dem die Karten liegen.
 SKILLS_PREFIX = os.getenv("RULEBOOK_SKILLS_PREFIX", "skills").strip("/")
+
+
+def _sp(name: str = "") -> str:
+    """
+    Pfad einer Karte im jeweiligen Speicher.
+
+    Lokal ist der Praefix der ORDNER `app/skills/`, dort ist er zwingend. Im Blob Storage
+    liegen die Karten dagegen in einem EIGENEN Container `skills` — ein zusaetzlicher
+    Ordner gleichen Namens darin waere `skills/skills/_core.md` und damit doppelt gemoppelt.
+    Deshalb darf der Praefix leer sein; dann liegen die Karten direkt im Container.
+    Ohne diese Funktion entstuende bei leerem Praefix ein fuehrender Schraegstrich.
+    """
+    return f"{SKILLS_PREFIX}/{name}" if SKILLS_PREFIX else name
 CORE_CARD = "_core.md"
 
 #: Die Validator-Tags, die Smart Planning tatsächlich ausgibt. Nur diese können je ein
@@ -73,9 +86,15 @@ KNOWN_VALIDATOR_TAGS = {
 }
 
 
+#: Eigener Blob-Container fuer die Lernkarten. Sie sind Konfiguration, keine Snapshot-Daten —
+#: in einem Container namens "snapshots" zu liegen laedt zum Missverstaendnis ein. Lokal ist
+#: der Wert bedeutungslos: dort zaehlt `base_path` und die Karten liegen unter app/skills/.
+SKILLS_CONTAINER = os.getenv("AZURE_SKILLS_CONTAINER", "skills")
+
+
 def _storage() -> StorageManager:
     """Storage mit app/ als Basis, damit 'skills/x.md' lokal UND auf Azure identisch auflöst."""
-    return StorageManager(base_path=str(APP_ROOT))
+    return StorageManager(base_path=str(APP_ROOT), container=SKILLS_CONTAINER)
 
 
 def _split_frontmatter(text: str) -> tuple[dict, str]:
@@ -136,11 +155,11 @@ def list_cards() -> list[dict]:
     """Alle Karten aus dem Skills-Storage."""
     storage = _storage()
     cards = []
-    for path in sorted(storage.list_files(f"{SKILLS_PREFIX}/")):
+    for path in sorted(storage.list_files(_sp())):
         name = Path(path).name
         if not name.endswith(".md") or name.startswith("_"):
             continue  # `_core.md` und alles mit _ sind keine Karten (Vorlage, Doku)
-        raw = storage.load_text(f"{SKILLS_PREFIX}/{name}")
+        raw = storage.load_text(_sp(name))
         if raw is None:
             continue
         meta, body = _split_frontmatter(raw)
@@ -248,9 +267,9 @@ def load_rulebook(error_type: Optional[str] = None,
         return MONOLITH_FILE.read_text(encoding="utf-8")
 
     storage = _storage()
-    core_raw = storage.load_text(f"{SKILLS_PREFIX}/{CORE_CARD}")
+    core_raw = storage.load_text(_sp(CORE_CARD))
     if core_raw is None:
-        raise FileNotFoundError(f"{SKILLS_PREFIX}/{CORE_CARD} not found")
+        raise FileNotFoundError(f"{_sp(CORE_CARD)} not found")
     _, core_body = _split_frontmatter(core_raw)
     parts = [core_body]
 

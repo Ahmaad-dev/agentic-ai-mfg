@@ -27,7 +27,9 @@ Status legend: [ ] open · [~] in progress · [x] done
 - [x] M5  MCP Integration (AP5)
 - [x] M6  Dashboard (AP6)
 - [x] M7  Memory System (AP7)
-- [ ] M8  Evaluation & Demo (AP-E)
+- [~] M8  Evaluation & Demo (AP-E) — Empirie steht (Suiten, Seeding, A/B); offen: AK2-Zahl nach
+      dem Lernen, Kalibrierungskurve auf EINE Formel-Generation gepinnt, 11-Schritte-Demo,
+      Housekeeping
 
 Critical path: AP1 → AP2 → AP3 → AP4 (demo-ready) → AP5 & AP6 → AP7.
 
@@ -63,6 +65,15 @@ confidence = 0.5 * llm_self_estimate      (LLM returns 0..1 in an extended promp
                                 every proposal, so the term would be constant 1 and repeat the
                                 `schema_valid` mistake.)
 Special case: action == "manual_intervention_required" → confidence = 0.0
+
+**Nachtrag v4 (2026-07-31) — Confidence-Boden bei bestätigtem Wert.** Ist `memory_support = 1.0`
+(ein Mensch hat genau diesen Wert für DIESE Entität bestätigt), gilt ein Boden von **0.9**.
+Grund: bei einem ZERSTÖRTEN Wert ist `value_grounded` per Konstruktion 0 — der Wert steht nicht
+mehr im Snapshot. Das zog den menschlich bestätigten Wert UNTER eine freie Schätzung
+(0.675 < 0.725); die Confidence war ausgerechnet für den sichersten Fall invertiert.
+Gewichte unverändert; v3 und v4 unterscheiden sich AUSSCHLIESSLICH für menschlich bestätigte
+Werte. **Generationen in der DB: v0 (6), v3 (8), v4 (3)** — eine Kalibrierungskurve muss auf
+genau eine davon gepinnt werden (AP-E.4).
 
 Why the middle term changed: it used to be `schema_valid`, which is ALWAYS 1 — the proposal is
 validated against the Pydantic model immediately after being built, so the term was tautological
@@ -361,12 +372,18 @@ switchable for the evaluation. → **MET 2026-07-12.**
 AP7.0 creates a clean A/B experiment — *monolithic system prompt vs. selectively loaded rule
 cards* — measurable on tokens per run, approval-without-modification rate (AK2 ≥80%) and latency.
 With 6 reviews this shows the *mechanism*; statistically meaningful numbers require a seeding run
-(a batch of snapshots reviewed through the UI) before AP-E. This is a known, accepted gap.
+(a batch of snapshots reviewed through the UI) before AP-E. ~~This is a known, accepted gap.~~
+**ERLEDIGT 2026-07-31:** der Seeding-Lauf ist gefahren (AP-E.2), die Fallbasis steht bei
+14 reviews / 14 memory_items. Die A/B-Messung selbst deckt bisher nur die Token-Achse ab —
+Akzeptanzquote und Latenz sind darin NICHT gemessen (siehe AP-E.3).
 
 ### Handover to AP-E
 AP7 hands four open items to AP-E. They are NOT AP7 work and do not block M7 — they are listed
 as sub-packages in the AP-E section below: the `value_grounded` blocker (AP-E.0), the seeding run
 (AP-E.2), the finished test catalog (AP-E.1), and the card-conflict check (backlog).
+**Stand 2026-08-03:** drei davon sind geschlossen (AP-E.0 am 12.07., AP-E.1 am 12.07.,
+AP-E.2 am 31.07.). Offen bleibt nur die Konfliktprüfung — und auch die ist inzwischen als
+`rulebook_loader.check_card_conflicts` gebaut (01.08., Feinschliff #10).
 
 ---
 
@@ -437,13 +454,28 @@ a demonstrably correct proposal from then on.
   (article 124211 without `workItemConfigs`) that the prioritiser ranks ABOVE the injected one.
   Repaired using the values a human confirmed in memory case #6 — no invented values.
 
-- [ ] **AP-E.2 — Seeding run (needs a HUMAN)**
-  7 open proposals are queued, exactly one per snapshot, all four error types covered. A case only
-  enters `memory_items` through a real human review. **Do AP-E.0 first** — otherwise you review
-  against a confidence that is provably inverted for half the error types.
-  DoD: enough decided cases that `SMALL_SAMPLE` (n < 10) clears and a calibration curve is possible.
+- [x] **AP-E.2 — Seeding run (needs a HUMAN)**  *(DONE 2026-07-31)*
+  ~~7 open proposals are queued~~ — durchgeführt auf den 10 Vorschlägen der isolierten Suite
+  (AP-E.6). Der Nutzer hat im Review-Board entschieden und die Schätzungen korrigiert
+  (Dichte 1.14 → 1.017 für `articles:100005`, Department 20200 → 20100, HE01-Zeiten).
+  **Ergebnis: 14 reviews / 14 memory_items** — `SMALL_SAMPLE` (n < 10) ist damit gefallen.
+  A case only enters `memory_items` through a real human review. **Do AP-E.0 first** — otherwise
+  you review against a confidence that is provably inverted for half the error types. *(AP-E.0 war
+  vorher erledigt, die Reihenfolge wurde eingehalten.)*
 
-- [ ] **AP-E.3 — A/B: monolithic prompt vs. rule cards**
+  **Wie die Entscheidungsverteilung zu lesen ist (wichtig, war schon einmal Anlass für eine
+  Fehldeutung):** die 14 Reviews stehen bei 5 approve / 8 modify / 1 reject. Das sind **NICHT**
+  36 % AK2. Es ist ein Erstkontakt-Lauf, und die `modify`s konzentrieren sich fast vollständig
+  auf EINE strukturelle Klasse — **zerstörte Werte** (Dichte, Department, HE01-Zeiten), bei denen
+  der Originalwert im Snapshot nicht mehr existiert. Dort ist ein `modify` das *beabsichtigte*
+  Verhalten (Nutzerentscheidung „kein Referenz-Snapshot, Autorität ist das Gedächtnis"), kein
+  Qualitätsmangel. Gegenprobe in denselben Daten: wo der Wert ÜBERLEBT, wurde exakt approved
+  (Reviews 9/10/12 — `D100005_002`, `100005`, `SP10        SP01`).
+  **Die AK2-Zahl darf daher nicht aus diesem Lauf gebildet werden** — sie gehört in AP-E.4,
+  gemessen NACH dem Lernen.
+
+- [~] **AP-E.3 — A/B: monolithic prompt vs. rule cards**  *(Token-Achse gemessen 2026-07-12;
+  Akzeptanzquote und Latenz NICHT gemessen — deshalb [~] und nicht [x])*
   The `RULEBOOK_MODE` switch (AP7.0) is the experiment: same snapshot, two arms.
   First run (3 snapshots, 2026-07-12): **−16 % prompt tokens (81.962 → 68.920), identical
   proposals**, cost 0.2166 $ → 0.1839 $. It also exposed a real regression (the cards had lost the
@@ -452,9 +484,51 @@ a demonstrably correct proposal from then on.
   is a re-measurement. Say so in the write-up.
   DoD: A/B over the test catalog + the real snapshots, reported on tokens, acceptance rate, latency.
 
-- [ ] **AP-E.4 — Measurement + 11-step demo**
+- [ ] **AP-E.4 — Measurement + 11-step demo**  *(das eigentliche verbleibende Paket)*
   ≥80 % accepted-without-modification vs. the M0 baseline; calibration curve pinned to ONE
-  confidence generation (`?formula_version=v2` — see AP6); memory case shown live in the review UI.
+  confidence generation (~~`?formula_version=v2`~~ — **veraltet**, siehe unten); memory case shown
+  live in the review UI.
+
+  **Drei präzisierte offene Punkte (Stand 2026-08-03):**
+  1. **AK2 ist nach dem Lernen nicht gemessen.** Die kombinierte Suite (AP-E.6) belegt
+     *Wiedererkennung* (`memory_support=1.0` bei 7/10 Snapshots) — das ist NICHT dieselbe Kennzahl
+     wie „ohne Modifikation akzeptiert". Die 17 Eval-Vorschläge wurden nach der Suite als Hygiene
+     aus dem Board entfernt, statt sie zu reviewen. Für eine belastbare AK2-Zahl braucht es einen
+     Durchlauf gegen das GEFÜLLTE Gedächtnis, der auch tatsächlich reviewt wird.
+  2. **Formel-Generation pinnen.** In der DB liegen drei nebeneinander: **v0 (6), v3 (8), v4 (3)**.
+     Der Plan nannte oben noch `v2` — den gibt es dort gar nicht mehr. v3 änderte die Semantik von
+     `value_grounded` (AP-E.0), v4 zog einen Confidence-Boden von 0.9 bei `memory_support=1.0` ein
+     (31.07.). v3 und v4 unterscheiden sich NUR für menschlich bestätigte Werte. Eine Kurve über
+     alle drei Generationen misst den Formelwechsel, nicht das System.
+  3. **11-Schritte-Demo** — nicht gelaufen.
+
+- [x] **AP-E.6 — Fehler-Suiten: isoliert + kombiniert**  *(gefahren 2026-07-31; hier am 2026-08-03
+  NACHGETRAGEN — das Paket existierte im Plan nicht, obwohl es die tragende Empirie von AP-E ist.
+  Späte Ergänzung wie AP7.5.)*
+  Files: `app/eval/run_isolated_suite.py`, `app/eval/run_combined_suite.py`, `app/eval/run_iterative.py`.
+  Grundlage: der vom Nutzer gebaute Katalog (10 isolierte Snapshots à eine chirurgische Änderung
+  + `expected-results.json` als maschinenlesbares Oracle; 10 kombinierte Snapshots als Curriculum).
+
+  **Ergebnisse:**
+  * *Isoliert:* Erkennung **10/10**, Lokalisierung funktional 8/10, Wert exakt 4/10.
+  * *Kombiniert:* Erkennung **18/20 Fehler, 9/10 Snapshots vollständig**; Gedächtnis-
+    Wiedererkennung (`memory_support=1.0`) bei **7/10 Snapshots**.
+  * *Gedächtnis-Loop bewiesen:* Re-Run desselben Dichte-Fehlers nach dem Seeding schlägt **1.017**
+    statt 1.14 vor, `memory_support=1.0`, entitäts-präzise (`articles:100005`).
+
+  **Der Kernbefund, der die ganze Bewertung trägt:** „valide, aber fachlich falsch" ist eine
+  STRUKTURELLE Klasse und hier erstmals exakt messbar. Zerstört der Fehler den Originalwert
+  (Dichte → 0, departmentId → ""), existiert die Wahrheit nur noch außerhalb des Snapshots; das
+  System rät einen plausiblen Nachbarwert, der die Re-Validierung BESTEHT. Überlebt der Wert
+  (Duplikat, Referenz-Integrität), korrigiert das System exakt. Genau diese Trennung von
+  „server-valide" und „exakt richtig" löst das Messproblem, das das Exposé als offen benennt.
+
+  **Bekannte Grenzen (dokumentiert, nicht kaschiert):** I09-Lokalisierung wurde am 31.07.
+  geschlossen (neuer Modus `equipment_workitem`); I10 (packaging predecessors) bleibt ein
+  zerstörter-Wert-Fall. error-06 ist als INTEGRITÄTS-Fehler zu führen, nicht als Inhaltsfehler —
+  eine leere `equipmentId` scheitert an der Schema-Prüfung, die laut ESAROM-Doku §3.1 VOR den
+  Inhalts-Validatoren läuft und den co-injizierten Fehler maskiert.
+  Rohdaten: `pt4-eval-results.json`, `pt4-combined-results.json`.
 
 - [ ] **AP-E.5 — Repo-Housekeeping** *(vor der Abgabe / dem Demo-Tag)*
   Bestandsaufnahme 2026-07-12. **Wichtig vorweg: das Repo ist NICHT vermüllt.** Kein toter Test-
@@ -462,10 +536,15 @@ a demonstrably correct proposal from then on.
   Hygieneproblem und, wichtiger, eine Reihe von Dateien, die man beim Aufräumen NICHT anfassen darf.
 
   **A) Das eigentliche Problem: nichts ist committet.**
-  16 geänderte Dateien + 7 unversionierte Pfade — die **komplette AP7-Arbeit** liegt uncommittet:
-  `demo/skills/`, `demo/memory/`, `demo/eval/`, `demo/rulebook_loader.py`, die Alembic-Migration
-  `2f47c4554ece`, `docs/AP7-0_rule_inventory.md`. Ein Rechnerausfall kostet alles. **Das ist die
-  dringendste Aufräum-Aufgabe, nicht das Löschen von Dateien.**
+  ~~16 geänderte Dateien + 7 unversionierte Pfade~~ — **Stand 2026-08-03 deutlich größer:
+  112 Einträge in `git status`**, davon ~99 Umbenennungen aus dem Repository-Umbau
+  (`demo/` → `app/`, Snapshots nach `data/`) plus die AP7-Arbeit und die Infrastruktur-Angleichung.
+  Ein Rechnerausfall kostet alles. **Das ist die dringendste Aufräum-Aufgabe, nicht das Löschen
+  von Dateien.** Aufteilung in vier rückrollbare Commits vorgeschlagen (UI-Redesign · neue
+  Funktionen samt DB-Migration · Repository-Umbau · Infrastruktur-Angleichung), siehe
+  `docs/HANDOVER.md`. **Der Nutzer committet selbst.**
+  *Hinweis: alle `demo/…`-Pfade in diesem Plan sind historisch — der Code liegt seit 02.08.
+  unter `app/`, die Runtime-Skripte unter `app/tools/smart-planning/runtime/`.*
 
   **B) Echter Abfall (löschen ist sicher):**
   - `demo/__pycache__/` (9 Verzeichnisse im Projektcode) — regenerierbar, bereits gitignored.

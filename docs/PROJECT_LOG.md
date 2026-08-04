@@ -2316,3 +2316,242 @@ Container App ihre Werte über Managed Identity aus dem Key Vault, dort sind sie
 Die Konsequenz gilt aber allgemein: nach jedem `terraform apply`, der Ressourcen neu anlegt
 oder Schlüssel rotiert, ist die lokale `.env` veraltet. Ein kleines Skript, das sie aus dem
 Key Vault auffrischt, wäre die naheliegende Vorsorge — noch nicht gebaut.
+
+---
+
+### 2026-08-03 — PT4_PLAN.md an den tatsächlichen Stand angeglichen (Dokumentationskorrektur)
+- **Status:** done · **Changed files:** `docs/PT4_PLAN.md` (einzige Datei; kein Code angefasst)
+
+**Auslöser.** Ein frischer Chat las die Checkboxen des Plans und meldete AP-E als weitgehend
+offen — inklusive der Fehldeutung, die Akzeptanzquote von 5/14 Reviews (36 %) sei die AK2-Zahl
+und das Kriterium damit klar verfehlt. Der Nutzer hat widersprochen. **Er hatte recht:** der Plan
+war seit dem 12.07. nicht mehr nachgezogen worden, während das PROJECT_LOG die Arbeit vom 31.07.
+und 01.08. dokumentiert. Der Plan war die Fehlerquelle, nicht das System.
+
+**Der inhaltliche Kern der Korrektur.** Die 8 `modify`-Entscheidungen sind kein Qualitätsmangel,
+sondern konzentrieren sich fast vollständig auf EINE strukturelle Klasse: **zerstörte Werte**
+(Reviews 7/8/11 Dichte 1.017, 13/14 Department 20100, 5 HE01-Zeiten). Dort existiert der
+Originalwert im Snapshot nicht mehr; ein `modify` ist das beabsichtigte Verhalten gemäß der
+Nutzerentscheidung „kein Referenz-Snapshot, Autorität ist das episodische Gedächtnis".
+Gegenprobe in denselben Daten: wo der Wert ÜBERLEBT, wurde exakt approved (Reviews 9/10/12 —
+`D100005_002`, `100005`, `SP10        SP01`). Ein Seeding-Lauf ist per Konstruktion Erstkontakt;
+eine AK2-Zahl daraus zu bilden misst den Kaltstart, nicht das System.
+
+**Was im Plan geändert wurde**
+- M8 von `[ ]` auf `[~]` mit benannten Restpunkten.
+- **AP-E.2 (Seeding) → `[x]`**, durchgeführt 31.07., 14 reviews / 14 memory_items, `SMALL_SAMPLE`
+  gefallen. Mit der Lesehilfe zur Entscheidungsverteilung, damit die 36-%-Fehldeutung nicht
+  wiederkehrt.
+- **AP-E.3 (A/B) → `[~]`**, bewusst NICHT `[x]`: gemessen ist nur die Token-Achse (−16 %,
+  identische Vorschläge, 3 Snapshots). Akzeptanzquote und Latenz fordert die DoD ebenfalls und
+  sind nicht gemessen.
+- **AP-E.4** bleibt `[ ]` und ist jetzt präzise: (1) AK2 nach dem Lernen ungemessen — die
+  kombinierte Suite belegt Wiedererkennung (`memory_support=1.0`), das ist eine ANDERE Kennzahl
+  als „ohne Modifikation akzeptiert"; die 17 Eval-Vorschläge wurden als Hygiene entfernt statt
+  reviewt. (2) Formel-Generation pinnen — der Plan nannte `v2`, in der DB liegen v0 (6), v3 (8),
+  v4 (3). (3) 11-Schritte-Demo nicht gelaufen.
+- **AP-E.6 NEU nachgetragen und `[x]`** — die isolierte und die kombinierte Fehler-Suite hatten im
+  Plan überhaupt keinen Platz, obwohl sie die tragende Empirie von AP-E sind (isoliert 10/10
+  Erkennung, kombiniert 18/20 bzw. 9/10 Snapshots, Gedächtnis-Wiedererkennung 7/10) — inklusive
+  Kernbefund „valide, aber fachlich falsch" und der Grenzen (I10, error-06 als Integritätsfehler).
+- **Confidence-Formel:** Nachtrag v4 (Boden 0.9 bei `memory_support=1.0`) ergänzt; der Block endete
+  bei v3.
+- **AP-E.5:** die Bestandsaufnahme nannte „16 geänderte Dateien" — tatsächlich sind es 112
+  `git status`-Einträge nach dem Repository-Umbau. Ergänzt um den Hinweis, dass alle `demo/`-Pfade
+  im Plan historisch sind (Code liegt seit 02.08. unter `app/`) und dass der Nutzer selbst committet.
+- **„Note for AP-E" / „Handover to AP-E":** die als offen geführten Übergabepunkte sind bis auf
+  AP-E.4/AP-E.5 geschlossen; die Konfliktprüfung existiert seit 01.08. als
+  `rulebook_loader.check_card_conflicts`.
+
+**Verifikation.** Alle Zahlen stammen aus der laufenden SQLite-DB, nicht aus dem Log:
+proposals 17 (v0 6 / v3 8 / v4 3), reviews 14 (5 approve / 8 modify / 1 reject), memory_items 11,
+`memory_support` verteilt auf None 6 / 0.0 7 / 0.5 1 / 1.0 3, 3 Vorschläge `pending_review`.
+Die Review-Kommentare wurden einzeln gelesen, um die Zuordnung „modify = zerstörter Wert" zu
+belegen statt zu behaupten. Kein Code, kein Runtime-Tool und keine Fixture geändert.
+
+**Merke (Prozess).** `PT4_PLAN.md` ist die Referenz, aus der ein frischer Chat seinen Stand zieht.
+Wenn nur das append-only PROJECT_LOG fortgeschrieben wird, driftet die Referenz — und der nächste
+Chat meldet erledigte Arbeit als offen. Nach jedem Sub-Paket gehört die Checkbox mit nachgezogen.
+
+- **Open / next:** AP-E.4 (AK2 nach dem Lernen messen, Kalibrierung auf eine Formel-Generation,
+  11-Schritte-Demo) und AP-E.5 (Commits durch den Nutzer). Unicode-Entscheidung und der
+  Search-/Index-Block bleiben auf Nutzerwunsch vertagt.
+
+---
+
+### 2026-08-04 — Cloud-Verhalten geprüft: die Lernkarten fehlen im Blob Storage
+- **Status:** BEFUND, noch nicht behoben (Entscheidung des Nutzers abwarten)
+- **Changed files:** keine
+
+**Anlass:** Frage des Nutzers, ob in der Cloud alles funktioniert, wo die Lernkarten dort
+liegen und ob sie sich ohne Deployment erweitern lassen.
+
+**Wie der Umschalter funktioniert.** `StorageManager` liest `STORAGE_MODE`. Bei `LOCAL` gehen
+alle Pfade gegen `base_path` auf der Platte, bei `AZURE` gegen Blobs im Container aus
+`AZURE_STORAGE_CONTAINER`. Entscheidend: `rulebook_loader` benutzt DENSELBEN StorageManager
+mit dem Präfix `skills/`. In der Cloud werden die Lernkarten also NICHT aus dem Image
+gelesen — der Ordner `app/skills/` im Container ist dort schlicht unbeteiligt.
+
+**Befund, am echten Code im AZURE-Modus nachgewiesen (nur lesend):**
+```
+  Modus: AZURE   Container: snapshots
+  list_files("skills/") -> []
+  load_text("skills/_core.md") -> None
+  list_cards() -> 0 Karten
+  load_rulebook() -> FileNotFoundError: skills/_core.md not found
+```
+Die Korrektur-Pipeline stirbt in der Cloud beim ersten Aufruf. Chat, Review Board und
+Dashboard sind NICHT betroffen (die brauchen das Regelwerk nicht).
+
+**Bestandsaufnahme in Azure:**
+- `stagenticaimfg34b7u5` / Container `snapshots` (RG `rg-agentic-ai-mfg-environment`):
+  existiert, **0 Blobs** — weder Snapshots noch Lernkarten.
+- `saagenticaimfg` / Container `basic-ai-informations` (RG `rg-agentic-ai-mfg`):
+  existiert, **0 Blobs** — der Dokumenten-Storage aus dem TODO-Block.
+- Die 608 MB lokaler Snapshots liegen NUR lokal. Ein Vorschlag, der sich auf einen alten
+  Snapshot bezieht, findet ihn in der Cloud nicht.
+
+**Die gute Nachricht:** Der Mechanismus, nach dem der Nutzer gefragt hat, ist bereits gebaut.
+Liegen die Karten als Blobs unter `skills/`, genügt das Hochladen einer geänderten `.md`, um
+das Verhalten zu ändern — ohne Deployment, ohne Repository-Zugriff. Es fehlt nur der
+einmalige Erstbestand und ein Weg, ihn synchron zu halten.
+
+**Nicht konfigurierbar in der Cloud:** `RULEBOOK_MODE` und `HUMAN_IN_THE_LOOP` stehen NICHT
+im `env`-Block der Container App. Sie greifen dort auf ihre Codestandards zurück (`cards`
+bzw. `true`) und lassen sich ohne Terraform-Änderung nicht umstellen. Für einen A/B-Schalter,
+der laut PT4-Plan bedienbar sein soll, ist das zu wenig.
+
+---
+
+### 2026-08-04 — Cloud-Betrieb hergestellt: Lernkarten im Blob, Schalter in Terraform
+- **Status:** done · **Changed files:** `app/tools/sync_skills.py` (neu), `app/.env` (lokal),
+  Infra: `infra/main.tf`, `infra/variables.tf`
+- **Snapshots wurden auf Nutzerwunsch NICHT hochgeladen** — die Cloud startet mit frischem
+  Bestand. Der Container `snapshots` bleibt für Snapshot-Daten leer.
+
+**1) Lernkarten in den Blob Storage.** Alle 14 Dateien aus `app/skills/` liegen jetzt unter
+`skills/` im Container `snapshots` (Konto `stagenticaimfg34b7u5`). Damit ist der Befund von
+vorhin behoben: `load_rulebook()` im AZURE-Modus liefert dasselbe wie lokal — 12 Karten,
+Kartenindex 1309 Zeichen, Regelwerk für `DENSITY_VALUES` 16620 Zeichen, Diagnose ohne
+Tippfehler-Tags und ohne Konflikte.
+
+**2) `app/tools/sync_skills.py`** mit drei Unterbefehlen. Die eigentliche Überlegung dabei
+war NICHT das Hochladen, sondern der Schutz davor:
+- `push` lädt nur Karten hoch, die im Blob FEHLEN. Abweichende werden gemeldet und
+  ÜBERSPRUNGEN — wer im Portal eine Karte korrigiert hat, verliert sie nicht durch einen
+  Routine-Abgleich. Überschreiben erfordert `--overwrite`, also eine bewusste Entscheidung.
+- `pull` holt den Blob-Stand zurück ins Repository, damit Portal-Änderungen ihren Weg in die
+  Versionsverwaltung finden.
+- `status` zeigt nur an. Vergleich über SHA-256 mit normalisierten Zeilenenden, damit
+  Windows/Linux keinen Unterschied erzeugen.
+Snapshots fasst das Werkzeug nicht an.
+
+**3) Der Kernnutzen ist nachgewiesen, nicht behauptet.** Eine Karte direkt im Blob geändert
+(simulierte Portal-Bearbeitung): das Regelwerk wuchs von 16620 auf 16709 Zeichen und enthielt
+die neue Zeile — **ohne Neustart, ohne Deployment, ohne Repository-Zugriff**. Danach sauber
+zurückgesetzt und gegengeprüft.
+
+**4) Beide Schalter in Terraform.** `HUMAN_IN_THE_LOOP` und `RULEBOOK_MODE` standen NICHT im
+`env`-Block der Container App und liessen sich in der Cloud nur über einen neuen Image-Build
+ändern. Jetzt als Variablen mit `validation`-Block: ungültige Werte fallen beim `plan` durch,
+nicht erst zur Laufzeit. Beide Wächter ausprobiert — `rulebook_mode=quatsch` und
+`human_in_the_loop=vielleicht` brechen mit der jeweiligen Klartextmeldung ab.
+`terraform validate` allein genügt dafür NICHT: es prüft keine Variablenwerte.
+
+**Plan geprüft:** `0 to add, 4 to change, 0 to destroy` — nichts wird ersetzt.
+ACHTUNG bei der Bewertung: `azurerm_key_vault_secret.client_secret` erscheint im Plan nur,
+weil ich für den Testlauf einen Platzhalter als Secret übergeben habe. Mit dem echten Wert
+entfällt diese Zeile. Die übrigen zwei Änderungen (Static Web App, Dokumenten-Storage) sind
+vorhandene Abweichungen und stammen NICHT aus dieser Arbeit.
+
+**5) `app/.env`:** `AZURE_STORAGE_CONNECTION_STRING` war vorhanden, aber LEER; jetzt gefüllt,
+dazu `AZURE_STORAGE_CONTAINER=snapshots`. `STORAGE_MODE` bleibt lokal auf `LOCAL` — die
+Zeichenfolge wird nur im AZURE-Modus gelesen und macht das Sync-Werkzeug ohne zusätzliche
+Umgebungsvariablen benutzbar. Gegengeprüft: lokal weiterhin LOCAL, 12 Karten von der Platte,
+Snapshot-Basis unverändert `data/snapshots`.
+
+**Offen bleibt:** Die Container App zieht die neuen Schalter erst mit dem nächsten
+`terraform apply`. Und der `image_tag` muss hoch, sonst läuft dort weiterhin das alte Image
+ohne ODBC-Treiber.
+
+---
+
+### 2026-08-04 — Lernkarten in einen eigenen Blob-Container
+- **Status:** done · **Changed files:** `app/core/storage_manager.py`,
+  `app/core/rulebook_loader.py`, `app/tools/sync_skills.py`,
+  Infra: `infra/main.tf`, `infra/variables.tf` (+ Terraform-State-Import)
+
+**Anlass:** Die Karten lagen im Container `snapshots` — Konfiguration im selben Behälter wie
+Snapshot-Daten. Wer dort aufräumt, hätte das Regelwerk mitgelöscht.
+
+**Umgesetzt:** Eigener Container `skills`. `StorageManager` bekam einen optionalen Parameter
+`container`, `rulebook_loader` benutzt ihn über `AZURE_SKILLS_CONTAINER` (Standard `skills`).
+
+**Eine Unschönheit gleich mit erledigt:** Im eigenen Container wäre der Pfad
+`skills/skills/_core.md` gewesen — der Präfix stammt daher, dass die Karten lokal im ORDNER
+`app/skills/` liegen. Neue Helferfunktion `_sp()`: bei leerem Präfix liegen die Karten direkt
+in der Container-Wurzel, ohne sie entstünde ein führender Schrägstrich. Lokal bleibt der
+Präfix `skills`, in der Cloud setzt Terraform `RULEBOOK_SKILLS_PREFIX=""`.
+
+**Beim Umzug aufgefallen (durch die Gegenprobe, nicht durch Nachdenken):** Nach dem zweiten
+Hochladen meldete der Lader **24 Karten und 14 Konflikte** — die verschachtelten Kopien lagen
+noch daneben und wurden doppelt gezählt. Nach dem Löschen wieder 12 Karten, 0 Konflikte,
+Regelwerk 16620 Zeichen, identisch zum lokalen Stand.
+
+**Endzustand in Azure:**
+- Container `snapshots`: **0 Blobs** (frischer Start, wie vom Nutzer gewünscht)
+- Container `skills`: **14 Blobs** direkt in der Wurzel
+
+**Terraform:** Container als Ressource ergänzt, dazu `AZURE_SKILLS_CONTAINER` und
+`RULEBOOK_SKILLS_PREFIX` im `env`-Block.
+**WICHTIG — selbst verursacht und behoben:** Der `StorageManager` legt fehlende Container
+selbsttätig an, der Container existierte durch das Hochladen also bereits. Terraform hätte
+ihn beim nächsten `apply` erneut anlegen wollen und wäre mit einem Konflikt gescheitert.
+Deshalb per `terraform import` in den Zustand übernommen. Plan danach:
+`0 to add, 4 to change, 0 to destroy` — der Container taucht nicht mehr als „to add" auf.
+
+**Frage des Nutzers zur SQL-Datenbank — Antwort:** Ja. Acht Tabellen, alles
+anwendungsrelevante geht dorthin: `sessions`, `messages`, `agent_runs`, `proposals`,
+`reviews`, `memory_items`, `snapshots_meta`, `email_drafts`. Lokal SQLite, in der Cloud über
+`DATABASE_URL` die Azure SQL. In Dateien bzw. Blobs liegen NUR die Snapshot-Nutzdaten und die
+Lernkarten. Die Unicode-Entscheidung (VARCHAR/TEXT statt NVARCHAR) betrifft genau diese
+Tabellen und ist weiterhin offen.
+
+---
+
+### 2026-08-04 — READMEs beider Repositories auf den aktuellen Stand
+- **Status:** done · **Changed files:** `app/README.md`, `app/README-PT4.md`,
+  Infra: `README.md` (neu angelegt)
+
+**Infrastruktur-Repository: es gab gar keine README.** Neu geschrieben, aus der
+Terraform-Quelle abgeleitet statt aus dem Gedächtnis: die beiden Ressourcengruppen und warum
+sie getrennt sind, Einrichtung mit den zwei Pflichtvariablen, sämtliche an die Container App
+übergebenen Umgebungsvariablen nach Themen sortiert, die zwei Blob-Container mit ihrer
+unterschiedlichen Rolle, die Verhaltensschalter, der Deploy-Ablauf mit `image_tag`, die
+bekannten Baustellen und die Stolperfallen (`terraform plan` statt `validate`; Container nie
+von Hand anlegen, sonst kollidiert der nächste `apply`).
+
+**Anwendungs-README: die Konfigurationsangaben waren FALSCH, nicht nur veraltet.** Wer ihr
+gefolgt wäre, hätte einen Startabbruch bekommen:
+- `AZURE_SEARCH_API_KEY` statt `AZURE_SEARCH_ADMIN_KEY`
+- `SP_API_BASE_URL` / `SP_CLIENT_ID` / `SP_CLIENT_SECRET` — Namen, die es im Code nie gab
+  (richtig: `SMART_PLANNING_BASE_URI` / `_CLIENT_ID` / `CLIENT_SECRET`)
+- **Die zwölf `AZURE_OPENAI_{CHAT,RAG,ORCHESTRATION}_*`-Variablen fehlten komplett** — genau
+  die, die `must_env()` hart verlangt. Die README nannte stattdessen ein einzelnes
+  `AZURE_OPENAI_API_KEY`.
+- `cd demo`, `pip install -r requirements.txt`, `gpt-4o`, `text-embedding-ada-002`
+
+**Gegengeprüft statt geglaubt:** Ein Abgleich aller `NAME=`-Zeilen der README gegen alle
+`must_env()`-Aufrufe im Code. Erster Durchlauf: 6 Pflichtvariablen fehlten, weil ich die
+RAG- und Orchestrierungs-Sätze mit „dazu _KEY, _API_VERSION, _DEPLOYMENT" abgekürzt hatte —
+also derselbe Fehlertyp wie im Original. Ausgeschrieben. Zweiter Durchlauf: alle 16
+Pflichtvariablen dokumentiert.
+
+**Inhaltlich neu in beiden Dokumenten:** die Doppelrolle von `STORAGE_MODE` (es schaltet
+Snapshots UND Lernkarten um), dass der Regelwerk-Lader im Azure-Modus NICHT aus dem Image
+liest, die Pflege der Karten über das Portal ohne Deployment, `tools/sync_skills` samt der
+Begründung, warum `push` abweichende Karten überspringt, und der Hinweis, dass nach jedem
+`terraform apply` die lokale `.env` verdächtig ist.
+
+`README-PT4.md` behält seinen historischen Charakter; die Dateiliste zeigt die neuen Pfade,
+und ein Abschnitt am Ende nennt, was seit dieser Fassung dazugekommen ist.
