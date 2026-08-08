@@ -25,7 +25,26 @@
       "Bash(./../../../agentic-ai-mfg/app/.venv/Scripts/python.exe -c ' *)",
       "Bash(./.venv/Scripts/python.exe \"C:/Users/ALSAYAD/AppData/Local/Temp/claude/c--Projektarbeiten-agentic-ai-mfg/51187e60-3117-48f8-b9d5-9fbe3bd38b84/scratchpad/readme-app.py\")",
       "Bash(grep -nE \"cd demo|demo/|AZURE_SEARCH_API_KEY|SP_API_BASE_URL|SP_CLIENT_ID|SP_CLIENT_SECRET|gpt-4o|ada-002|agent_config\\\\.py\\\\`|smart-planning/Snapshots\" README.md)",
-      "Bash(./.venv/Scripts/python.exe -c \"import ast;ast.parse\\(open\\('alembic/env.py',encoding='utf-8'\\).read\\(\\)\\);print\\('Syntax OK'\\)\")"
+      "Bash(./.venv/Scripts/python.exe -c \"import ast;ast.parse\\(open\\('alembic/env.py',encoding='utf-8'\\).read\\(\\)\\);print\\('Syntax OK'\\)\")",
+      "PowerShell(az network vnet show -g \"rg-p-weu-ccadmm-hub-network\" -n \"vnet-p-weu-ccadmm-hub\" --subscription $HUB --query \"{space:addressSpace.addressPrefixes}\" -o json)",
+      "PowerShell(az network vnet peering list -g \"rg-p-weu-ccadmm-hub-network\" --vnet-name \"vnet-p-weu-ccadmm-hub\" --subscription $HUB --query \"[].{name:name, state:peeringState, remoteSpace:remoteAddressSpace.addressPrefixes}\" -o json)",
+      "PowerShell(az network private-dns record-set a list -g \"rg-p-weu-ccadmm-hub-dns\" -z \"internal.idp.cca-dev.com\" --subscription $HUB --query \"[].{name:name, ip:aRecords[0].ipv4Address}\" -o table)",
+      "PowerShell($HUB=\"9b942b89-e1d1-454e-a11c-18531063ef2d\")",
+      "PowerShell(az network vnet show -g \"rg-t-weu-ccadmm-idp-network\" -n \"vnet-t-weu-ccadmm-idp\" --subscription \"40e08bde-e349-4ac5-8299-6c6e2f5c33f6\" --query \"{name:name, location:location}\" -o json)",
+      "PowerShell(az resource list --subscription \"17b4807c-05a1-4c15-b35e-1a6b20bc37b3\" --resource-type \"Microsoft.App/managedEnvironments\" --query \"[].{name:name, rg:resourceGroup, loc:location}\" -o table)",
+      "PowerShell(az resource list --subscription \"17b4807c-05a1-4c15-b35e-1a6b20bc37b3\" --resource-type \"Microsoft.App/containerApps\" --query \"[].{name:name, rg:resourceGroup, loc:location}\" -o table)",
+      "PowerShell(az storage account list --subscription \"17b4807c-05a1-4c15-b35e-1a6b20bc37b3\" --query \"[?name=='tfstateagenticaimfg'].{name:name, rg:resourceGroup, sub:id}\" -o json)",
+      "PowerShell(az group list --subscription \"17b4807c-05a1-4c15-b35e-1a6b20bc37b3\" --query \"[?contains\\(name,'agentic'\\)].{name:name, loc:location}\" -o table)",
+      "PowerShell(az resource list --subscription $DEV --resource-type \"Microsoft.App/managedEnvironments\" --query \"[?resourceGroup=='rg-agentic-ai-mfg-environment'].{name:name}\" -o table)",
+      "PowerShell(az resource list --subscription $DEV --resource-type \"Microsoft.App/containerApps\" --query \"[?resourceGroup=='rg-agentic-ai-mfg-environment'].{name:name}\" -o table)",
+      "PowerShell(az network vnet list --subscription $DEV --query \"[?contains\\(name,'agentic'\\)].{name:name, rg:resourceGroup, space:addressSpace.addressPrefixes[0]}\" -o table)",
+      "PowerShell($DEV=\"17b4807c-05a1-4c15-b35e-1a6b20bc37b3\")",
+      "Bash(cp \"C:/Projektarbeiten/agentic-ai-mfg/docs/NETZWERKARCHITEKTUR.md\" \"C:/Projektarbeiten/Infra/agentic-ai-mfg-infrastructure-terraform/docs/NETZWERKARCHITEKTUR.md\")",
+      "Bash(rm \"C:/Projektarbeiten/agentic-ai-mfg/docs/NETZWERKARCHITEKTUR.md\")",
+      "PowerShell(az containerapp show -g rg-agentic-ai-mfg-environment -n ca-agentic-ai-backend-34b7u5 --subscription $DEV --query \"properties.template.containers[0].image\" -o tsv)",
+      "PowerShell(az acr repository show-tags --name acragenticaimfg --repository agentic-ai-backend --subscription $DEV --orderby time_desc -o table 2>&1)",
+      "PowerShell(az acr repository show-tags --name acragenticaimfg34b7u5 --repository agentic-ai-backend --subscription $DEV --orderby time_desc -o table 2>&1)",
+      "PowerShell(az acr manifest list-metadata --registry acragenticaimfg34b7u5 --name agentic-ai-backend --subscription $DEV --query \"[].{tags:tags[0], created:createdTime}\" -o table 2>&1)"
     ]
   }
 }

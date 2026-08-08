@@ -152,12 +152,16 @@ async function sendMessage(retryCount = 0) {
     // Typing Indicator anzeigen
     showTypingIndicator();
 
-    // Cold-Start Hinweis nach 10s - nur in Production (Container App Scale-to-Zero)
+    // Hinweis nach 10s, wenn das Backend nicht antwortet - nur in Production.
+    // Der Text nannte frueher "Scale-to-Zero" als Grund. Das war seit dem
+    // 02.08.2026 falsch (min_replicas = 1, kein Scale-to-Zero mehr) und aktiv
+    // irrefuehrend: bei einem abgestuerzten Container hat die Meldung zum
+    // Warten aufgefordert, statt auf einen Fehler hinzuweisen.
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const coldStartTimer = !isLocal ? setTimeout(() => {
         const indicator = document.getElementById('typingIndicator');
         if (indicator) {
-            indicator.querySelector('.bubble').innerHTML += '<p style="font-size:0.75rem;opacity:0.6;margin-top:4px">⏳ Backend startet... (Scale-to-Zero, bitte kurz warten)</p>';
+            indicator.querySelector('.bubble').innerHTML += '<p style="font-size:0.75rem;opacity:0.6;margin-top:4px">⏳ Das Backend antwortet noch nicht. Falls das anhält, bitte den Status der Container App prüfen.</p>';
         }
     }, 10000) : null;
 

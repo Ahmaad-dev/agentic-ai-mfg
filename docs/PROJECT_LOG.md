@@ -2593,3 +2593,130 @@ auf `9b1e40c7d2a3 (head)`.
 hart ab. Genau deshalb ist der Fehler sofort und deutlich aufgetreten, statt dass die
 Anwendung auf einem leeren Schema gestartet wäre und bei jedem Request anders gescheitert
 wäre.
+
+---
+
+### 2026-08-04 — Netzwerkanbindung Container App → Smart Planning: Terraform + Dokumentation
+- **Status:** Code geschrieben und geplant, **NICHT ausgerollt** (kein `apply`)
+- **Changed files:** INFRA-Repository: `infra/network.tf` (neu), `infra/main.tf`,
+  `infra/variables.tf`, `infra/terraform.tfvars`, `infra/outputs.tf`,
+  `docs/NETWORK_SETUP.md` (neu). Hauptrepository: `docs/NETZWERKARCHITEKTUR.md` (neu).
+  Kein Anwendungscode angefasst.
+
+**Das Problem.** Die Container App läuft ohne VNet-Integration und geht ausschließlich
+über die geteilte Azure-Egress ins öffentliche Internet. Die Smart-Planning-VM hat
+**keine öffentliche IP** (`10.112.19.8`), liegt in einer fremden Subscription und trägt
+einen privaten DNS-Namen. Es sind zwei Probleme, nicht eines: Routing UND Namensauflösung.
+
+**Befund per Leseabfrage gegen Azure — nicht aus Dokumentation.** Die VM liegt NICHT im
+Hub `vnet-p-weu-ccadmm-hub`, sondern im Spoke `vnet-t-weu-ccadmm-idp` (10.112.16.0/22,
+westeurope). Damit wäre ein Peering DEV→Hub wirkungslos gewesen — **Peering ist nicht
+transitiv**. Der lokale VPN-Zugriff funktioniert nur, weil das Spoke
+`useRemoteGateways=true` hat und die Gateway-Routen propagiert bekommt. Die DNS-Zone
+`internal.idp.cca-dev.com` ist eine Azure Private DNS Zone im Hub und enthält den
+A-Record `vm-t-weu-ccadmm-idp-test02 → 10.112.19.8`; ein Zonen-Link löst die DNS-Seite
+daher vollständig, ohne Erreichbarkeit des DNS-Servers 10.112.0.100.
+
+**Zwei Nutzerentscheidungen, die den Entwurf geprägt haben.**
+1. *In DEV wird nichts Bestehendes verwendet.* Das bereits vorhandene `vnet-dev-soi`
+   samt fertigem Hub-Peering und einem leeren Subnetz `snet-dev-soi-container` (/23,
+   ohne Delegation) wäre die Abkürzung gewesen — bewusst nicht genutzt.
+2. *Die Managed Identity bekommt keine Rechte in IDP.* Das erzwingt die Aufteilung:
+   Terraform baut nur DEV, die drei netzübergreifenden Schritte macht der Nutzer manuell
+   im Portal. Hintergrund: Azure verlangt `Microsoft.Network/virtualNetworks/peer/action`
+   auf dem ZIEL-VNet — selbst die DEV-seitige Hälfte des Peerings bräuchte eine Rolle in
+   IDP. Zur Laufzeit berührt die Identity IDP ohnehin nie (ESAROM authentifiziert über
+   Keycloak, nicht über Entra ID).
+
+**Gewählter Weg: direktes Spoke-zu-Spoke-Peering**, nicht über die Hub-Firewall
+`afw-ngw-p2s-v1` (10.112.1.4). Keine UDR, keine Firewall-Regel, kein Gateway, und die
+Produktions-Firewall bleibt unangetastet. Der Preis ist explizit dokumentiert: der
+Verkehr umgeht die zentrale Protokollierung des Hubs. Für eine DEV-Anbindung an eine
+Testinstanz vertretbar, für einen Produktivpfad nicht.
+
+**Region.** Das VNet muss in derselben Region wie die Environment liegen, und die übrige
+Infrastruktur steht in swedencentral — das Peering wird daher ein **Global VNet Peering**
+(swedencentral ↔ westeurope): höherer Preis je GB, ~20 ms Latenz. Bei mehrminütigen
+Pipeline-Läufen bedeutungslos.
+
+**Verifikation — `terraform plan` gegen den echten State:**
+`Plan: 4 to add, 3 to change, 2 to destroy`. Neu entstehen VNet und Subnetz; ersetzt
+werden ausschließlich `azurerm_container_app_environment.cae` (durch das unveränderliche
+`infrastructure_subnet_id`) und `azurerm_container_app.api` als Folge davon. **SQL, Key
+Vault, ACR, Storage und Static Web App stehen NICHT in der Ersetzungsliste** — das war
+die eigentliche Risikofrage. Von den drei In-Place-Änderungen ist eine ein Artefakt des
+Platzhalter-Secrets im lokalen Planlauf; `static_web_app.ui` und
+`storage_account.documents` sind vorbestehender Drift und stammen nicht aus dieser
+Änderung (die Storage-Regel setzt `default_action = "Allow"`, sperrt also nichts aus).
+`terraform validate` und `fmt` sauber. **Kein `apply` ausgeführt** — der Umbau ersetzt
+laufende Ressourcen und ändert die öffentliche Backend-FQDN; das ist eine
+Nutzerentscheidung.
+
+**Dokumentierte Risiken.** (R1) Peering und DNS-Link liegen NICHT im Terraform-State —
+wird das VNet je ersetzt, verschwinden beide ohne Meldung und die Verbindung bricht
+wortlos. Bewusst akzeptierter Preis der Rechtetrennung. (R2) Der Rollout erzeugt eine
+neue Backend-FQDN, danach muss `deploy-frontend.yml` laufen. (R3) `10.113.0.0/22` ist nur
+gegen die am Hub sichtbaren Peerings geprüft, IPAM-Bestätigung steht aus. (R4) Ob Azure
+zu Workload Profiles zwingt und ob dort eine Grundgebühr anfällt, ist nicht belastbar
+geklärt — deshalb der /23-Zuschnitt, der beide Varianten trägt.
+
+**Kostenwirkung: praktisch null.** Kein VPN Gateway, keine Firewall, kein NAT Gateway.
+VNet, Subnetz, Peering-Verbindung und DNS-Link kosten nichts; es bleibt Peering-Verkehr
+im Centbereich. Dominierend bleibt unverändert `min_replicas = 1`.
+
+- **Open / next:** IPAM-Bestätigung, `apply`, drei Portal-Schritte, Frontend-Redeploy,
+  danach fachlicher Nachweis über eine Snapshot-Validierung aus der Container App.
+  Unicode-Entscheidung und Search-/Index-Block bleiben vertagt.
+
+---
+
+### 2026-08-04 — Apply gescheitert: Subnetz-Delegation erzwingt Workload Profiles (behoben)
+- **Status:** Code korrigiert und geplant; **Apply muss wiederholt werden**
+- **Changed files:** INFRA-Repository: `infra/network.tf`, `infra/main.tf`,
+  `docs/NETWORK_SETUP.md`, `docs/NETZWERKARCHITEKTUR.md`. Kein Anwendungscode.
+
+**Der Fehler.** Der Apply brach ab mit
+`ManagedEnvironmentSubnetDelegationError: The subnet of the environment must be
+delegated to the service 'Microsoft.App/environments'.`
+Das war exakt das im Netzwerkdokument als **R4** geführte Risiko — die Annahme, eine
+Consumption-only Environment komme ohne Subnetz-Delegation aus, war für den
+VNet-integrierten Weg falsch. Azure lässt eine VNet-integrierte Environment ohne diese
+Delegation nicht zu, und ein delegiertes Subnetz bedingt eine Workload-Profiles-Environment.
+
+**BETRIEBLICHE FOLGE — das Backend war offline.** Terraform ersetzt destroy-then-create.
+Environment und Container App waren zum Zeitpunkt des Fehlers bereits gelöscht, die
+Neuanlage schlug fehl. Per `az resource list` verifiziert: beide Ressourcen waren
+verschwunden, das VNet `vnet-agentic-ai-mfg-34b7u5` (10.113.0.0/22) war angelegt.
+**Lehre: dieser Umbau braucht ein Wartungsfenster, kein Nebenbei-Deploy.**
+
+**Die Lösung kam vom Nutzer** — er verwies auf ein anderes Projekt, in dem dasselbe
+Problem so gelöst wurde, und formulierte die Diagnose bereits richtig: „Container App
+Environment braucht Delegation, aber Container App selbst consumption only." Das Beispiel
+bestätigt es wörtlich: *Workload Profiles v2 environment with the default Consumption
+profile. No Dedicated profile is configured.*
+
+**Umgesetzt**
+1. `network.tf`: Delegation `Microsoft.App/environments` mit der Aktion
+   `Microsoft.Network/virtualNetworks/subnets/join/action` aktiviert.
+2. `main.tf` Environment: `workload_profile { name = "Consumption",
+   workload_profile_type = "Consumption" }` — **kein Dedicated-Profil**, die Abrechnung
+   bleibt verbrauchsbasiert. Aus dem Beispielprojekt NICHT übernommen wurde
+   `internal_load_balancer_enabled = true`; hier muss der Wert `false` bleiben, sonst wäre
+   die Weboberfläche nicht mehr aus dem Browser erreichbar.
+3. `main.tf` Container App: `workload_profile_name = "Consumption"` explizit gesetzt, damit
+   die Zuordnung sichtbar bleibt, falls je ein zweites Profil hinzukommt.
+
+**Verifikation.** `terraform validate` und `fmt` sauber. Plan gegen den echten State:
+`Plan: 2 to add, 4 to change, 0 to destroy` — **reine Reparatur, nichts wird zerstört**.
+Das Subnetz erhält die Delegation **in-place**, das VNet bleibt unberührt; Environment und
+Container App werden neu erstellt. Der /23-Zuschnitt hat sich ausgezahlt: Workload Profiles
+verlangen mindestens /27, ein Neuzuschnitt war nicht nötig.
+
+**Dokumentation.** `NETZWERKARCHITEKTUR.md` liegt jetzt im INFRA-Repository unter `docs/`
+(Nutzerentscheidung — sie beschreibt Infrastruktur). R4 ist dort von „offen" auf
+„eingetreten und gelöst" umgeschrieben, inklusive der Ausfallzeit-Lehre, und als neue
+Entscheidung E4 aufgenommen. `NETWORK_SETUP.md` entsprechend korrigiert.
+
+- **Open / next:** Apply wiederholen (stellt das Backend wieder her), danach die drei
+  manuellen Portal-Schritte, Frontend-Redeploy, fachlicher Nachweis über eine
+  Snapshot-Validierung.
