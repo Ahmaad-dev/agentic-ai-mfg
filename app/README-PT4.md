@@ -123,7 +123,7 @@ Selbsteinschätzung deshalb korrigieren.
 > **Diese Darstellung ist bewusst knapp.** Die Zahl ist governance-relevant — welche Frage
 > hinter jedem Signal steckt, warum die Selbsteinschätzung nur halb zählt, warum es die
 > Untergrenze gibt und wie ein Prüfer die Zahl lesen sollte, steht in
-> **[`docs/KONFIDENZ.md`](../docs/KONFIDENZ.md)**, samt durchgerechnetem Beispiel und der
+> **[`docs/KONFIDENZ.md`](../docs/04_PT4/KONFIDENZ.md)**, samt durchgerechnetem Beispiel und der
 > Entwicklung der Formel von v0 bis v4.
 
 Der Formelstand wird pro Vorschlag in `formula_version` mitgespeichert, damit alte Vorschläge
@@ -132,7 +132,7 @@ erkennbar bleiben und nicht stillschweigend mit neuen vermischt werden.
 > **Wie die Agenten zusammenarbeiten**, was jeder von ihnen weiss, warum Chat und RAG ihre
 > Antwort selbst formulieren, wie sich betreuter und automatischer Betrieb unterscheiden und
 > ob das gesammelte Feedback auch ohne Human-in-the-Loop wirkt, steht in
-> **[`docs/AGENTEN_ARCHITEKTUR.md`](../docs/AGENTEN_ARCHITEKTUR.md)**.
+> **[`docs/AGENTEN_ARCHITEKTUR.md`](../docs/04_PT4/AGENTEN_ARCHITEKTUR.md)**.
 
 ---
 

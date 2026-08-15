@@ -1,9 +1,35 @@
-# PT4 — Implementation Plan (Reference)
+# PT4 — Implementation Plan (ABGESCHLOSSEN)
+
+> **Status: PT4 ist abgeschlossen (Stand 2026-08-15).** Dieses Dokument wird nicht mehr
+> fortgeschrieben. Es bleibt als **Nachweis** bestehen: Es belegt, welche Arbeitspakete
+> geplant, welche umgesetzt und welche bewusst nicht umgesetzt wurden — samt der Zahlen aus
+> AP-E, die im Projektbericht zitiert werden.
+>
+> **Das aktuelle Vorhaben ist die Bachelorarbeit** (Graph-basierte Systemarchitektur vs.
+> monolithische Systemprompt-Struktur). Deren Referenzen sind:
+> * `docs/Graph-Architektur-Masterplan_fable.md` — verbindliche Bau-Referenz, Kap. 23 ist die
+>   Master-Checkliste
+> * `docs/BACHELORARBEIT_UMSETZUNGSPLAN.md` — Methodik und Messvorschriften
+> * `docs/03_Expose-extern/` — das eingereichte Exposé
+>
+> **Was aus PT4 in die Arbeit übergeht — und was nicht,** steht in `CLAUDE.md` unter
+> „Zwei Projekte, ein Repository". Kurz: die Fehlerinjektion als Ground-Truth-Methode, der
+> `RULEBOOK_MODE`-Schalter als Teilbaustein und die deterministische technische Prüfung.
+> Human-in-the-Loop, Dashboard, MCP, Memory und das Confidence-Scoring bleiben funktionsfähig,
+> sind aber **nicht** Gegenstand des Architekturvergleichs.
+>
+> **Offen geblieben bei Abschluss** (nicht verschwiegen, bewusst nicht mehr angefasst):
+> M8/AP-E war zuletzt `[~]` — die AK2-Zahl nach dem Lernen, die auf EINE Formel-Generation
+> gepinnte Kalibrierungskurve und die 11-Schritte-Demo. Die Kalibrierungskurve wurde am
+> 2026-08-13 serverseitig auf die aktuelle Generation beschränkt (siehe `PROJECT_LOG.md`);
+> die anderen beiden Punkte bleiben offen.
+
+---
 
 Project: "Agentic AI in der Produktion: Vom PoC zur Enterprise Solution —
 Human-in-the-Loop Governance, MCP-Integration & Market Transferability"
 
-This is the stable reference. Milestones and work packages below.
+Stabile Referenz des abgeschlossenen Projekts. Milestones und Arbeitspakete unten.
 Status legend: [ ] open · [~] in progress · [x] done
 
 ---
