@@ -18,7 +18,7 @@ project exists to prevent. So every KPI is computed from ALL data (nothing is si
 filtered), and anything that makes a number less than trustworthy is emitted as an
 explicit flag the UI must show:
 
-  1. REVALIDATION_PRE_AP33D — before AP3.3d, `validate_snapshot` read the server's message
+  1. REVALIDATION_UNVERIFIED — before AP3.3d, `validate_snapshot` read the server's message
      list WITHOUT triggering the validation job first, so it always reported "0 errors"
      (a false green). Those `revalidation_result` entries are recognisable by the ABSENCE
      of the `errors_before` key, which AP3.3d introduced. Detected from the data, not from
@@ -57,7 +57,6 @@ dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/api/dashboard")
 
 #: Vocabulary of the pre-AP3.6b hit-count heuristic. These are not error classes:
 #: they say how often the searched value occurred (see AP3.6a in PROJECT_LOG.md).
-LEGACY_ERROR_LABELS = frozenset({"DUPLICATE_ID", "SINGLE_MATCH", "NO_RESULTS_FOUND"})
 
 #: A decision faster than this cannot be a human reading a before/after diff.
 #: Used ONLY to separate scripted fixtures from real decisions, never to delete data.
@@ -296,6 +295,25 @@ def _in_range(value: Any, rng: dict) -> bool:
     return dt is not None and rng["from"] <= dt <= rng["to"]
 
 
+
+def _latest_formula_version(proposals: list[dict]) -> Optional[str]:
+    """Die hoechste vorkommende Konfidenz-Generation (`v0`, `v3`, `v12`, ...).
+
+    Sortiert NUMERISCH nach der Ziffernfolge, nicht alphabetisch — `"v10" < "v9"` waere als
+    Zeichenkette wahr und wuerde die neueste Generation ausgerechnet dann verwerfen, wenn es
+    zweistellig wird. Werte ohne dieses Muster (`None`, `"unknown"`) zaehlen nicht mit; gibt
+    es gar keine, ist das Ergebnis `None` und die Kurve bleibt leer, statt stillschweigend
+    auf alle Generationen zurueckzufallen.
+    """
+    best: Optional[tuple[int, str]] = None
+    for p in proposals:
+        raw = (p.get("formula_version") or "").strip().lower()
+        if len(raw) > 1 and raw[0] == "v" and raw[1:].isdigit():
+            cand = (int(raw[1:]), raw)
+            if best is None or cand[0] > best[0]:
+                best = cand
+    return best[1] if best else None
+
 def compute_metrics(data: dict, rng: dict) -> dict:
     """Turn the raw rows from `repository.fetch_metrics_data()` into the API payload."""
     all_proposals: list[dict] = data["proposals"]
@@ -379,11 +397,33 @@ def compute_metrics(data: dict, rng: dict) -> dict:
     # ---------------------------------------------------------------- calibration
     # Does a HIGH confidence score actually predict that the human took the value unchanged?
     # That is the one question that tells us whether the number is worth anything.
+    #
+    # NUR die aktuelle Generation (13.08.2026). Die Formel wurde mehrfach geaendert, und
+    # ihre Werte liegen zwischen den Generationen NICHT auf derselben Skala — eine frueher
+    # quasi-konstante Formel liefert Scores um 0.775 unabhaengig vom Fall. Eine Kurve ueber
+    # alle Generationen hinweg mittelt daher Ungleiches und sieht flach aus, ohne dass das
+    # etwas ueber die Vorhersagekraft aussagt. Genau dieser Trugschluss war es, den bisher
+    # ein Warntext erklaeren musste; jetzt entsteht er gar nicht erst.
+    #
+    # Welche Generation die aktuelle ist, wird NICHT als Textkonstante hinterlegt: der
+    # Generator erhoeht `CONFIDENCE_FORMULA_VERSION` bei jeder Aenderung der Formel, und
+    # eine Kopie davon wuerde hier stillschweigend veralten. Massgeblich ist die hoechste
+    # Generation, die IM BESTAND vorkommt — das ist bauartbedingt die, die das System
+    # heute schreibt. Bezugsmenge sind alle Vorschlaege, nicht die des Zeitfensters:
+    # sonst waere „aktuell" beim Blaettern in die Vergangenheit etwas anderes.
+    current_formula = _latest_formula_version(all_proposals)
+    cal_reviews = [
+        rv
+        for rv in reviews
+        if (q := by_id.get(rv["proposal_id"])) is not None
+        and (q.get("formula_version") or None) == current_formula
+    ]
+
     calibration = []
     for i, (low, high) in enumerate(CONFIDENCE_BUCKETS):
         in_bucket = [
             rv
-            for rv in reviews
+            for rv in cal_reviews
             if (p := by_id.get(rv["proposal_id"])) is not None
             and p["confidence_score"] is not None
             and _bucket_index(p["confidence_score"]) == i
@@ -398,57 +438,16 @@ def compute_metrics(data: dict, rng: dict) -> dict:
             }
         )
 
-    # AP7.2: `formula_version` is now the EXACT discriminator (v0/v1/v2); the old
-    # `value_grounded IS NULL` heuristic only ever separated v0. Three generations exist:
-    #   v0 — middle term `schema_valid` (always 1) -> score a near-constant ~0.775
-    #   v1 — AP4.5: `value_grounded` real, but `memory_support` hard-wired to 0 -> capped at 0.8
-    #   v2 — AP7.2: `memory_support` graded from the episodic case base -> full 0..1 range
-    # Mixing them in ONE calibration curve compares scores that are not on the same scale.
-    decided_by_version: dict[str, int] = {}
-    for rv in reviews:
-        p = by_id.get(rv["proposal_id"])
-        if p is not None:
-            v = p.get("formula_version") or "unknown"
-            decided_by_version[v] = decided_by_version.get(v, 0) + 1
-
-    legacy_confidence_decided = sum(
-        n for v, n in decided_by_version.items() if v in ("v0", "unknown")
-    )
-    if legacy_confidence_decided:
-        flags.append(
-            {
-                "code": "CONFIDENCE_LEGACY_FORMULA",
-                "severity": "warning",
-                "affects": ["calibration", "avg_confidence", "confidence_distribution"],
-                "message": (
-                    f"{legacy_confidence_decided} von {total_decisions} entschiedenen Vorschlägen "
-                    "wurden mit der alten Konfidenz-Formel bewertet (vor AP4.5, Mittelterm "
-                    "`schema_valid` = immer 1). Ihr Score ist praktisch konstant (~0.775) und "
-                    "trägt keine Information — die Kalibrierungskurve ist deshalb flach, "
-                    "und zwar konstruktionsbedingt, nicht als Messergebnis."
-                ),
-            }
-        )
-
-    if len([v for v in decided_by_version if v != "unknown"]) > 1 or (
-        decided_by_version.get("unknown") and len(decided_by_version) > 1
-    ):
-        spread = ", ".join(f"{v}: {n}" for v, n in sorted(decided_by_version.items()))
-        flags.append(
-            {
-                "code": "CONFIDENCE_MIXED_FORMULA_VERSIONS",
-                "severity": "warning",
-                "affects": ["calibration", "avg_confidence", "confidence_distribution"],
-                "message": (
-                    f"Die entschiedenen Vorschläge stammen aus MEHREREN Konfidenz-Generationen "
-                    f"({spread}). Die Scores liegen damit nicht auf derselben Skala: v0 ist "
-                    "quasi-konstant, v1 ist bei 0.8 gedeckelt (memory_support fest 0), erst v2 "
-                    "nutzt den vollen Bereich 0..1. Eine gemeinsame Kalibrierungskurve über "
-                    "diese Generationen vergleicht Ungleiches — vor der Auswertung nach "
-                    "`formula_version` filtern (?formula_version=v2)."
-                ),
-            }
-        )
+    # ENTFERNT am 13.08.2026: die Vorbehalte CONFIDENCE_LEGACY_FORMULA und
+    # CONFIDENCE_MIXED_FORMULA_VERSIONS. Beide erklärten dem Betrachter die
+    # Entwicklungsgeschichte der eigenen Konfidenz-Formel (v0/v1/v2). Im laufenden Betrieb
+    # ist das keine Aussage über die Daten, sondern über das Projekt — und damit an dieser
+    # Stelle nur Lärm.
+    # Die SACHE dahinter ist seither erledigt, nicht nur der Text: die Kalibrierungskurve
+    # rechnet nur noch auf der aktuellen Generation (siehe `current_formula` weiter oben).
+    # Kennzahl „Mittlere Konfidenz" und die Konfidenz-Verteilung laufen bewusst WEITER
+    # ueber alle Generationen: sie beschreiben, was tatsaechlich erzeugt wurde, und stellen
+    # anders als die Kurve keine Behauptung ueber Vorhersagekraft auf.
 
     # ---------------------------------------------------------------- error types
     error_counts: dict[str, int] = {}
@@ -457,27 +456,14 @@ def compute_metrics(data: dict, rng: dict) -> dict:
         error_counts[label] = error_counts.get(label, 0) + 1
     error_types = sorted(
         (
-            {"error_type": k, "count": v, "legacy_label": k in LEGACY_ERROR_LABELS}
+            {"error_type": k, "count": v}
             for k, v in error_counts.items()
         ),
         key=lambda e: (-e["count"], e["error_type"]),
     )
-    legacy_labelled = sum(e["count"] for e in error_types if e["legacy_label"])
-    if legacy_labelled:
-        flags.append(
-            {
-                "code": "ERROR_TYPE_LEGACY_HEURISTIC",
-                "severity": "warning",
-                "affects": ["error_types"],
-                "message": (
-                    f"{legacy_labelled} Vorschlag/Vorschläge tragen ein Label aus der alten "
-                    "Zähl-Heuristik ({}). ".format(", ".join(sorted(LEGACY_ERROR_LABELS)))
-                    + "Diese Labels sagen aus, wie oft ein Wert im Snapshot vorkam — nicht, was "
-                    "falsch war (siehe AP3.6a). Seit AP3.6b kommt der Fehlertyp aus dem "
-                    "`[validate_*]`-Tag und ist korrekt."
-                ),
-            }
-        )
+    # ENTFERNT am 13.08.2026: der Vorbehalt ERROR_TYPE_LEGACY_HEURISTIC samt der
+    # Sondereinfärbung im Diagramm. Er erklärte, dass einzelne Altdatensätze ein Label aus
+    # einer abgelösten Zähl-Heuristik tragen — Entwicklungsgeschichte, kein Betriebshinweis.
 
     # ---------------------------------------------------------------- timeline
     # "When were corrections actually made?" — one bucket per day/week/month, stacked by
@@ -533,15 +519,15 @@ def compute_metrics(data: dict, rng: dict) -> dict:
     if untrusted:
         flags.append(
             {
-                "code": "REVALIDATION_PRE_AP33D",
+                "code": "REVALIDATION_UNVERIFIED",
                 "severity": "warning",
                 "affects": ["revalidation_success_rate"],
                 "message": (
-                    f"{untrusted} Re-Validierung(en) stammen aus der Zeit vor AP3.3d und sind "
-                    "nicht belastbar: `validate_snapshot` las die Meldungsliste des Servers, "
-                    "ohne den Validierungsjob vorher anzustoßen — das Ergebnis war immer "
-                    "„0 Fehler“ (falsches Grün). Sie sind aus der Quote ausgenommen und hier "
-                    "nur ausgewiesen."
+                    f"{untrusted} Re-Validierung(en) stammen aus der Zeit vor der Umstellung der "
+                    "Prüfreihenfolge und sind nicht belastbar: die Prüfung las die "
+                    "Meldungsliste des Servers, ohne den Validierungsjob vorher anzustoßen — "
+                    "das Ergebnis war immer „0 Fehler“ (falsches Grün). Diese Fälle sind aus "
+                    "der Quote ausgenommen und hier nur nachrichtlich ausgewiesen."
                 ),
             }
         )
@@ -573,11 +559,12 @@ def compute_metrics(data: dict, rng: dict) -> dict:
                 "affects": ["handling_time"],
                 "message": (
                     f"{fixture_count} Entscheidung(en) fielen in unter "
-                    f"{MIN_HUMAN_DECISION_SECONDS} Sekunden nach Erzeugung des Vorschlags — das "
-                    "sind Skript-Fixtures aus den Tests, kein Mensch, der einen Diff liest. Die "
-                    "Bearbeitungszeit wird deshalb zusätzlich ohne sie ausgewiesen. Grenze der "
-                    "Erkennung: ein per Skript entschiedenes Fixture, das Tage nach der "
-                    "Erzeugung lief, ist so nicht von einer echten Entscheidung zu trennen."
+                    f"{MIN_HUMAN_DECISION_SECONDS} Sekunden nach Erzeugung des Vorschlags. In dieser "
+                    "Zeit lässt sich kein Wertevergleich prüfen — es handelt sich um "
+                    "automatisiert erzeugte Testdaten. Die Bearbeitungszeit wird deshalb "
+                    "zusätzlich ohne sie ausgewiesen. Grenze der Erkennung: ein automatisiert "
+                    "entschiedener Fall, der erst Tage nach der Erzeugung lief, ist so nicht "
+                    "von einer echten Entscheidung zu unterscheiden."
                 ),
             }
         )
@@ -607,8 +594,11 @@ def compute_metrics(data: dict, rng: dict) -> dict:
                 f"{pricing['model']} (Input ${pricing['input_per_1k_usd']:.4f} / 1K, Output "
                 f"${pricing['output_per_1k_usd']:.4f} / 1K), gerechnet aus den gespeicherten "
                 "Tokens. Rabatte, Batch-Preise und Cached-Input sind nicht berücksichtigt. "
-                "Aussagekräftig für den Vergleich („welcher Agent verbrennt das Budget?“), "
-                "nicht für die Buchhaltung."
+                "Aussagekräftig für den Vergleich zwischen Agenten, nicht für die Buchhaltung. "
+                "Zu beachten: die Preise werden RÜCKWIRKEND auf alle Läufe angewandt, "
+                "auch auf solche, die tatsächlich auf einem anderen Modell liefen. Nach "
+                "einem Modellwechsel ändert sich diese Zahl deshalb auch für längst "
+                "abgeschlossene Läufe."
                 + ("" if pricing["known_model"] else
                    f" ACHTUNG: für das Modell „{pricing['model']}“ liegt kein Preis vor — "
                    "es wird mit den Preisen des aktiven Modells gerechnet.")
@@ -624,7 +614,7 @@ def compute_metrics(data: dict, rng: dict) -> dict:
                 "affects": ["tokens", "cost"],
                 "message": (
                     f"{len(runs) - runs_with_tokens} von {len(runs)} Agent-Läufen haben keine "
-                    "Token-Zahlen (Läufe vor AP2.5, das Token-Tracking kam erst dort dazu). "
+                    "Token-Zahlen — sie stammen aus der Zeit vor der Einführung der Token-Erfassung. "
                     "Summe und Kosten sind entsprechend eine Untergrenze."
                 ),
             }
@@ -639,9 +629,9 @@ def compute_metrics(data: dict, rng: dict) -> dict:
             "severity": "info",
             "affects": ["validations"],
             "message": (
-                "Gezählt werden die `validate_snapshot`-Toolaufrufe. Die serverseitigen "
-                "Validierungsjobs, die seit AP3.3d vor jedem Anwenden angestoßen werden, "
-                "schreiben keine `agent_runs`-Zeile und fehlen in dieser Zahl."
+                "Gezählt werden die Validierungs-Toolaufrufe des Agenten. Die serverseitigen "
+                "Validierungsjobs, die vor jedem Anwenden angestoßen werden, schreiben "
+                "keinen eigenen Lauf-Eintrag und fehlen in dieser Zahl."
             ),
         }
     )
@@ -655,7 +645,8 @@ def compute_metrics(data: dict, rng: dict) -> dict:
                 "message": (
                     f"Nur {total_decisions} Entscheidungen insgesamt. Jede einzelne verschiebt "
                     "jede Quote hier um zweistellige Prozentpunkte — das sind Einzelfälle, keine "
-                    "Statistik. Belastbare Quoten liefert erst die Baseline-Messung (AK2)."
+                    "Statistik. Belastbare Quoten ergeben sich erst mit einer deutlich größeren "
+                    "Zahl an Entscheidungen."
                 ),
             }
         )
@@ -702,6 +693,14 @@ def compute_metrics(data: dict, rng: dict) -> dict:
             "error_types": error_types,
             "confidence_distribution": distribution,
             "calibration": calibration,
+            # Woraus die Kurve gerechnet wurde. Die Oberflaeche braucht das, um bei einer
+            # leeren Kurve zwischen „noch nichts entschieden" und „nichts auf der
+            # aktuellen Formel entschieden" unterscheiden zu koennen.
+            "calibration_scope": {
+                "formula_version": current_formula,
+                "decisions": len(cal_reviews),
+                "decisions_excluded": total_decisions - len(cal_reviews),
+            },
         },
         # The window every FLOW number above was computed in. `open_reviews` below is STOCK
         # and ignores it — stated here so the reader is never left guessing which is which.
@@ -741,14 +740,16 @@ def get_metrics():
         preset=week|month|year|all      — relative window; default `month` (last 30 days)
         from=YYYY-MM-DD&to=YYYY-MM-DD   — explicit window (`to` inclusive); overrides preset
         granularity=day|week|month      — timeline bucket size; auto-coarsened if too fine
-        formula_version=v0|v1|v2        — AP7.2: restrict to ONE confidence generation
+        formula_version=vN              — restrict EVERYTHING to one confidence generation
 
     The window scopes every FLOW metric. It deliberately does NOT scope `open_reviews` /
     `proposals_open` — see the FLOW vs STOCK block above.
 
-    `formula_version` exists because the three generations are not on the same scale (v0 is
-    quasi-constant, v1 is capped at 0.8, only v2 uses the full range). For a calibration
-    curve that means something, pin ONE generation — `?formula_version=v2`.
+    `formula_version` exists because the generations are not on the same scale — an early
+    formula was quasi-constant, a later one capped. It pins EVERY metric to one generation.
+    Note that the calibration curve no longer needs it: since 13.08.2026 it restricts
+    itself to the current generation. The parameter remains for the other way round —
+    inspecting an OLDER generation on purpose.
     """
     try:
         data = repo.fetch_metrics_data()

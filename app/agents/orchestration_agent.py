@@ -6,6 +6,10 @@ import logging
 import re
 from typing import Dict, List, Optional
 from .base_agent import BaseAgent
+# Die bekannten Werkzeug-/Pipeline-Namen — Grundlage fuer _intent_from_plan
+from .sp_tools_config import SP_TOOLS, SP_PIPELINES
+# Sitzungsgebundener Snapshot-Bezug (siehe _snapshot_in_focus)
+from memory import short_term
 from core.agent_config import (
     CHAT_HISTORY_CONFIG,
     DEFAULT_ORCHESTRATOR_SYSTEM_PROMPT,
@@ -15,7 +19,8 @@ from core.agent_config import (
     DEFAULT_ORCHESTRATOR_SUBAGENT_INTERPRETATION_PROMPT,
     DEFAULT_ORCHESTRATOR_SP_INTENT_PROMPT,
     DEFAULT_ORCHESTRATOR_SP_RESULT_INTERPRETATION_PROMPT,
-    HUMAN_IN_THE_LOOP
+    HUMAN_IN_THE_LOOP,
+    APP_BASE_URL
 )
 
 logger = logging.getLogger(__name__)
@@ -70,7 +75,9 @@ class OrchestrationAgent(BaseAgent):
             interpretation_system_prompt or DEFAULT_ORCHESTRATOR_INTERPRETATION_PROMPT
         )
         self.agentic_mode = True  # Aktiviert Multi-Step Planning
-        self.last_snapshot_metadata = None  # Speichert letzte Snapshot-Metadaten für Chat Agent
+        #: Sitzungs-id des laufenden Aufrufs. Wird in `execute()` gesetzt; alles, was den
+        #: Snapshot-Bezug betrifft, haengt daran statt am Objekt (siehe short_term).
+        self._session_id = None
         # AP2.5: Request-scoped token accumulator (reset in execute() per call)
         self._tok_prompt = 0
         self._tok_completion = 0
@@ -174,6 +181,9 @@ class OrchestrationAgent(BaseAgent):
                 logger.info(f"[{self.name}] Single-Step Execution mit SP_Agent (NEUE Methode)")
                 sp_context = dict(request_context or {})
                 sp_context["chat_history"] = chat_history
+                # Der Plan benennt das Werkzeug bereits — mitgeben, damit der SP-Pfad es
+                # nicht ein zweites Mal per LLM herleiten muss.
+                sp_context["execution_plan"] = plan
                 return self._execute_sp_agent(user_input, chat_history, sp_context)
             
             # Chat/RAG → Alte Methode (behält execute())
@@ -182,9 +192,13 @@ class OrchestrationAgent(BaseAgent):
             # Erweitere Kontext mit letzten Snapshot-Metadaten (für Chat Agent)
             enhanced_context = dict(request_context or {})
             enhanced_context["chat_history"] = chat_history
-            if agent_key == "chat" and self.last_snapshot_metadata:
-                enhanced_context["last_snapshot_metadata"] = self.last_snapshot_metadata
-                logger.info(f"[{self.name}] Snapshot-Metadaten an Chat Agent weitergegeben")
+            if agent_key == "chat":
+                # FRISCH lesen, nicht zwischengespeichert: der Zustand aendert sich durch
+                # Anwenden, Hochladen und Freigaben — und zwar ausserhalb dieses Objekts.
+                meta = self._current_snapshot_metadata(chat_history, user_input)
+                if meta:
+                    enhanced_context["last_snapshot_metadata"] = meta
+                    logger.info(f"[{self.name}] Snapshot-Metadaten (frisch gelesen) an Chat Agent")
 
             # Review-Entscheidungen mitgeben: Die Chat-History enthaelt nur den KI-VORSCHLAG.
             # Die menschliche Entscheidung faellt im Review Board, ausserhalb des Chats - ohne
@@ -196,13 +210,31 @@ class OrchestrationAgent(BaseAgent):
                     logger.info(
                         f"[{self.name}] {len(decisions)} Review-Entscheidung(en) an Chat Agent weitergegeben"
                     )
+                offen = self._open_proposals_for_focus(chat_history, user_input)
+                if offen:
+                    enhanced_context["open_proposals"] = offen
+                    logger.info(f"[{self.name}] {len(offen)} offene(r) Vorschlag/Vorschlaege an Chat Agent")
 
 
             result = agent.execute(user_input, enhanced_context)
 
-            # Email previews are approval artefacts: the orchestrator must not paraphrase or
-            # silently change recipient, subject, body, draft id, or confirmation wording.
-            if agent_key == "email":
+            # DURCHREICHEN statt nachformulieren (15.08.2026).
+            #
+            # Der Grundgedanke der Nachformulierung war, dass der Orchestrator ergaenzen
+            # kann, was der Sub-Agent nicht wusste. Gemessen ist es umgekehrt: der
+            # Nachformulierungsschritt sieht 3 Nachrichten a 200 Zeichen, der Chat-Agent
+            # 10 a 1000 — und der Chat-Agent bekommt zusaetzlich Snapshot-Zustand,
+            # Review-Entscheidungen und offene Vorschlaege, von denen die Nachformulierung
+            # nichts sieht. Sie kann also nichts hinzufuegen, nur weglassen oder
+            # dazuerfinden. Beide Falschaussagen vom 14.08.2026 sind so entstanden.
+            #
+            # Fuer den SP-Pfad gilt das NICHT und dort bleibt die Schicht: der SP-Agent
+            # waehlt nur das Werkzeug, die Antwort entsteht erst aus dem Werkzeugergebnis.
+            # Siehe `_interpret_sp_result`.
+            #
+            # E-Mail war schon vorher ausgenommen: Entwuerfe sind Freigabe-Artefakte, an
+            # denen kein Wort still veraendert werden darf.
+            if agent_key in ("email", "chat", "rag"):
                 result.setdefault("metadata", {})["execution_plan"] = plan
                 return result
             
@@ -375,11 +407,15 @@ class OrchestrationAgent(BaseAgent):
                 for msg in recent
             ])
         
-        # Schritte zusammenfassen
+        # Schritte zusammenfassen. Die Grenze steht in der Config, nicht hier: bei 200
+        # Zeichen fiel der entscheidende Teil der Teilantwort weg (siehe Kommentar dort).
+        max_step_chars = CHAT_HISTORY_CONFIG.get("max_step_result_chars", 1200)
         steps_summary = ""
         for step in step_results:
             status = "✅" if step.get("success", True) else "❌"
-            steps_summary += f"\n{status} Schritt {step['step']}: {step['action'][:100]}\n   Ergebnis: {step['response'][:200]}...\n"
+            text = step['response'] or ""
+            gekuerzt = text[:max_step_chars] + ("…" if len(text) > max_step_chars else "")
+            steps_summary += f"\n{status} Schritt {step['step']}: {step['action'][:100]}\n   Ergebnis: {gekuerzt}\n"
         
         # Nutze zentralen Summary Prompt
         prompt = DEFAULT_ORCHESTRATOR_MULTISTEP_SUMMARY_PROMPT.format(
@@ -541,7 +577,17 @@ class OrchestrationAgent(BaseAgent):
         self._tok_completion = 0
         
         chat_history = context.get("chat_history", []) if context else []
-        
+
+        # Sitzungsbezug fuer diesen Aufruf. Ohne id faellt alles auf einen neutralen
+        # Platzhalter zurueck, damit ein Aufruf ohne Sitzung (Tests, Skripte) nicht in den
+        # Fokus einer echten Unterhaltung schreibt.
+        self._session_id = (context or {}).get("db_session_id") or "_kein_sitzungsbezug"
+
+        # Nennt der Nutzer eine Snapshot-ID, ist das ab jetzt DER Snapshot dieser Sitzung.
+        genannt = self._extract_snapshot_id_from_history([{"content": user_input or ""}])
+        if genannt:
+            short_term.set_focus_snapshot(self._session_id, genannt)
+
         # AGENTIC MODE: Erstelle Execution Plan mit Adaptive Re-Planning
         if self.agentic_mode:
             max_replanning_attempts = 4  # Max 4 Re-Planning Versuche
@@ -651,6 +697,35 @@ class OrchestrationAgent(BaseAgent):
         
         return result
     
+    def _intent_from_plan(self, plan: Optional[Dict],
+                          snapshot_id: Optional[str]) -> Optional[Dict]:
+        """Das Ziel aus dem Ausfuehrungsplan lesen — oder None, wenn es nicht eindeutig ist.
+
+        Der Planer schreibt sein Ziel in `action`, teils mit Zusatz ("full_correction
+        Pipeline"). Verglichen wird deshalb gegen die BEKANNTEN Namen aus `SP_TOOLS` und
+        `SP_PIPELINES` statt zu raten: nur wenn genau EIN bekannter Name im Text vorkommt,
+        gilt das Ziel als eindeutig. Alles andere geht den regulaeren Weg ueber die
+        Intent-Analyse — eine gesparte Sekunde ist keine falsche Pipeline wert.
+        """
+        if not plan or plan.get("agent") != "sp":
+            return None
+        action = (plan.get("action") or "").strip()
+        if not action:
+            return None
+
+        treffer = [(n, "pipeline") for n in SP_PIPELINES if n in action]
+        treffer += [(n, "tool") for n in SP_TOOLS if n in action]
+        if len(treffer) != 1:
+            return None
+
+        name, art = treffer[0]
+        return {
+            "action_type": art,
+            "action_name": name,
+            "snapshot_id": snapshot_id,
+            "args": [snapshot_id] if snapshot_id else [],
+        }
+
     def _execute_sp_agent(self, user_input: str, chat_history: List, context: Dict) -> Dict:
         """
         NEUE METHODE: Führt SP_Agent mit direkter Tool/Pipeline Auswahl aus
@@ -667,34 +742,50 @@ class OrchestrationAgent(BaseAgent):
         
         # Extrahiere Snapshot-ID aus Historie
         snapshot_id_from_history = self._extract_snapshot_id_from_history(chat_history)
-        
+
+        # WELCHER Snapshot gemeint ist, entscheidet zuerst die AKTUELLE Nachricht.
+        #
+        # Der Kurzschluss unten nahm bis 15.08.2026 `snapshot_id_from_history` — also nur die
+        # Historie. Nennt der Nutzer in seiner Nachricht eine NEUE ID ("hol mir 9faf89b1"),
+        # stand die dort noch gar nicht drin, und heruntergeladen wurde der Snapshot aus dem
+        # vorigen Gespraech. Gemessen am 15.08.2026: angefordert 9faf89b1, geladen a810d470.
+        # Der alte Weg ueber die LLM-Intent-Analyse hatte den Nutzertext im Prompt und war
+        # deshalb nicht betroffen — die Abkuerzung hat diese Quelle uebersprungen.
+        snapshot_gemeint = self._snapshot_in_focus(chat_history, user_input)
+
+        # Hat der Planer das Ziel schon eindeutig benannt, entfaellt der zweite LLM-Aufruf.
+        intent = self._intent_from_plan(context.get("execution_plan"), snapshot_gemeint)
+
         # Nutze zentralen Intent Analysis Prompt
         intent_prompt = DEFAULT_ORCHESTRATOR_SP_INTENT_PROMPT.format(
             context_summary=self._get_context_summary(chat_history),
             user_input=user_input,
             snapshot_id_from_history=snapshot_id_from_history or "Keine gefunden"
         )
-        
+
         try:
-            response = self.aoai_client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": "Du bist ein SP_Agent Intent Analyzer. Antworte nur mit JSON."},
-                    {"role": "user", "content": intent_prompt}
-                ],
-                temperature=CHAT_HISTORY_CONFIG["sp_intent_temperature"],
-                max_tokens=CHAT_HISTORY_CONFIG["max_intent_tokens"]
-            )
-            self._track_usage(response.usage)  # AP2.5
-            output = response.choices[0].message.content.strip()
-            if output.startswith("```json"):
-                output = output[7:]
-            if output.startswith("```"):
-                output = output[3:]
-            if output.endswith("```"):
-                output = output[:-3]
-            
-            intent = json.loads(output.strip())
+            if intent is not None:
+                logger.info(f"[{self.name}] SP-Intent aus dem Plan uebernommen (ein LLM-Aufruf gespart)")
+            else:
+                response = self.aoai_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": "Du bist ein SP_Agent Intent Analyzer. Antworte nur mit JSON."},
+                        {"role": "user", "content": intent_prompt}
+                    ],
+                    temperature=CHAT_HISTORY_CONFIG["sp_intent_temperature"],
+                    max_tokens=CHAT_HISTORY_CONFIG["max_intent_tokens"]
+                )
+                self._track_usage(response.usage)  # AP2.5
+                output = response.choices[0].message.content.strip()
+                if output.startswith("```json"):
+                    output = output[7:]
+                if output.startswith("```"):
+                    output = output[3:]
+                if output.endswith("```"):
+                    output = output[:-3]
+
+                intent = json.loads(output.strip())
             logger.info(f"[{self.name}] SP_Agent Intent: {intent['action_type']} - {intent['action_name']}")
             
             # Führe Action aus
@@ -741,6 +832,29 @@ class OrchestrationAgent(BaseAgent):
                     pipeline_name=intent["action_name"],
                     snapshot_id=pipeline_snapshot_id
                 )
+
+                # Wartet bereits ein Vorschlag auf eine Entscheidung, ist die Lage
+                # eindeutig — dafuer braucht es kein Sprachmodell. Die Meldung kommt
+                # woertlich aus dem Werkzeug, damit sie nicht beim Umformulieren
+                # verwaessert wird.
+                if result.get("waiting_for_decision"):
+                    return {
+                        "response": (
+                            "Es wartet bereits ein Korrekturvorschlag zu diesem Snapshot auf "
+                            "deine Entscheidung. Solange der offen ist, wird kein weiterer "
+                            "erzeugt — er waere gegen einen Datenstand gerechnet, den deine "
+                            "Entscheidung veraendert, und anwendbar ist ohnehin immer nur der "
+                            "neueste."
+                            + self._review_board_hint(pipeline_snapshot_id)
+                        ),
+                        "metadata": {
+                            "agent": "sp",
+                            "action_type": "pipeline",
+                            "pipeline": intent["action_name"],
+                            "success": True,
+                            "waiting_for_decision": True,
+                        }
+                    }
                 
                 # Interpretiere Pipeline-Ergebnis
                 interpreted = self._interpret_sp_result(
@@ -753,6 +867,9 @@ class OrchestrationAgent(BaseAgent):
 
                 # Ein Vorschlag ohne Wegweiser ist eine Sackgasse: analyze_only erzeugt einen
                 # Vorschlag, der auf eine Entscheidung wartet - der Nutzer muss erfahren, WO.
+                # Zahlen zuerst, Wegweiser danach.
+                interpreted += self._facts_block("pipeline", intent["action_name"], result)
+
                 if intent["action_name"] == "analyze_only" and result.get("success"):
                     interpreted += self._review_board_hint(pipeline_snapshot_id)
 
@@ -827,10 +944,14 @@ class OrchestrationAgent(BaseAgent):
                     args=args
                 )
                 
-                # Speichere Snapshot-Metadaten für späteren Zugriff
+                # Nur die ID merken — und zwar an DIESER Sitzung. Die Metadaten selbst
+                # werden bei jeder Frage neu gelesen, damit kein ueberholter Zustand als
+                # aktueller ausgegeben wird.
                 if intent["action_name"] in ["create_snapshot", "download_snapshot"] and "snapshot_metadata" in result:
-                    self.last_snapshot_metadata = result["snapshot_metadata"]
-                    logger.info(f"[{self.name}] Snapshot-Metadaten gespeichert für späteren Zugriff")
+                    neue_id = (result["snapshot_metadata"] or {}).get("id") or snapshot_id
+                    if neue_id:
+                        short_term.set_focus_snapshot(self._session_id, neue_id)
+                        logger.info(f"[{self.name}] Fokus-Snapshot dieser Sitzung: {neue_id}")
                 
                 # Interpretiere Tool-Ergebnis
                 interpreted = self._interpret_sp_result(
@@ -840,7 +961,8 @@ class OrchestrationAgent(BaseAgent):
                     user_input=user_input,
                     chat_history=chat_history
                 )
-                
+                interpreted += self._facts_block("tool", intent["action_name"], result)
+
                 return {
                     "response": interpreted,
                     "metadata": {
@@ -858,6 +980,33 @@ class OrchestrationAgent(BaseAgent):
                 "metadata": {"agent": "sp", "error": str(e)}
             }
     
+    def _snapshot_in_focus(self, chat_history: List, user_input: str = "") -> Optional[str]:
+        """Um welchen Snapshot geht es gerade?
+
+        Reihenfolge: die aktuelle Nachricht, dann die Historie, dann der Fokus der Sitzung.
+        Der letzte Schritt ist der Grund fuer diesen Helfer: die Historie wird vor jedem
+        LLM-Aufruf auf wenige Nachrichtenpaare gekuerzt, und in einer wiederaufgenommenen
+        Unterhaltung steht die UUID oft gar nicht mehr darin. Vorher fiel dann still jedes
+        Zusatzwissen weg — Entscheidungen, Deep-Link, Zustand —, ohne dass irgendwo stand,
+        dass der Bezug verloren ging.
+        """
+        return (
+            self._extract_snapshot_id_from_history([{"content": user_input or ""}])
+            or self._extract_snapshot_id_from_history(chat_history)
+            or short_term.get_focus_snapshot(self._session_id)
+        )
+
+    def _current_snapshot_metadata(self, chat_history: List, user_input: str = "") -> Optional[Dict]:
+        """Der AKTUELLE Zustand des Sitzungs-Snapshots, direkt aus der Ablage gelesen."""
+        snapshot_id = self._snapshot_in_focus(chat_history, user_input)
+        if not snapshot_id:
+            return None
+        try:
+            return self.agents["sp"]._read_snapshot_metadata(snapshot_id)
+        except Exception as exc:
+            logger.warning(f"[{self.name}] Snapshot-Metadaten nicht lesbar: {exc}")
+            return None
+
     def _extract_snapshot_id_from_history(self, chat_history: List) -> Optional[str]:
         """Extrahiert die letzte erwähnte Snapshot-ID (UUID) aus der Chat-Historie"""
         import re
@@ -870,6 +1019,39 @@ class OrchestrationAgent(BaseAgent):
                 return matches[-1]  # Neueste ID in dieser Message
 
         return None
+
+    def _facts_block(self, action_type: str, action_name: str, result: Dict) -> str:
+        """Die harten Zahlen eines Laufs — aus dem Code gerendert, nie durch ein Modell.
+
+        Alles hier stammt unveraendert aus dem Ergebnis. Was nicht drinsteht, wird nicht
+        gezeigt; gibt es gar nichts zu zeigen, entfaellt der Block. Er ERSETZT den
+        erklaerenden Text nicht, er verankert ihn — wenn Prosa und Block sich
+        widersprechen, gilt der Block, und der Widerspruch faellt sofort auf.
+        """
+        zeilen = []
+
+        # Validierung (Werkzeug `validate_snapshot` und Pipeline-Abschluss)
+        val = result.get("validation") or result.get("final_validation") or {}
+        if isinstance(val, dict) and ("errors" in val or "warnings" in val):
+            fehler = val.get("errors", 0)
+            warnungen = val.get("warnings", 0)
+            zeilen.append(f"- Validierung: **{fehler} Fehler**, {warnungen} Warnungen")
+            if fehler:
+                zeilen.append("- Snapshot ist damit **nicht** valide")
+
+        # Reichweite eines Analyse-Laufs
+        scope = result.get("analysis_scope")
+        if isinstance(scope, dict):
+            offen = scope.get("errors_not_addressed") or []
+            zeilen.append(
+                f"- Gefundene Fehler: **{scope.get('errors_found', 0)}** — "
+                f"Vorschlag erzeugt für **1** davon, **{len(offen)}** unberührt"
+            )
+            zeilen.append("- Am Snapshot wurde **nichts** geändert und nichts hochgeladen")
+
+        if not zeilen:
+            return ""
+        return "\n\n---\n**Gemessen:**\n" + "\n".join(zeilen)
 
     def _review_board_hint(self, snapshot_id: Optional[str] = None) -> str:
         """
@@ -890,7 +1072,8 @@ class OrchestrationAgent(BaseAgent):
                     p = open_ones[0]  # neuester zuerst
                     return (
                         f"\n\nDein Korrekturvorschlag wartet auf eine Entscheidung: "
-                        f"[Im Review Board oeffnen](/review.html?proposal={p['proposal_id']}) "
+                        f"[Im Review Board oeffnen]({APP_BASE_URL}/review.html"
+                        f"?proposal={p['proposal_id']}) "
                         f"— {p.get('error_type') or 'Vorschlag'}, "
                         f"Konfidenz {round((p.get('confidence_score') or 0) * 100)} %. "
                         f"Dort kannst du Genehmigen, Ablehnen oder den Wert aendern."
@@ -899,9 +1082,36 @@ class OrchestrationAgent(BaseAgent):
                 logger.warning(f"[{self.name}] Deep-Link nicht baubar: {exc}")
         return (
             "\n\nOffene Korrekturvorschlaege findest du im "
-            "[Review Board](/review.html) — dort kannst du Genehmigen, Ablehnen "
+            f"[Review Board]({APP_BASE_URL}/review.html) — dort kannst du Genehmigen, Ablehnen "
             "oder den Wert aendern."
         )
+
+    def _open_proposals_for_focus(self, chat_history: List, user_input: str = "") -> List[dict]:
+        """Vorschlaege zum Sitzungs-Snapshot, die noch auf eine Entscheidung warten.
+
+        Gab es bis 15.08.2026 nirgends im Agenten-Kontext: `list_open_proposals_as_dicts()`
+        wurde nur von der Review-Seite und vom Deep-Link-Hinweis genutzt. Auf die Frage „was
+        steht noch aus?" konnte der Agent es also nicht wissen — und schwieg darueber nicht,
+        sondern antwortete aus der Unterhaltung.
+
+        Bewusst auf den Snapshot dieser Sitzung eingegrenzt: die Liste kennt keine Mandanten,
+        und offene Vorschlaege fremder Snapshots gehen diese Unterhaltung nichts an.
+        """
+        snapshot_id = self._snapshot_in_focus(chat_history, user_input)
+        if not snapshot_id:
+            return []
+        try:
+            from db import repository as repo
+            offen = [p for p in repo.list_open_proposals_as_dicts()
+                     if p["snapshot_id"] == snapshot_id]
+            # Fertigen Link mitgeben, statt das Modell einen bauen zu lassen: es kennt den
+            # Host nicht und kann ihn nicht erfinden.
+            for p in offen:
+                p["review_url"] = f"{APP_BASE_URL}/review.html?proposal={p['proposal_id']}"
+            return offen
+        except Exception as exc:  # DB darf den Chat nie brechen
+            logger.warning(f"[{self.name}] Offene Vorschlaege nicht ladbar: {exc}")
+            return []
 
     def _get_review_decisions(self, chat_history: List, user_input: str = "") -> List[dict]:
         """
@@ -916,10 +1126,7 @@ class OrchestrationAgent(BaseAgent):
 
         Defensiv: jeder DB-Fehler wird geschluckt, der Chat funktioniert dann wie bisher.
         """
-        snapshot_id = (
-            self._extract_snapshot_id_from_history([{"content": user_input or ""}])
-            or self._extract_snapshot_id_from_history(chat_history)
-        )
+        snapshot_id = self._snapshot_in_focus(chat_history, user_input)
         if not snapshot_id:
             return []
         try:
@@ -938,8 +1145,11 @@ class OrchestrationAgent(BaseAgent):
         lines = []
         for msg in recent:
             role = "User" if msg["role"] == "user" else "Assistant"
+            # Herkunft mitschreiben — sonst ist ein gemessenes Werkzeugergebnis von einem
+            # dahingesagten Satz nicht zu unterscheiden.
+            etikett = short_term.label_for(msg.get("agent_name")) if msg["role"] != "user" else None
             content = msg["content"][:200]
-            lines.append(f"{role}: {content}...")
+            lines.append(f"{role}{f' [{etikett}]' if etikett else ''}: {content}...")
         
         return "\n".join(lines)
     
@@ -999,6 +1209,38 @@ class OrchestrationAgent(BaseAgent):
                     errors = final_validation.get("errors", 0)
                     warnings = final_validation.get("warnings", 0)
                     context_parts.append(f"Final validation: is_valid={is_valid}, errors={errors}, warnings={warnings}")
+
+                # Reichweite der Analyse. Steht bewusst als eigener, sehr direkter Block da:
+                # "Status: success" allein wurde als "alles korrigiert" gelesen.
+                scope = result.get("analysis_scope")
+                if scope:
+                    offen = scope.get("errors_not_addressed") or []
+                    context_parts.append("--- WHAT THIS RUN ACTUALLY DID (binding, do not embellish) ---")
+                    context_parts.append(
+                        "NOTHING WAS CHANGED: the snapshot was not modified and nothing was "
+                        "uploaded to the server. Only a PROPOSAL was created."
+                    )
+                    context_parts.append(
+                        f"Validation found {scope.get('errors_found', 0)} error(s) and "
+                        f"{scope.get('warnings_found', 0)} warning(s)."
+                    )
+                    context_parts.append(
+                        f"A proposal was created for EXACTLY ONE of them: {scope.get('handled_error')}"
+                    )
+                    if offen:
+                        context_parts.append(
+                            f"NOT addressed by this run ({len(offen)} error(s)) — they are still open:"
+                        )
+                        for m in offen:
+                            context_parts.append(f"  - {m}")
+                        context_parts.append(
+                            "You MUST tell the user that only one error was handled and that "
+                            f"{len(offen)} further error(s) remain open. Do NOT claim the snapshot "
+                            "is fixed, valid, or ready to use."
+                        )
+                    context_parts.append(
+                        "The proposal is NOT applied. It awaits a human decision in the review board."
+                    )
         
         else:  # Tool
             context_parts.append(f"Tool: {action_name}")
@@ -1061,6 +1303,36 @@ class OrchestrationAgent(BaseAgent):
                 elif stdout:
                     context_parts.append(f"Output: {stdout[:500]}")
         
+        # Menschliche Entscheidungen gehoeren in JEDE Interpretation, nicht nur in die des
+        # Chat-Agenten. Sonst berichtet eine Frage wie „was war die Loesung?", die der Router
+        # zum SP-Agenten schickt, weiterhin den KI-Vorschlag — genau der Fehler, gegen den
+        # die Bruecke gebaut wurde. Sie war bis 15.08.2026 nur am Chat-Pfad angeschlossen.
+        entscheidungen = self._get_review_decisions(chat_history, user_input)
+        if entscheidungen:
+            import json as _json
+            context_parts.append(
+                "--- HUMAN REVIEW DECISIONS (binding, they overrule the AI proposal) ---"
+            )
+            context_parts.append(_json.dumps(entscheidungen, ensure_ascii=False, default=str))
+            context_parts.append(
+                "`applied_value` is what was really applied; on decision='modify' the human "
+                "REPLACED `ai_value` and it must not be presented as the solution. "
+                "`revalidation.errors_after` is the CHECKED number of errors left afterwards — "
+                "if it is above 0, the snapshot is NOT fixed, valid or ready to use."
+            )
+
+        # Offene Vorschlaege. Ohne sie kann auf „was steht noch aus?" niemand antworten —
+        # die Entscheidung faellt im Review Board und steht nicht in der Unterhaltung.
+        offen = self._open_proposals_for_focus(chat_history, user_input)
+        if offen:
+            context_parts.append(f"--- OPEN PROPOSALS awaiting a human decision ({len(offen)}) ---")
+            for o in offen:
+                context_parts.append(
+                    f"  - {o['error_type']} at {o['target_path']} "
+                    f"(confidence {round((o.get('confidence_score') or 0) * 100)} %) "
+                    f"-> {APP_BASE_URL}/review.html?proposal={o['proposal_id']}"
+                )
+
         result_context = "\n".join(context_parts)
         
         # LLM interpretiert das Ergebnis NATÜRLICH basierend auf User-Frage
@@ -1070,7 +1342,13 @@ class OrchestrationAgent(BaseAgent):
         if chat_history:
             recent = chat_history[-(max_interpret_pairs * 2):]
             max_chars = CHAT_HISTORY_CONFIG.get("max_message_chars", 1000)
-            recent_context = f"Bisheriger Kontext:\n" + "\n".join([f"{m['role']}: {m['content'][:max_chars]}" for m in recent]) + "\n"
+            recent_context = "Bisheriger Kontext:\n" + "\n".join(
+                f"{m['role']}"
+                + (f" [{short_term.label_for(m.get('agent_name'))}]"
+                   if m['role'] != 'user' and short_term.label_for(m.get('agent_name')) else "")
+                + f": {m['content'][:max_chars]}"
+                for m in recent
+            ) + "\n"
         
         # Nutze zentralen SP Result Interpretation Prompt
         interpret_prompt = DEFAULT_ORCHESTRATOR_SP_RESULT_INTERPRETATION_PROMPT.format(

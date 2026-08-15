@@ -14,7 +14,7 @@ Open / next: what remains or what comes next.
 
 ### 2026-07-08 — M0 Baseline & Scope
 - **Status:** done
-- **Changed files:** none (analysis only) + created `.github/instructions/first.instructions.md`, `docs/PT4_PLAN.md`, `docs/PROJECT_LOG.md`
+- **Changed files:** none (analysis only) + created `.github/instructions/instructions.md`, `docs/PT4_PLAN.md`, `docs/PROJECT_LOG.md`
 - **What was done:** Inventoried the Phase-3 codebase. Confirmed: code under `demo/`, no confidence field, no DB, Pydantic models exist in `correction_models.py`, `apply_correction.py` writes directly to snapshot data with no gate. Established PT4 plan and agent instruction files.
 - **Verification:** Two independent agent analyses agreed on structure and findings.
 - **Open / next:** Begin AP1.1 (extend schema). Baseline auto-fix rate still to be measured on 5–10 snapshots for later comparison.
@@ -2720,3 +2720,1169 @@ Entscheidung E4 aufgenommen. `NETWORK_SETUP.md` entsprechend korrigiert.
 - **Open / next:** Apply wiederholen (stellt das Backend wieder her), danach die drei
   manuellen Portal-Schritte, Frontend-Redeploy, fachlicher Nachweis über eine
   Snapshot-Validierung.
+
+---
+
+### 2026-08-08 — Netzwerkkette steht; Ursache des Container-Absturzes war ein halbes Jahr altes Image
+- **Status:** Infrastruktur vollständig ausgerollt und verifiziert; **fachlicher Nachweis offen**
+- **Changed files:** INFRA: `infra/terraform.tfvars` (`image_tag` 0.2.1 → 0.3.1),
+  `docs/NETZWERKARCHITEKTUR.md`. HAUPT: `app/ui/scripts/chat.js`.
+
+**Drei Symptome, zwei Ursachen.** Nach dem Netzwerk-Apply meldete der Nutzer: Chats weg,
+eine „Scale-to-Zero"-Meldung trotz abgeschaltetem Scale-to-Zero, und ein Container, der
+nicht hochkam mit
+`can't open file '/root/.local/bin/gunicorn': [Errno 13] Permission denied`.
+
+**Ursache 1 — veraltetes Image (das eigentliche Problem).** Die Container App zog
+`agentic-ai-backend:0.2.1`, **erstellt am 18.02.2026**. Das Dockerfile wurde am 02.08.
+umgebaut (Requirements system-weit statt `pip install --user`, zusätzlich `USER appuser`).
+Im Februar-Image liegt gunicorn deshalb unter `/root/.local/bin/`, worauf `appuser` nicht
+zugreifen darf — der Container startete gar nicht. In der ACR lag bereits `0.3.1` vom
+04.08. aus dem korrigierten Dockerfile. **Das war wortwörtlich TODO #9 aus dem Handover**
+(„image_tag = 0.2.1 — mit den Änderungen von heute gehört ein neuer Tag dazu"). Es schlug
+jetzt zu, weil die Container App durch den Netzwerkumbau neu erstellt wurde und das Image
+frisch zog. `image_tag = "0.3.1"` gesetzt, mit Begründung im tfvars.
+
+**Ursache 2 — eine Meldung, die einen Fehler als Normalzustand ausgibt.** `chat.js`
+blendete nach 10 s ungeprüft „⏳ Backend startet… (Scale-to-Zero, bitte kurz warten)" ein.
+Scale-to-Zero ist seit dem 02.08. abgeschaltet (`min_replicas = 1`), die Aussage war also
+schlicht falsch — und schädlicher als keine Meldung: sie forderte zum Warten auf, während
+der Container in einer Absturzschleife hing. Neuer Text nennt keinen erfundenen Grund mehr,
+sondern verweist auf den Status der Container App.
+
+**Zu den „verlorenen Chats" — Entwarnung, nachgezählt statt behauptet.** Lokal unverändert
+vorhanden: 180 Sessions, 116 Messages, 17 Proposals, 14 Reviews, 11 Memory-Items in
+`app/db/pt4.sqlite3`. Die Azure-Datenbank `sqldb-agentic-ai-mfg` (angelegt 02.08.) ist
+`Online` und stand in **keiner** der beiden Destroy-Listen. Die Container App hatte zudem
+nur EINE Revision, und `0.2.1` kann unter `appuser` überhaupt nicht starten — die Anwendung
+dürfte in Azure nie gelaufen sein und folglich nie Daten geschrieben haben. **Lokale SQLite
+und Azure SQL sind zwei getrennte Datenbanken**; die lokale Historie war nie in der Cloud.
+
+**Abnahme 08.08.2026 (alles per Abfrage belegt).** Revision `--0000002` **Healthy** mit
+Image `0.3.1`; `GET /` → 200; `GET /api/dashboard/metrics` → 200 (damit steht auch die
+Datenbankverbindung). Peering `peer-agenticai-to-idp` und `peer-idp-to-agenticai` beide
+`Connected`; das bestehende Hub-Peering des IDP-Spokes unverändert; DNS-Zonen-Link
+`link-agentic-ai-mfg` `Completed`, der vorhandene Hub-Link unberührt. Der Nutzer hat die
+Peering-Namen richtungsrichtig vergeben.
+
+**Ehrliche Abgrenzung.** Bewiesen ist, dass der Pfad **gebaut** ist — nicht, dass er
+**trägt**. Ein HTTPS-Aufruf aus dem Container an `10.112.19.8` ist noch nicht erfolgt.
+
+- **Open / next:** Fachlicher Nachweis über eine echte Snapshot-Validierung aus der
+  Container App. Danach IPAM-Bestätigung für `10.113.0.0/22` (nicht blockierend).
+  Unicode-Entscheidung und Search-/Index-Block weiterhin vertagt.
+
+---
+
+### 2026-08-04 — Review Board: Deep-Link, Textfelder, Präzedenzfälle (Nutzerbefunde)
+- **Status:** done · **Changed files:** `app/ui/css/styles.css`, `app/ui/scripts/review.js`,
+  `app/db/repository.py`
+
+**1) Teilbarer Link zu einer einzelnen Prüfung.** Die Adresszeile zeigte immer nur
+`/review.html` — ein Link liess sich nicht weitergeben. Interessanterweise gab es die
+Deep-Link-Unterstützung beim LADEN bereits (`?proposal=` bzw. `?id=` aus den E-Mails); es
+fehlte nur das Setzen der URL beim Klicken. Ergänzt, dazu ein Knopf „Link kopieren" und ein
+`popstate`-Handler, damit Vor/Zurück im Browser zwischen Liste und Detail wechselt.
+Als Kennung dient `proposal_id` — **Primärschlüssel** der Tabelle `proposals` und damit
+garantiert eindeutig (`…-4508608a67cf__iteration-4`). Der Nutzer hatte recht, dass die
+SNAPSHOT-Id nicht genügt: zu einem Snapshot gehören mehrere Vorschläge, im Testbestand
+drei.
+
+**2) FEHLER MIT GROSSER REICHWEITE — alle Textfelder waren 24 px hoch.** Eine nackte
+Elementregel `textarea { height: 24px; max-height: 150px; }`, geschrieben für das
+mitwachsende Chat-Eingabefeld, traf JEDES Textfeld der Anwendung:
+- Kommentarfeld im Review Board: `rows="3"`, gemessen **24 px** — null nutzbare Zeilen
+- JSON-Editor unter „Wert ändern…": `rows="16"`, ebenfalls 24 px — praktisch unbenutzbar,
+  nur noch nicht aufgefallen, weil er erst auf Klick erscheint
+Regel auf `.input-wrapper textarea` eingegrenzt. Gemessen danach: Kommentar 73 px (3 Zeilen),
+JSON-Editor 341 px (16 Zeilen), beide in der Höhe ziehbar; Chat-Eingabe unverändert 24 px
+mit Deckel 150 px.
+
+**3) Präzedenzfälle: Datum ergänzt, Anzeige auf drei begrenzt.** `memory_items.created_at`
+existierte in der Tabelle, wurde aber nicht durchgereicht — ergänzt in
+`list_memory_items_as_dicts()`. Angezeigt absolut UND relativ („31.7.2026 · vor 7 Tagen"):
+das absolute Datum ist zitierbar, das relative sagt auf einen Blick, wie frisch der Fall ist.
+Es werden die drei JÜNGSTEN Fälle gezeigt, sortiert nach Datum; die Kopfzeile nennt
+weiterhin die WAHRE Gesamtzahl, darunter steht bei Bedarf „N weitere(r) Fall/Fälle nicht
+angezeigt". Sonst entstünde der Eindruck, das Gedächtnis kenne nur drei Fälle.
+
+**4) Frage des Nutzers zur Protokollierung — Antwort: ja, vollständig.** Tabelle `reviews`:
+`id`, `proposal_id` (Fremdschlüssel), `decision`, `final_value`, `comment`, `reviewer_ref`,
+`decided_at`, `revalidation_result`. Dazu `proposals` mit dem KI-Vorschlag und
+`memory_items` mit dem daraus abgeleiteten Präzedenzfall. Eine Auswertung „was wurde im
+letzten Jahr entschieden" ist also eine reine SQL-Abfrage.
+
+- **Verifiziert:** Klick auf eine Karte setzt `?proposal=…`, Zurück leert sie wieder, der
+  Link frisch geöffnet zeigt direkt das Detail mit dem richtigen Ziel-Pfad; Kopierknopf
+  vorhanden; Datumszeilen gerendert; Begrenzung durch kurzzeitiges `MAX_CASES = 1` bewiesen
+  („1 weitere(r) Fall/Fälle nicht angezeigt") und danach zurückgesetzt.
+
+---
+
+### 2026-08-13 — Erklärung der Konfidenz + BEFUND: Selbsteinschätzung passt nicht zum Wert
+- **Status:** Erklärung geliefert; ein Befund offen (noch nicht behoben)
+- **Changed files:** keine
+
+**Anlass:** Der Nutzer wollte wissen, wie die 90 % für `articles[0].relDensityMin` zustande
+kommen. Nachgerechnet mit den echten gespeicherten Werten und der echten Funktion:
+`llm_confidence 0.9`, `value_grounded 0.0`, `memory_support 1.0` →
+gewichtete Summe `0.5·0.9 + 0.3·0.0 + 0.2·1.0 = 0.65`, danach greift die v4-Untergrenze
+(`memory_support >= 1.0` ⇒ mindestens 0.9). Die 90 % stammen also VOLLSTÄNDIG aus der
+Untergrenze, nicht aus der Summe.
+
+**BEFUND — die Selbsteinschätzung erklärt einen Wert, der nicht mehr vorgeschlagen wird.**
+Im Feld „Selbsteinschätzung der KI" (`confidence_rationale`) steht:
+„Band A: Der Medianwert von **1.14** wurde aus 330 ähnlichen Artikeln … berechnet."
+Vorgeschlagen wird aber **1.017** — der Wert aus dem Gedächtnis, der die LLM-Schätzung per
+deterministischem Override ersetzt hat. Geprüft: `1.017` kommt im Rationale NICHT vor,
+`1.14` schon. Das Feld `reasoning` ist korrekt (es beginnt mit `[GEDÄCHTNIS]` und erklärt
+die Ersetzung), nur das Rationale wurde beim Override nicht nachgezogen.
+
+Für einen Prüfer ist das irreführend: die Begründung neben der Zahl rechtfertigt eine andere
+Zahl. Zwei denkbare Auflösungen — (a) das Rationale beim Override um einen Satz ergänzen, der
+die Ersetzung benennt, oder (b) im UI kennzeichnen, dass sich die Selbsteinschätzung auf den
+ursprünglichen LLM-Vorschlag bezieht. Entscheidung steht aus.
+
+---
+
+### 2026-08-13 — Konfidenz-Score dokumentiert
+- **Status:** done · **Changed files:** `docs/KONFIDENZ.md` (neu), `app/README-PT4.md`
+
+**Beim Schreiben aufgefallen: die vorhandene Dokumentation war FALSCH, nicht nur knapp.**
+Der Abschnitt „Confidence-Score" in `README-PT4.md` beschrieb die v1-Formel — mit
+`schema_valid` als mittlerem Term und dem Zusatz „memory_support (AP7; derzeit 0.0)". Beides
+gilt seit Langem nicht mehr: `schema_valid` wurde durch `value_grounded` ersetzt (der Term war
+tautologisch, weil immer 1), und `memory_support` ist abgestuft und aktiv. Wer sich darauf
+verlassen hätte, hätte die angezeigten Zahlen nicht nachvollziehen können.
+
+**Neu: `docs/KONFIDENZ.md`.** Die Zahl ist governance-relevant, deshalb eine eigene Referenz
+statt eines Absatzes: Formel und Sonderfall, die drei Signale mit der jeweils dahinterstehenden
+Frage (inkl. der Tabelle, welche Prüfung `value_grounded` je Feldklasse anstellt und der drei
+Stufen von `memory_support`), die Untergrenze samt der Verkehrung, die sie behebt, ein
+durchgerechnetes Beispiel mit den echten Werten des Testbestands, eine Vergleichstabelle, eine
+Leseanleitung für Prüfer und die Entwicklung v0→v4 mit den Messwerten, die jede Änderung
+ausgelöst haben.
+
+**Kernaussage der Leseanleitung:** 90 % ist nicht gleich 90 %. Ob die Zahl aus einem Datenbeleg
+oder aus dem Gedächtnis stammt, ändert, worauf ein Prüfer schauen muss — die Prozentzahl allein
+sagt das nicht, die Kästen daneben schon.
+
+**Verifiziert:** Alle fünf Zahlenpaare der Vergleichstabelle gegen die echte Funktion
+`compute_confidence_score` gerechnet — alle stimmen. Formelstand im Code (`v4`) und im Dokument
+identisch, die Zwischensumme 0.65 des Beispiels nachgerechnet.
+
+Die bekannte Schwäche (`confidence_rationale` wird beim Gedächtnis-Override nicht nachgezogen,
+begründet also 1.14 während 1.017 vorgeschlagen wird) ist im Dokument als offener Punkt
+festgehalten, nicht stillschweigend weggelassen.
+
+---
+
+### 2026-08-13 — Selbsteinschätzung nach Gedächtnis-Override eingeordnet (Befund behoben)
+- **Status:** done · **Changed files:**
+  `app/tools/smart-planning/runtime/generate_correction_llm.py`, `app/ui/scripts/review.js`,
+  `app/ui/css/styles.css`, `docs/KONFIDENZ.md`
+
+**Problem:** Ersetzt ein Gedächtnisfall den Wert des Modells, begründete das Feld
+`confidence_rationale` weiterhin den VERWORFENEN Wert (1.14), während daneben 1.017 stand.
+Nur `reasoning` wurde beim Override nachgezogen, das Rationale nicht.
+
+**Grundsatzentscheidung: der Originaltext bleibt.** Er ist der Beleg dafür, was das Modell
+gedacht hat, und gehört zur Nachvollziehbarkeit — ihn zu überschreiben hieße, die Historie zu
+glätten. Er wird stattdessen EINGEORDNET.
+
+**Zwei Stellen, weil eine nicht reicht:**
+1. `generate_correction_llm.py` — der Override stellt dem Rationale einen Satz voran
+   („Bezieht sich auf den ursprünglichen KI-Vorschlag 1.14, der durch die frühere menschliche
+   Entscheidung 1.017 ersetzt wurde."). Damit steht die Einordnung in der Datenbank und im
+   gespeicherten JSON, nicht nur auf dem Bildschirm.
+2. `review.js` — für BEREITS GESPEICHERTE Vorschläge kommt Punkt 1 zu spät; genau so einer
+   war der Fall, den der Nutzer gemeldet hat. Das Review Board ergänzt die Einordnung deshalb
+   beim Anzeigen. Erkannt am Präfix `[GEDÄCHTNIS]` in `reasoning` — das ist keine Vermutung,
+   sondern eine präzise Markierung: genau ein Codepfad schreibt sie, nämlich der Override.
+
+- **Verifiziert:** Generator-Pfad mit dem ECHTEN Gedächtnisfall nachgespielt — Rationale nennt
+  danach 1.017 UND behält den Originaltext („Medianwert von 1.14"). Anzeige am gemeldeten
+  Vorschlag: als ersetzt markiert, Text trägt die Einordnung. **Gegenprobe** an einem
+  Vorschlag OHNE Override (`DEMAND_ARTICLE_IDS`): unverändert „Selbsteinschätzung der KI:",
+  nicht als ersetzt markiert. Keine Konsolenfehler in beiden Themes.
+- `docs/KONFIDENZ.md`: aus dem Abschnitt „Bekannte Schwäche" wurde eine Beschreibung des
+  jetzigen Verhaltens.
+
+---
+
+### 2026-08-13 — KONFIDENZ.md: Herkunft von `value_grounded` nachgeschärft
+- **Status:** done · **Changed files:** `docs/KONFIDENZ.md`
+
+**Anlass:** Rückfrage des Nutzers — bei `memory_support` sei klar, dass es aus der Datenbank
+kommt, aber woher stammt „Wert ist in den Daten belegt"? Die Dokumentation beschrieb die
+GEPRÜFTE FRAGE je Feldklasse, nannte aber nirgends die QUELLE. Berechtigte Lücke.
+
+**Ergänzt:** Die Prüfung liest den Snapshot selbst (`snapshot-data.json`) — die
+Produktionsdaten, die gerade korrigiert werden. Weder Datenbank noch Modell sind beteiligt.
+Damit stehen die beiden Signale sauber getrennt da: `value_grounded` aus den Daten,
+`memory_support` aus `memory_items`.
+
+**Dazu ein am echten Snapshot gemessenes Beispiel** (422 Artikel durchsucht):
+`1.017` → 0.0 („nicht auffindbar"), `1.055` → 1.0 („existiert bereits in
+articles[1].relDensityMin"). Beide Werte über die echte Funktion `compute_value_grounded`
+gegen die echte Datei gerechnet, nicht konstruiert.
+
+**Und die Abgrenzung, die dabei erst richtig sichtbar wurde:** „belegt" heißt *ein
+vergleichbarer Datensatz trägt diesen Wert bereits* — NICHT, dass er für dieses Objekt
+richtig ist. Beide Richtungen kommen vor: `1.055` wäre belegt und trotzdem falsch (fremder
+Artikel), `1.017` ist unbelegt und trotzdem richtig (menschlich bestätigt, einmalig). Damit
+ist auch begründet, warum das Signal nur 0.3 wiegt und von einer menschlichen Bestätigung
+überstimmt wird.
+
+---
+
+### 2026-08-13 — Quellen der drei Konfidenz-Signale prominent dokumentiert
+- **Status:** done · **Changed files:** `docs/KONFIDENZ.md`, `app/README-PT4.md`
+
+**Anlass:** Der Nutzer wollte die Erklärung aus dem Gespräch genau so in der Dokumentation
+haben. Beim Abgleich zeigte sich: die Details standen bereits drin, aber die ÜBERSICHT fehlte
+— also genau das, was die Frage beantwortet.
+
+**Neuer Abschnitt „Woher jedes Signal stammt"**, direkt hinter der Formel. Eine Tabelle mit
+den drei Quellen: Modell / Snapshot-Datei / Datenbanktabelle. Dazu der Satz, auf den es
+ankommt: nur EIN Signal kommt aus dem Modell, die beiden anderen sind deterministisch und
+dürfen die Selbsteinschätzung deshalb überhaupt korrigieren.
+
+**Zwei Präzisierungen:**
+- Bei der Tabelle der Feldklassen steht jetzt, WARUM es keine Einheitsfrage sein kann: für ein
+  Identitätsfeld ist „steht der Wert schon in den Daten?" verkehrt herum — eine neue eindeutige
+  ID darf gerade nicht existieren.
+- `memory_support` nennt jetzt ebenfalls ausdrücklich seine Quelle (`memory_items`) samt dem
+  Hinweis, dass das Gedächtnis ausschliesslich durch geprüfte menschliche Entscheidungen
+  wächst, nie durch die KI selbst.
+
+**README-PT4.md** trägt die Quellen-Tabelle in Kurzform, damit die Aussage auch dort steht, wo
+die meisten zuerst nachschauen.
+
+- **Verifiziert:** Alle fünf Zahlenpaare erneut gegen `compute_confidence_score` gerechnet,
+  Formelstand `v4` in Code und Dokument identisch, beide Quellenangaben (`snapshot-data.json`,
+  `memory_items`) im Text vorhanden. Dokument jetzt 227 Zeilen mit 14 Abschnitten.
+
+---
+
+### 2026-08-13 — Gedächtnis-Override: begründeter Einspruch statt Zwang
+- **Status:** done · **Changed files:**
+  `app/tools/smart-planning/runtime/correction_models.py`,
+  `app/tools/smart-planning/runtime/generate_correction_llm.py`,
+  `app/ui/scripts/review.js`, `app/ui/css/styles.css`
+
+**Anlass:** Frage des Nutzers, ob Gedächtnisdaten in die LLM-Abfrage einfliessen und ob sie
+eine Entscheidung erzwingen können, die nicht passt. Beim Nachsehen zeigte sich ein
+Widerspruch zwischen Prompt und Code: der Prompt räumte dem Modell ausdrücklich ein, vom
+Gedächtnis abzuweichen („ausser du hast einen expliziten, belegten Grund dagegen") — der
+deterministische Override verwarf den Wert danach trotzdem bedingungslos.
+
+**Umgesetzt:** Neues optionales Feld `memory_dissent_reason` im Pydantic-Modell. Trägt das
+Modell dort einen Grund ein, bleibt sein Wert stehen und die Abweichung wird protokolliert
+(`value_source = "llm_dissent"`, Vorwort `[ABWEICHUNG VOM GEDÄCHTNIS]` samt Fallnummer und
+dem zuvor entschiedenen Wert). Bleibt das Feld leer, greift der Override wie bisher.
+Der Prompt sagt jetzt dasselbe wie der Code und verlangt ausdrücklich einen datengestützten
+Grund („mein Wert erscheint mir plausibler" zählt nicht).
+
+**Warum das sicher ist — und zwar OHNE zusätzliche Regel.** Weicht der Wert vom bestätigten
+ab, ist er per Definition nicht mehr bestätigt: `compute_memory_support` liefert dann nicht
+mehr 1.0, die 0.9-Untergrenze greift nicht, und die Konfidenz sinkt von selbst. Ein Einspruch
+kann sich die Sicherheit einer menschlichen Bestätigung also nicht erschleichen. Gemessen am
+echten Datenbestand:
+
+| Fall | Wert | memory_support | Konfidenz |
+|---|---|---|---|
+| Kein Einspruch (Override) | 1.017 | 1.0 | **90 %** |
+| Einspruch mit NEUEM Wert | 1.31 | 0.5 | **55 %** |
+| Einspruch mit Wert, der schon einmal verworfen wurde | 1.14 | 0.0 | **45 %** |
+
+Die dritte Zeile war eine positive Überraschung: der bereits vorhandene Negativ-Präzedenzfall
+greift auch hier und meldet „WARNUNG: Dieser Wert wurde für DIESES Objekt schon einmal
+vorgeschlagen und von einem Menschen verworfen".
+
+**Im Review Board** erscheint ein eigener, kräftiger Kasten „Widerspricht einer früheren
+menschlichen Entscheidung" mit dem Hinweis, zuerst die Begründung zu prüfen. Erkannt am
+Vorwort in `reasoning` — dieselbe Technik wie beim Gedächtnis-Override, kein neues DB-Feld.
+
+- **Verifiziert:** altes JSON lädt weiterhin (neues Feld optional), beide Pfade am echten
+  Gedächtnisfall #11 durchgespielt, alle drei Konfidenzstufen gemessen, Anzeige im Browser
+  geprüft — Kasten erscheint NUR beim Dissens-Vorschlag (Gegenprobe am Override-Vorschlag:
+  nicht vorhanden), Konfidenz 55 % korrekt dargestellt. Keine Konsolenfehler in beiden Themes.
+- **Unverändert:** Es wird nichts geschrieben. Auch ein Einspruch landet als Vorschlag im
+  Review Board und braucht eine menschliche Freigabe.
+
+---
+
+### 2026-08-13 — Dashboard geprüft: ein echter Anzeigefehler, sonst sauber
+- **Status:** done · **Changed files:** `app/ui/scripts/dashboard.js`
+
+**Vorgehen:** Nicht hingeschaut, sondern die Kennzahlen unabhängig aus der Datenbank
+nachgerechnet und gegen die API gestellt.
+
+**Alles rechnerisch korrekt.** `proposals_total` 17, `decisions_total` 14, `proposals_open` 3,
+Aufschlüsselung 5/8/1, AK2 5/14 = 0.3571, `avg_confidence` 0.7894, `validations` 7,
+`tokens_total` 2.496.057 — jede Zahl deckungsgleich mit der eigenen Rechnung. Auch die
+Charts: Zeitreihe summiert auf 14 (= decisions_total), Fehlerarten auf 17, Konfidenz-
+Verteilung auf 17. Revalidierung 2/10 und Bearbeitungszeit-Median 3,4 h einzeln nachgeprüft.
+
+**BEFUND — die Hochzähl-Animation kam nicht ans Ende.** Im gerenderten DOM standen die
+richtigen Werte in `data-end`, angezeigt wurden aber Zwischenstände: 34,2 % statt 35,7 %,
+16 statt 17, 13 statt 14, $5,02 statt $5,25. Auffällig wurde es durch einen inneren
+Widerspruch: die Kachel „Entscheidungen" zeigte 13, ihre eigene Fußzeile darunter aber
+„5× freigegeben · 8× korrigiert · 1× verworfen" — zusammen 14.
+
+Ursache: die Anzeige hing allein daran, dass `requestAnimationFrame` bis zum letzten Frame
+läuft. Das ist nicht garantiert — rAF pausiert in Hintergrund-Tabs und wird von
+Headless-Browsern gedrosselt. Behoben durch ein Sicherungsnetz: ein `setTimeout` setzt den
+Endwert nach Ablauf der Animationsdauer unabhängig davon, ob die Frames durchgelaufen sind.
+Danach alle acht Kennzahlen exakt gleich dem hinterlegten Endwert.
+
+Besonders relevant, weil der Nutzer Screenshots für den Projektbericht macht: ein Screenshot
+mitten in der Animation hätte falsche Zahlen dokumentiert.
+
+**Zweiter Befund, KEIN Fehler, aber erklärungsbedürftig:** Die Kostenzahl ist von $6,52
+(2.8.) auf $5,25 gefallen, obwohl die Tokens gestiegen sind. Grund: Das Dashboard rechnet
+die Kosten bewusst aus den gespeicherten Tokens mit dem AKTUELLEN Preismodell (AP6.3,
+dokumentiert) — und das Modell wurde am 2.8. von gpt-4o auf gpt-4.1 umgestellt, das
+günstiger ist. Gemessen: 134 von 143 Läufen stammen aus der Zeit VOR dem Wechsel, liefen
+also tatsächlich auf gpt-4o. Die Summe der damals gespeicherten Einzelkosten beträgt $6,56
+gegenüber $5,25 nach heutigem Preismodell.
+Der Vorbehalt `COST_IS_ESTIMATE` nennt korrekt die verwendeten gpt-4.1-Listenpreise, sagt
+aber NICHT, dass sie rückwirkend auf Läufe mit anderen Modellen angewandt werden. Für die
+Buchhaltung taugt die Zahl ohnehin nicht (steht so im Vorbehalt); für den Projektbericht
+sollte der Zusatz ergänzt werden. NICHT geändert — das ist eine inhaltliche Entscheidung.
+
+---
+
+### 2026-08-13 — Dashboard: Vorbehalts-Popover, Formulierungen, „Heute"-Schalter
+- **Status:** done · **Changed files:** `app/ui/css/styles.css`, `app/ui/scripts/dashboard.js`,
+  `app/ui/dashboard.html`, `app/routes/dashboard.py`, `app/ui/fonts/material-symbols-subset.woff2`
+
+**1. Aufgeklappter Vorbehalt sprengte die Karte.** Die Regel, die den Text schweben lässt,
+war auf `.db-tile` eingeschränkt. Im Kartenkopf und im Hero stand er deshalb im Fluss:
+er verbreiterte das `<details>` in der Kopf-Flexbox, quetschte die Überschrift daneben zu
+einer einbuchstabigen Spalte („Wann wurde ent-schie-den?" untereinander) und trat zugleich
+rechts aus der Karte heraus.
+Behoben in zwei Schritten: die Regel gilt jetzt für JEDEN Vorbehalt, und der Bezugsrahmen
+ist die KOPFZEILE statt des Symbols. Die Kopfzeile ist genau so breit wie der Inhaltsbereich,
+also begrenzt `width: min(340px, 100%)` das Feld von selbst — breite Karte 340 px, schmale
+Kachel Kachelbreite. Am Symbol verankert standen nur dessen ~50 px als Bezug zur Verfügung;
+in den Kacheln trat das Feld dann in die Nachbarkachel aus (gemessen: 199–539 px bei einer
+Kachel von 279–556 px).
+Nachgemessen bei 1440 / 1024 / 700 px Fensterbreite, alle 9 Vorbehalte gleichzeitig geöffnet:
+keiner verlässt seine Karte, keine Überschrift unter 120 px, kein waagerechter Seitenlauf.
+
+**2. Formulierungen überarbeitet — der ganze Bildschirmtext, nicht nur die genannten Stellen.**
+Leitlinie: keine Nummern aus der Projektdokumentation, keine Ich-Erzählung über „den
+Menschen", Kennzahl-Namen sagen, was sie messen.
+- „Angenommen ohne Änderung (AK2)" → „Freigabequote ohne Änderung". `AK2_TARGET` bleibt als
+  interner Bezeichner im Code; auf dem Bildschirm steht die Nummer nirgends mehr.
+- „5 von 14 Entscheidungen — der Mensch hat den KI-Wert unverändert übernommen." →
+  „5 von 14 Entscheidungen unverändert freigegeben"
+- „Wann wurde entschieden?" → „Entscheidungen im Zeitverlauf"
+- „Kalibrierung — sagt die Konfidenz die menschliche Entscheidung voraus?" →
+  „Aussagekraft der Konfidenz"
+- „Ø Bearbeitungszeit" → „Bearbeitungszeit (Median)" (das Ø war schlicht falsch, gerechnet
+  wurde immer der Median), „Ø Konfidenz" → „Mittlere Konfidenz",
+  „Revalidierung erfolgreich" → „Revalidierung bestanden"
+- Untertitel der Seite, aller sechs Karten sowie die Kachel-Fußzeilen neu gefasst.
+- Auch die SERVERSEITIGEN Vorbehalte: sie erscheinen im Dashboard und trugen Verweise auf
+  AP2.5 / AP3.3d / AP3.6a/b / AP4.5 und AK2. Beschrieben wird jetzt die Sache selbst
+  („vor der Einführung der Token-Erfassung" statt „vor AP2.5"). Der Code
+  `REVALIDATION_PRE_AP33D` heißt jetzt `REVALIDATION_UNVERIFIED` — er steht sichtbar im
+  Vorbehaltsfeld. Automatisch geprüft: kein `AP<n>`/`AK<n>` mehr im sichtbaren Seitentext.
+- `COST_IS_ESTIMATE` benennt jetzt den gestern gefundenen Punkt: die Preise werden
+  RÜCKWIRKEND auf alle Läufe angewandt, auch auf solche, die auf einem anderen Modell
+  liefen — deshalb ändert sich die Kostenzahl nach einem Modellwechsel auch für längst
+  abgeschlossene Läufe.
+
+**3. „Heute"-Schalter in der Filterleiste.** Setzt Ansicht auf Wochen UND Anker auf heute —
+nach mehrmaligem Zurückblättern der Weg zurück, ohne die Klicks zählen zu müssen. Steht bei
+den Pfeilen, nicht bei den Auflösungs-Schaltern: er bewegt den Zeitraum, er wählt keine
+Auflösung. Ist die Ansicht bereits dort, bleibt er sichtbar, aber stillgelegt (sonst
+springt die Leiste). Funktional geprüft: von „Monate, ein Fenster zurück" führt ein Klick
+auf `view=week`, ohne Anker, Zeitraum bis 2026-08-13, Schalter „Wochen" aktiv.
+
+**4. Symbol-Subset neu gebaut** (39 Symbole, 4996 Bytes) — `today` kam hinzu. Auf allen drei
+Seiten geprüft, dass kein Symbol als Text durchschlägt: Dashboard, Review Board, Chat (67).
+
+**Nachtrag (Doku-Abgleich):** Die Umbenennung war nicht nur eine UI-Änderung — der Code
+`REVALIDATION_PRE_AP33D` stand auch in drei anderen Dokumenten. Angeglichen in
+`docs/AP5_AP6_DOCUMENTATION.md` (2×), `docs/PT4_PLAN.md` (1×) und
+`app/eval/build_test_catalog.py` (1×); der alte Bezeichner existiert nirgends mehr.
+Ebenso die Hero-Beschriftung in `docs/AP5_AP6_DOCUMENTATION.md`, mit Hinweis auf den alten
+Namen, damit die Änderung nachvollziehbar bleibt.
+
+---
+
+### 2026-08-13 — Filterleiste bricht nicht mehr zufällig um; Vorgänger-Hinweise entfernt
+- **Status:** done · **Changed files:** `app/routes/dashboard.py`, `app/ui/scripts/dashboard.js`,
+  `app/ui/css/styles.css`
+
+**1. „Auflösung" rutschte mal in die zweite Zeile, mal nicht.** Gemessen: nutzbar sind
+818 px; Navigation (351) + Schalter (272) lassen 167 px übrig. Die Anzeige braucht bei
+„Monate" 140 px — passt —, bei „Kalenderwochen" 197 px — passt nicht. Der Umbruch hing also
+am ANGEZEIGTEN WORT, nicht an der Fensterbreite, und wirkte deshalb zufällig.
+Zwei Änderungen: (a) der Wert bekommt einen festen Platz von 104 px, breit genug für den
+längsten Fall — die Anzeige ist damit immer 128 px breit, und ob umbrochen wird, hängt nur
+noch von der Fensterbreite ab. (b) Das Wort „Auflösung:" entfällt zugunsten des
+Kalendersymbols mit Titel und Vorlesetext (`sr-only`); das spart die fehlenden ~70 px.
+Nachgemessen über 4 Fensterbreiten × 3 Auflösungen: durchgehend EINE Zeile, Bedarf konstant
+779 px unabhängig von der Beschriftung.
+
+**2. Hinweise auf abgelöste Vorgängerstände entfernt** (Wunsch des Nutzers: gehört nicht in
+eine Produktivumgebung). Gestrichen: `CONFIDENCE_LEGACY_FORMULA`,
+`CONFIDENCE_MIXED_FORMULA_VERSIONS`, `ERROR_TYPE_LEGACY_HEURISTIC` samt der zugehörigen
+Berechnungen (`decided_by_version`, `LEGACY_ERROR_LABELS`, Feld `legacy_label` im Payload)
+und der Sondereinfärbung „⚠ Alt-Label" im Fehlerarten-Diagramm inklusive toter CSS-Regeln.
+Der Kalibrierungs-Hinweis beschreibt jetzt nur noch, was die Kurve zeigt, ohne die
+Formel-Historie zu erklären.
+Verbleibende fünf Vorbehalte: `REVALIDATION_UNVERIFIED`, `HANDLING_TIME_FIXTURES`,
+`COST_IS_ESTIMATE`, `TOKENS_INCOMPLETE`, `VALIDATION_COUNT_PARTIAL` (dazu situativ
+`RANGE_*`, `GRANULARITY_COARSENED`, `SMALL_SAMPLE`).
+
+**OFFEN und bewusst so hinterlassen:** Mit `CONFIDENCE_MIXED_FORMULA_VERSIONS` ist der
+HINWEIS weg, nicht die Sache. Die Konfidenzwerte der entschiedenen Vorschläge stammen
+weiterhin aus zwei Generationen (v0: 6, v3: 8) und liegen nicht auf derselben Skala;
+„Mittlere Konfidenz" und die Kalibrierungskurve mitteln also weiter über Ungleiches — es
+steht nur nicht mehr da. Sauber wäre, die Kurve serverseitig auf die aktuelle Generation zu
+beschränken (der API-Parameter `?formula_version=` existiert bereits). Das ist eine
+inhaltliche Entscheidung und wurde nicht eigenmächtig getroffen.
+
+**Zur Herkunft der Hinweise (Nutzerfrage):** Alle Vorbehalte sind deterministischer
+Python-Code in `routes/dashboard.py` — 12 `flags.append`-Stellen, jede an eine Bedingung über
+DB-Zeilen gebunden. Kein LLM, kein Netzaufruf; die Datei importiert ausschliesslich
+`datetime`, `logging`, `flask`, `core.cost_model` und `db.repository`. Gleiche Daten ⇒
+gleiche Hinweise.
+
+---
+
+### 2026-08-13 — Kalibrierungskurve rechnet nur noch auf der aktuellen Konfidenz-Formel
+- **Status:** done · **Changed files:** `app/routes/dashboard.py`, `app/ui/scripts/dashboard.js`,
+  `docs/KONFIDENZ.md`
+
+Umsetzung des im vorigen Eintrag offen gelassenen Punktes: nicht den Hinweis abschalten,
+sondern die Ursache beseitigen.
+
+**Server.** Neuer Helfer `_latest_formula_version()` bestimmt die höchste im Bestand
+vorkommende Konfidenz-Generation. Bewusst NICHT als Textkonstante `"v4"` hinterlegt — der
+Generator erhöht `CONFIDENCE_FORMULA_VERSION` bei jeder Formeländerung, eine Kopie hier
+würde stillschweigend veralten. Sortiert wird numerisch, nicht alphabetisch: als Zeichenkette
+wäre `"v10" < "v9"` wahr und die neueste Generation ausgerechnet ab zweistelliger Zählung
+verworfen. Geprüft: leer→None, v0/v3/v4→v4, v9/v10→v10, mit Müll→v2, nur Müll→None.
+Bezugsmenge sind ALLE Vorschläge, nicht die des Zeitfensters — sonst wäre „aktuell" beim
+Zurückblättern jeweils etwas anderes.
+Die Kurve wird nur noch aus Entscheidungen dieser Generation gebildet. Neu im Payload:
+`charts.calibration_scope` mit `formula_version`, `decisions`, `decisions_excluded`.
+
+**Befund dabei:** Auf der aktuellen Generation (`v4`) ist bisher **keine einzige**
+Entscheidung gefallen — die 14 vorhandenen verteilen sich auf v0 (6) und v3 (8). Die Kurve
+ist damit vorerst LEER. Das ist die ehrliche Antwort: die bisherige flache Kurve war kein
+Messergebnis, sondern ein Artefakt des Vermischens.
+
+**Oberfläche.** Statt eines Achsenkreuzes mit fünfmal „n=0" ein Leerzustand: „Noch keine
+Entscheidungen auf Basis der aktuellen Konfidenz-Formel", mit der Zahl der aus diesem Grund
+nicht mitgezählten älteren Entscheidungen. Ein leeres Diagramm sähe aus wie ein gemessenes
+0 % — genau die Verwechslung, die diese Karte vermeiden soll. Der Kartenuntertitel nennt die
+Einschränkung jetzt selbst.
+
+**Nebenbefund und behoben:** Der API-Parameter `?formula_version=` wirkte über die
+Oberfläche gar nicht. `syncUrl()` baut die Adresse bei jedem Aufbau neu und löschte den
+handgeschriebenen Parameter still weg — angezeigt wurde etwas anderes, als in der Adresszeile
+stand. Er wird jetzt durchgereicht (nur `v<Ziffern>`, sonst verworfen).
+Gegenprobe im Browser: `?formula_version=v3` → 8 Entscheidungen, Band 0.6–0.8, 37,5 %;
+`?formula_version=v0` → 3 + 3 Entscheidungen, beide Bänder 33,3 %, und dort erscheint auch
+korrekt der Flachheits-Hinweis. Ohne Parameter: Leerzustand.
+
+**Bewusst NICHT umgestellt:** „Mittlere Konfidenz" und die Konfidenz-Verteilung laufen
+weiter über alle Generationen. Sie beschreiben, was tatsächlich erzeugt wurde, und stellen —
+anders als die Kurve — keine Behauptung über Vorhersagekraft auf. Eine Einschränkung auf v4
+würde die Kennzahl von 0.7894 (n=17) auf 0.9417 (n=3) springen lassen, ohne dass sich an der
+Sache etwas geändert hätte.
+
+`docs/KONFIDENZ.md` entsprechend nachgezogen; der dortige Satz, alte Vorschläge würden „im
+Dashboard mit einem Vorbehalt versehen", stimmte nach dem Entfernen der Vorbehalte nicht mehr.
+
+---
+
+### 2026-08-14 — BEFUND: Der Agent behauptete Erfolge, die es nicht gab
+- **Status:** done · **Changed files:** `app/agents/sp_agent.py`, `app/agents/orchestration_agent.py`,
+  `app/agents/chat_agent.py`, `app/db/repository.py`, `app/core/agent_config.py`,
+  `app/eval/test_agent_truthfulness.py` (neu)
+
+Nutzerbefund aus einem echten Lauf (Snapshot `a810d470…`, 14.08.2026). Drei falsche Aussagen:
+1. Nach „ja bitte die fehler korrigieren": „Alle kritischen Fehler wurden behoben."
+   Tatsächlich wurde ein Vorschlag für EINEN von DREI Fehlern erzeugt.
+2. Im selben Atemzug: „Der Snapshot ist jetzt valide und vom Server akzeptiert."
+   Tatsächlich wurde nichts geschrieben und nichts hochgeladen — `analyze_only` ändert nichts.
+3. Nach der Freigabe: „vollständig fehlerfrei und einsatzbereit", obwohl die Freigabe selbst
+   „3 Fehler vorher → 2 Fehler nachher" gemeldet hatte.
+
+**Ursache — kein Prompt-Problem, ein Datenproblem.** Das Modell, das den Text formuliert,
+bekam die entscheidenden Tatsachen gar nicht:
+- `_interpret_sp_result` sah für `analyze_only` nur `Status: success` und die Schrittnamen.
+  Weder die Zahl der gefundenen Fehler noch die Beschränkung auf einen noch die Tatsache,
+  dass nichts geschrieben wurde, standen im Kontext. `final_validation` wird ausschliesslich
+  für `full_correction`/`correction_from_validation` berechnet — und genau die werden unter
+  HUMAN_IN_THE_LOOP auf `analyze_only` umgebogen. Es gab also strukturell nie eine Zahl.
+- `get_decisions_for_snapshot()` verschluckte die Spalte `revalidation_result`. Die Zeile in
+  der Datenbank enthielt wörtlich `errors_before=3, errors_after=2, is_valid=False` samt den
+  beiden offenen Fehlermeldungen — nachgewiesen per Direktabfrage. Der Chat-Agent sah davon
+  nichts und füllte die Lücke mit Optimismus.
+Das erklärt auch, warum der Agent auf ausdrückliche Nachfrage („bitte nochmal validieren!!!")
+plötzlich korrekt antwortete: dort lief ein echtes `validate_snapshot`, und dessen Ergebnis
+steht im Kontext.
+
+**Behoben, an der Wurzel:**
+- `SPAgent._describe_analysis_scope()` (neu) liest die Artefakte des Laufs selbst und meldet:
+  gefundene Fehler, der EINE behandelte, die namentlich unberührten, `snapshot_written=False`,
+  `uploaded_to_server=False`. Bewusst die `snapshot-validation.json` IM Iterationsordner —
+  die Datei eine Ebene darüber wird von späteren Läufen überschrieben und ergäbe eine andere
+  Zahl als die, die der Lauf tatsächlich gesehen hat. Fehlt ein Artefakt: `None`, lieber
+  keine Angabe als eine falsche.
+- Der Orchestrator rendert das als eigenen, unmissverständlichen Block in den Kontext.
+- `get_decisions_for_snapshot()` liefert `revalidation` (vorher/nachher/offene Fehler) über
+  einen neuen Helfer `_summarize_revalidation()` — verdichtet, weil die Rohspalte die
+  komplette Validierungsantwort enthält und ungefiltert den Prompt sprengen würde.
+- `BASE_INTERPRETATION_RULES` bekommt eine oberste Regel, die für JEDEN Interpretationspfad
+  gilt: „alle Fehler behoben", „valide", „einsatzbereit" sind nur erlaubt, wenn eine
+  Validierung mit ERROR-Anzahl 0 im Ergebnis steht; ein Vorschlag ist keine Änderung; deckt
+  ein Lauf nur einen von mehreren Fehlern ab, ist das ungefragt zu sagen.
+
+**Nachweis am echten Modell** (`eval/test_agent_truthfulness.py`, füttert exakt die Daten des
+Laufs von gestern): beide Fälle grün. Der Analyse-Lauf antwortet jetzt „Es wurde ein
+Korrekturvorschlag für genau einen der drei Fehler erstellt … es ist also noch nichts am
+Snapshot geändert worden" und nennt die beiden offenen Fehler namentlich; die Frage nach der
+Freigabe antwortet „Nach deiner letzten Genehmigung sind noch 2 Fehler offen" mit beiden
+Meldungen. Keine der neun verbotenen Erfolgsfloskeln kommt noch vor.
+
+---
+
+### 2026-08-15 — Audit: weitere Stellen, an denen Agenten Wissen NICHT erreicht
+- **Status:** done (Bestandsaufnahme, nichts geändert) · **Changed files:** keine
+
+Auf die Frage, ob es weitere Fälle wie den Wahrheitsfehler von gestern gibt, jeden Weg
+geprüft, auf dem Wissen zu einem Agenten gelangt. Sechs Befunde, alle im Code belegt.
+
+**1. `last_snapshot_metadata` ist ÜBER ALLE CHAT-SESSIONS HINWEG dasselbe Objekt.**
+`orchestrator` ist ein Modul-Global (`web_server.py:95/187`), `last_snapshot_metadata` ein
+Instanzattribut (`orchestration_agent.py:73`). Nachgewiesen: Sitzung A lädt einen Snapshot,
+Sitzung B stellt eine unabhängige Frage — und bekommt die Metadaten aus A in ihren
+Systemprompt. In der Cloud mit mehreren Nutzern sieht Nutzer B damit Name, ID und
+Validierungsstatus des Snapshots von Nutzer A. Schwerwiegendster Befund, auch ohne die
+Wahrheitsfrage.
+
+**2. Derselbe Zwischenspeicher wird nie aufgefrischt.** Gesetzt nur bei `create_snapshot`
+und `download_snapshot` (`orchestration_agent.py:831`). Nach Anwenden, Hochladen oder einer
+Freigabe bleibt der Stand vom Herunterladen stehen — inklusive
+`isSuccessfullyValidated`. Exakt dieselbe Fehlerklasse wie der gestern behobene Fall: ein
+alter Stand wird als aktueller ausgegeben.
+
+**3. Menschliche Entscheidungen erreichen nur den CHAT-Pfad.** Die Brücke hängt an
+`if agent_key == "chat"` (`orchestration_agent.py:192`). Eine Frage wie „was war die
+Lösung?", die der Router zum SP-Agenten schickt (wahrscheinlich, sobald ein Snapshot
+erwähnt wird), läuft ohne jede Kenntnis der Freigabe — und berichtet wieder den
+KI-Vorschlag statt des angewendeten Werts. Genau der Fehler, gegen den die Brücke gebaut
+wurde; sie ist nur halb gesteckt.
+
+**4. Die Multi-Step-Zusammenfassung kürzt jedes Teilergebnis auf 200 Zeichen**
+(`orchestration_agent.py:382`). Die gestern eingebaute wahrheitsgemässe Antwort ist 570
+Zeichen lang; nachgerechnet fällt genau ab „Die beiden anderen Fehler sind weiterhin
+offen: …" alles weg. Der Vorbehalt überlebt den Einzelschritt, aber nicht den Mehrschritt.
+
+**5. Offene Vorschläge kennt der Chat-Agent nicht.** `list_open_proposals_as_dicts()` wird
+von der Review-Route und vom Deep-Link-Hinweis genutzt, aber nie als Kontext übergeben
+(`grep` in `chat_agent.py`: 0 Treffer). Auf „was steht noch aus?" in einer frischen Sitzung
+kann er es nicht wissen — und schweigt darüber nicht, sondern antwortet aus der Historie.
+
+**6. Die Snapshot-Erkennung ist rein textuell und historienbegrenzt.**
+`_extract_snapshot_id_from_history` sucht eine UUID im Klartext. Steht sie nicht in der
+(auf 2 Paare à 1000 Zeichen gekürzten) Historie — neue Sitzung, oder „der von gestern" —,
+gibt es keine ID, also keine Entscheidungen und keinen Deep-Link. Die Verschlechterung ist
+STILL: der Agent sagt nicht „ich weiss nicht, welcher Snapshot gemeint ist", er antwortet
+einfach ohne dieses Wissen.
+
+Nichts davon geändert — das war eine Bestandsaufnahme auf Nachfrage.
+
+---
+
+### 2026-08-15 — Alle sechs Audit-Befunde behoben
+- **Status:** done · **Changed files:** `app/memory/short_term.py`,
+  `app/agents/orchestration_agent.py`, `app/agents/chat_agent.py`, `app/core/agent_config.py`,
+  `app/eval/test_agent_context_access.py` (neu)
+
+**1+2+6 in einem Zug: Snapshot-Bezug an die Sitzung gebunden UND nicht mehr zwischengespeichert.**
+`last_snapshot_metadata` am Orchestrator ist ersatzlos entfallen. Stattdessen hält
+`short_term` einen „Fokus-Snapshot" je Sitzung — und zwar NUR die ID, nie die Metadaten.
+Das löst drei Befunde gleichzeitig:
+- Der Wert hängt an der Sitzung, nicht am Prozess. Keine Unterhaltung sieht mehr den
+  Snapshot einer anderen (Befund 1).
+- Eine ID veraltet nicht. Der Zustand dazu wird bei JEDER Frage frisch über
+  `SPAgent._read_snapshot_metadata()` gelesen, statt den Stand vom Herunterladen
+  festzuhalten (Befund 2).
+- Neuer Helfer `_snapshot_in_focus()`: aktuelle Nachricht → Historie → Sitzungs-Fokus.
+  Damit findet der Agent den Snapshot auch dann, wenn die UUID aus der gekürzten Historie
+  herausgefallen ist (Befund 6). `_get_review_decisions` und der Deep-Link-Hinweis laufen
+  jetzt über denselben Weg.
+`short_term.clear()` nimmt den Fokus mit — sonst antwortet eine geleerte Unterhaltung
+weiter zu einem Snapshot, der in ihr nicht mehr vorkommt.
+
+**3. Menschliche Entscheidungen erreichen jetzt JEDE Interpretation**, nicht nur den
+Chat-Pfad. `_interpret_sp_result` hängt sie als eigenen, als verbindlich gekennzeichneten
+Block an — samt der Regel, dass `revalidation.errors_after > 0` eine Entwarnung verbietet.
+
+**4. Kürzung der Teilergebnisse** von fest verdrahteten 200 Zeichen auf
+`max_step_result_chars = 1200` in der Config. Begründung steht dort: die gemessene
+wahrheitsgemässe Antwort ist 570 Zeichen lang, abgeschnitten wurde ab „Die beiden anderen
+Fehler sind weiterhin offen: …".
+
+**5. Offene Vorschläge** über `_open_proposals_for_focus()` in beide Pfade. Bewusst auf den
+Sitzungs-Snapshot eingegrenzt — die Liste kennt keine Mandanten, und offene Vorschläge
+fremder Snapshots gehen eine Unterhaltung nichts an.
+
+**Nachweis.** `eval/test_agent_context_access.py` (neu, 8 Prüfungen) — alle grün, u. a.:
+Sitzung 101/202/303 bleiben getrennt; `clear(101)` lässt 202 unberührt; der gelesene
+Zustand ist identisch mit dem direkt von der Platte; `last_snapshot_metadata` existiert
+nicht mehr; ohne Snapshot-Bezug liefern alle Helfer leer statt irgendetwas.
+Live am Modell zusätzlich: „was war die lösung?" OHNE UUID im Text über den SP-Pfad nennt
+jetzt `D100005_001`, die menschliche Freigabe UND die 2 danach offenen Fehler; „was steht
+noch aus?" listet alle drei offenen Vorschläge mit Fehlerart und Deep-Link und sagt dazu,
+dass sie nicht angewendet sind. Der Wahrheitstest von gestern läuft unverändert grün.
+
+**Ein Nebenbefund beim Bauen:** Mein erster Patch-Lauf brach an einer Stelle mit
+abweichenden Leerzeichen ab — die vorherige Datei war da aber schon geschrieben, und der
+Wiederholungslauf hat ihren Block ein zweites Mal eingefügt. Aufgefallen beim Nachzählen der
+Definitionen, bereinigt. Merke: Patch-Skripte über mehrere Dateien müssen ALLE Anker prüfen,
+bevor sie die erste Datei schreiben.
+
+---
+
+### 2026-08-15 — Vier Architektur-Optimierungen am Orchestrator
+- **Status:** done · **Changed files:** `app/memory/short_term.py`, `app/web_server.py`,
+  `app/agents/base_agent.py`, `app/agents/orchestration_agent.py`,
+  `app/core/agent_config.py`, `app/eval/test_agent_architektur.py` (neu)
+
+Anlass: Bewertung der Gesamtarchitektur auf Nutzerfrage. Ergebnis war, dass das gewählte
+Muster (ein Orchestrator, Fachagenten als Werkzeuge) richtig ist — der Nutzer chattet
+bereits ausschliesslich mit dem Orchestrator. Die Schwäche lag nicht in der Struktur,
+sondern in einer Schicht zu viel.
+
+**1. Herkunft im Verlauf.** `add_message(..., agent_name=...)` schrieb sie seit jeher in die
+Datenbank, `get_history()` baute den Verlauf aber nur aus `role`/`content` wieder auf — die
+Herkunft wurde geschrieben und nie gelesen. Für einen Agenten sah damit ein gemessenes
+Werkzeugergebnis genauso aus wie ein dahingesagter Satz; so konnte sich eine falsche
+Entwarnung über Runden fortpflanzen. Jetzt trägt jeder Beitrag ein Etikett
+(`[Werkzeug-Ergebnis]` / `[Wissensbasis]` / `[Gespräch]`), umgesetzt in
+`short_term.as_llm_messages()` — an genau der Stelle, an der der Verlauf in einen LLM-Aufruf
+übergeht, weil dort zugleich das Feld `agent_name` entfernt werden muss (die
+Chat-Completions-Schnittstelle weist unbekannte Felder zurück). Unbekannte Namen bekommen
+BEWUSST kein Etikett. Dazu die Regel in allen Prompts: ein `[Gespräch]`-Satz belegt nichts.
+
+**2. Nachformulierung für Chat und RAG abgeschaltet.** Gemessen sah dieser Schritt
+3 Nachrichten à 200 Zeichen, der Chat-Agent 10 à 1000 — plus Snapshot-Zustand,
+Review-Entscheidungen und offene Vorschläge, von denen die Schicht nichts sah. Sie konnte
+nichts ergänzen, nur weglassen oder dazuerfinden. Beide Falschaussagen vom 14.08. sind so
+entstanden. **Für den SP-Pfad gilt das ausdrücklich NICHT und dort bleibt die Schicht**: der
+SP-Agent wählt nur das Werkzeug, die Antwort entsteht erst aus dem Werkzeugergebnis.
+Voraussetzung, ohne die es ein Rückschritt gewesen wäre: beide Prompts sagten wörtlich
+„Deine Antworten werden vom Orchestrator aufbereitet" und enthielten weder die
+Wahrheitsregel noch das Verbot technischer Pfade. Erst umgezogen, dann abgeschaltet.
+
+**3. Planung und Intent-Analyse zusammengelegt.** Der Planer benennt sein Ziel längst in
+`action` ("download_snapshot", "full_correction Pipeline"); ein zweiter LLM-Aufruf leitete
+dasselbe noch einmal her (~2,5 s). `_intent_from_plan()` liest es jetzt aus dem Plan —
+verglichen wird gegen die bekannten Namen aus `SP_TOOLS`/`SP_PIPELINES`, und nur bei GENAU
+einem Treffer gilt das Ziel als eindeutig. Alles andere fällt auf die bisherige Analyse
+zurück; die Abkürzung kann also nichts kaputt machen. Geprüft mit 5 Fällen.
+
+**4. Zahlen kommen aus dem Code, nicht aus dem Sprachmodell.** Bisher war der einzige Weg
+einer Messgrösse zum Nutzer ein Satz, den ein Modell darüber geschrieben hat. `_facts_block()`
+rendert die harten Zahlen deterministisch aus dem Ergebnis und hängt sie an die Antwort:
+Fehler/Warnungen, Reichweite eines Analyse-Laufs, „nichts geändert". Er ersetzt die Prosa
+nicht, er verankert sie — widersprechen sie sich, fällt es sofort auf. Fehlen belastbare
+Zahlen, entfällt der Block ersatzlos.
+
+**Nachweis:** `eval/test_agent_architektur.py` (neu, 11 Prüfungen) — alle grün. Die beiden
+bestehenden Reihen (`test_agent_context_access.py`, `test_agent_truthfulness.py`) laufen
+unverändert grün, also ohne Rückschritt.
+
+**Werkzeug-Verbesserung:** `patchlib.apply_all()` prüft ALLE Anker über alle Dateien, bevor
+die erste geschrieben wird, und toleriert abweichende Zeilenend-Leerzeichen. Der alte
+Ablauf hatte zweimal Datei 1 geschrieben, an Datei 2 abgebrochen und beim Wiederholungslauf
+Datei 1 doppelt gepatcht (doppelte Funktionsdefinitionen in `short_term.py`, bereinigt).
+
+---
+
+### 2026-08-15 — BEFUND: „Fehlerstelle im Original" zeigte die falsche Zeile
+- **Status:** done · **Changed files:** `app/routes/review.py`
+
+Nutzerbefund: Zwei offene Vorschläge am selben Artikel zeigten im Block „Fehlerstelle im
+Original (snapshot-data.json)" DIESELBE Stelle — der Vorschlag auf ein einzelnes Feld zeigte
+den Ausschnitt des Vorschlags auf das umgebende Array.
+
+**Ursache.** Der Zielpfad wurde mit
+`re.match(r"^(\w+)\[(\d+)\]\.(\w+)", target_path)` zerlegt. `re.match` prüft nur den ANFANG;
+alles dahinter fiel stillschweigend weg:
+
+    articles[0].workItemConfigs[3].rampUpTime   ->   articles[0].workItemConfigs
+
+Damit landete die Markierung bei BEIDEN Vorschlägen auf `workItemConfigs` (Zeile 7710, das
+ganze Array). Der Reviewer sah zu „rampUpTime 0 → 200" einen Ausschnitt, der diesen Wert gar
+nicht hervorhob — die eine Stelle, die eine Entscheidung tragen soll.
+Nicht auffindbar über den Rückgabewert: die Antwort war formal gültig, nur inhaltlich falsch.
+
+**Behoben.** `_parse_target_path()` zerlegt den Pfad VOLLSTÄNDIG in Namen und Indizes und
+gibt leer zurück, wenn ein Rest unverstanden bleibt (lieber eine ehrliche Fehlermeldung als
+eine falsche Stelle). `_walk_to_parent()` läuft die Schritte ab und benennt im Fehlerfall den
+Abschnitt, an dem der Pfad ins Leere geht; `_set_at()` setzt die Marke am Blatt.
+Beliebige Schachtelungstiefe, nicht nur drei Abschnitte.
+
+**Nachweis** an genau den beiden Vorschlägen aus dem Screenshot:
+- `articles[0].workItemConfigs` -> Zeile 7710, 41 Zeilen markiert (unverändert korrekt)
+- `articles[0].workItemConfigs[3].rampUpTime` -> Zeile **7728**, genau eine Zeile:
+  `"rampUpTime": 0,` — der HE01-Eintrag, passend zu „Vorher 0 / Nachher 200"
+
+**Zur Herkunft der Vorschläge:** `iteration-5` (09:03 UTC) stammt aus meinem
+Diagnoselauf von `generate_correction_llm.py` beim Nachstellen des 429-Fehlers — das Werkzeug
+schreibt bei Erfolg einen echten Vorschlag in die Datenbank. Er ist inhaltlich gültig, aber
+nicht vom Nutzer angefordert.
+
+---
+
+### 2026-08-15 — Sperre gegen doppelte offene Vorschläge + Kennzeichnung überholter
+- **Status:** done · **Changed files:** `app/tools/smart-planning/runtime/generate_correction_llm.py`,
+  `app/agents/sp_agent.py`, `app/agents/orchestration_agent.py`, `app/routes/review.py`,
+  `app/ui/scripts/review.js`, `app/ui/css/styles.css`, `app/eval/*` (Prüfungen nachgezogen)
+
+**Ausgangslage:** Die Sperre existierte bereits — `check_iteration_is_latest` blockiert beim
+ANWENDEN alles ausser der neuesten Iteration. Nur eben zu spät: der überholte Vorschlag sah
+im Review Board aus wie jeder andere, und erst nach Diff lesen, Begründung prüfen und Klicken
+kam ein 409. Die Aufmerksamkeit war investiert, bevor der Widerspruch auffiel.
+
+**1. Sperre beim Erzeugen** (`open_proposal_blocking`, Exit-Code 3). Wartet zu diesem
+Snapshot schon ein Vorschlag, entsteht kein zweiter. Begründung im Code: ein Vorschlag ist
+eine FRAGE an den Menschen; eine zweite zu stellen, bevor die erste beantwortet ist, ergibt
+nur Sinn, wenn beide unabhängig wären — sie sind es nicht, der zweite wird gegen einen
+Datenstand gerechnet, den die erste Entscheidung verändert.
+**Nur unter HUMAN_IN_THE_LOOP.** Ohne den Schalter wendet die Pipeline sofort an und iteriert
+selbst; der Status bleibt dort dauerhaft `pending_review` (auf `applied` setzt ihn allein der
+Review-Pfad), eine bedingungslose Sperre hätte die Automatik nach dem ersten Durchgang
+stillgelegt.
+Zusätzlich dieselbe Frage in `execute_pipeline`, BEVOR der erste Schritt läuft — sonst
+schlüge die Sperre erst nach `identify_error_llm` zu, also nach einem LLM-Aufruf umsonst.
+Gemessen: 0,04 s statt ~6 s.
+
+**2. Exit-Code 3 ist kein Fehlschlag.** Die Pipeline wiederholte sonst dreimal dasselbe und
+meldete am Ende Scheitern, obwohl alles richtig lief. Neu: `waiting_for_decision` bricht ohne
+Wiederholung ab, und der Orchestrator antwortet ohne LLM-Aufruf mit einer festen Meldung samt
+Deep-Link.
+
+**3. Kennzeichnung im Review Board.** `_annotate_applicability` hängt `applicable` und
+`not_applicable_reason` an Liste und Detail. In der Oberfläche: Abzeichen „überholt",
+Karte gedimmt (bei Hover wieder voll), in der Detailansicht ein Warnkasten — und
+„Genehmigen"/„Wert ändern" sind entfernt. **„Ablehnen" bleibt**, ein überholter Vorschlag
+muss vom Tisch können.
+Im Browser geprüft: 3 von 5 offenen Vorschlägen sind überholt (auch auf einem zweiten
+Snapshot), Abzeichen und Warnkasten erscheinen, die beiden anwendenden Knöpfe fehlen.
+
+**BEFUND beim Testen — eigener Fehler von gestern behoben.** `_describe_analysis_scope` las
+die Validierung NUR aus dem Iterationsordner. Die legt aber nur `apply_correction` an; ein
+reiner Analyse-Lauf schreibt sie nie. Das `or []` machte daraus ein klammheimliches
+„0 Fehler gefunden" — eine erfundene Zahl an genau der Stelle, die Zahlen belastbar machen
+soll. Jetzt Rückfall auf die Datei eine Ebene darüber (die `validate_snapshot` als ersten
+Schritt des Laufs schreibt), und bei Widerspruch (behandelter Fehler, aber keine Meldungen)
+gar keine Angabe statt einer falschen.
+
+**Zwei Prüfungen waren zu grob** und hätten künftige echte Regressionen verdeckt:
+- Feste Zahlen (`'3' in block`) — der Snapshot-Zustand ändert sich mit jeder Freigabe.
+  Jetzt aus den Daten abgeleitet.
+- Reine Wortsuche nach „fehlerfrei"/„einsatzbereit"/„valide". Dreimal falscher Alarm bei
+  Sätzen wie „der Snapshot ist **noch nicht** fehlerfrei" — inhaltlich genau richtig. Jetzt
+  satzweise und nur ohne Verneinung im selben Satz. Gegengeprüft: die FALSCHE Antwort vom
+  14.08. schlägt weiterhin an, die richtigen von heute nicht mehr.
+Alle drei Testreihen grün, der Wahrheitstest zweimal hintereinander stabil.
+
+---
+
+### 2026-08-15 — Zusammenfassende Dokumentation der Agenten-Architektur
+- **Status:** done · **Changed files:** `docs/AGENTEN_ARCHITEKTUR.md` (neu, 315 Zeilen),
+  `app/README-PT4.md` (Querverweis)
+
+Auf Wunsch: alle Änderungen der letzten drei Tage an einer Stelle, mit Begründung und dem
+aktuellen Stand — statt verstreut über die chronologischen Einträge hier.
+
+Inhalt: Aufbau und Antwortwege je Agent (samt der Messung, warum Chat/RAG selbst
+antworten und SP nicht), gemeinsamer Verlauf und Herkunfts-Etiketten, Wahrheitspflicht mit
+den drei Falschaussagen vom 14.08. und ihrer Ursache, ein Fehler pro Lauf im betreuten
+gegenüber dem automatischen Betrieb, die Sperre samt ihrer HitL-Bindung, und die
+Gedächtnis-Frage.
+
+**Drei Nutzerannahmen im Code gegengeprüft und bestätigt:**
+1. Die Sperre greift ausschliesslich bei `HUMAN_IN_THE_LOOP=true` — belegt an beiden
+   Stellen (`if not HUMAN_IN_THE_LOOP: return None` im Werkzeug, `and HUMAN_IN_THE_LOOP`
+   in `execute_pipeline`). Ohne den Schalter läuft alles unverändert.
+2. Die automatische Pipeline behebt einen Fehler je Iteration und wiederholt bis 0 Fehler
+   oder `MAX_CORRECTION_ITERATIONS = 5`.
+3. **Das Gedächtnis ist vom Schalter unabhängig.** Im Generator kommt `HUMAN_IN_THE_LOOP`
+   nur in der neuen Sperre vor; `find_similar_cases`, `format_cases_for_prompt`,
+   `same_entity_confirmed_value` und `compute_memory_support` stehen davor und sind an
+   keine Bedingung geknüpft. Geschrieben wird `memory_items` ausschliesslich über
+   `long_term.record_case_safe()` aus `routes/review.py`, also nur durch menschliche
+   Entscheidungen. Bestand aktuell 12 Einträge (6 genehmigt, 5 geändert, 1 verworfen).
+   Praktische Folge: im automatischen Betrieb werden bereits korrigierte Fehler NICHT
+   wiederholt — für dasselbe Objekt greift sogar zwingend der Gedächtnis-Override.
+
+Automatisch gegengeprüft: alle 12 im Dokument genannten Code-Stellen existieren
+tatsächlich (Funktionsnamen, Konstanten, Bedingungen).
+
+---
+
+### 2026-08-15 — BEFUND (Nutzer): falsches Vergleichskollektiv + Absturz beim Anwenden
+- **Status:** done · **Changed files:** `app/tools/smart-planning/runtime/apply_correction.py`,
+  `app/tools/smart-planning/runtime/identify_snapshot.py`,
+  `app/tools/smart-planning/runtime/generate_correction_llm.py`
+
+**A) Anwenden stürzte bei tief verschachtelten Zielpfaden ab.** `parse_target_path` kennt
+vier feste Formen; `articles[0].workItemConfigs[3].rampUpTime` ist keine davon. Die
+Entscheidung des Menschen (modify auf 120) war bereits gespeichert, das Anwenden brach mit
+`ValueError` ab — Status blieb `modified`, `errors_after=None`.
+Dieselbe Fehlerklasse wie am selben Tag in `routes/review.py` (dort zeigte die Fehlerstelle
+die falsche Zeile), hier mit härteren Folgen: die Korrektur bleibt ganz aus.
+Behoben durch `tokenize_target_path()` + `resolve_deep_path()` — beliebige Tiefe, mit
+Benennung des Abschnitts, an dem der Pfad ins Leere geht. `parse_target_path` blieb
+UNVERÄNDERT (auch `add_to_array`/`remove_from_array` hängen daran); nur bisher abstürzende
+Pfade nehmen den neuen Weg. Geprüft: die zwei neuen Formen greifen, die zwei bisherigen
+verhalten sich identisch, kaputte Pfade werden benannt statt blind geschrieben.
+
+**B) Der Vorschlag beruhte auf dem falschen Vergleichskollektiv.** Der Nutzer hat das
+belegt, ich habe es unabhängig nachgerechnet und bestätige es:
+- Die zitierten „Artikel aus demselben Department (20100)" — 100079, 100099, 100112 —
+  liegen alle in Department **20200**. Zielartikel 100005 liegt in 20100.
+- Es sind exakt `articles[1]`, `articles[2]`, `articles[3]` — die **Array-Nachbarn**.
+- HE01 im Department 20100: **326 von 331** Artikeln tragen 120/0.3. Der vorgeschlagene
+  Wert 200/0.25 kommt dort **einmal** vor (im 20200 dagegen 90-mal).
+- 100005 ist der einzige 20100-Artikel am Anfang des Arrays; 20100 beginnt sonst ab 106313.
+  Bei nach Department sortiertem Array wäre der Fehler zufällig nicht aufgetreten.
+
+**Ursache — nicht dort, wo man sie vermutet.** `similar_items` wird bereits KORREKT über
+`departmentId` gebildet. Nur tragen seine Einträge ausschliesslich `relDensityMin` und
+`relDensityMax`, und `similar_items_stats` rechnet nur für diese beiden. Ging es um
+Zeitwerte, war das fachlich richtige Kollektiv also **stumm** — die einzigen HE01-Werte im
+Kontext standen in `items_before`/`items_after`.
+
+**Behoben:**
+1. `work_item_config_stats_same_department` — Verteilung der Zeitwerte je `workItemKey`
+   über alle Artikel desselben Departments. Bewusst eine VERTEILUNG statt einer Liste:
+   331 Artikel × ~13 Arbeitsgänge würden den Prompt sprengen, und „326 von 330" trägt eine
+   Entscheidung, während drei Beispiele das nicht tun. Gegen die echten Daten geprüft:
+   HE01 → 120/0.3 bei 326 von 330 (98,8 %), 200/0.25 bei 1 (0,3 %).
+2. `items_neighbours_note` — die Nachbarn sagen im Kontext jetzt selbst, dass Array-Nähe
+   keine fachliche Vergleichbarkeit ist und sie als Beleg nicht taugen.
+3. Prompt-Regel „WORAUF DU EINEN WERT STUETZEN DARFST": nur geprüfte Vergleichsmerkmale
+   nennen; Nachbarn sind kein Beleg; bei einer Verteilung den häufigsten Wert samt
+   Häufigkeit nennen; Abweichung von der Mehrheit senkt die Sicherheit. Und der Punkt aus
+   dem Nutzerbefund: die Selbsteinschätzung misst die Übereinstimmung mit den DATEN, nicht
+   die Schlüssigkeit der eigenen Begründung.
+
+**Offen, bewusst nicht entschieden:** `netTimeFactor` bleibt bei 0. Die Validierungsregel
+verlangt nur, dass EINER der beiden Werte > 0 ist — mit `rampUpTime=120` ist sie erfüllt und
+der Fehler verschwindet. Fachlich wäre 0.3 richtig (326 von 330 im Department), aber das ist
+kein Validierungsfehler und wird deshalb nicht eigenmächtig geändert.
+
+---
+
+### 2026-08-15 — Zwei Nutzerbefunde im Review Board + ein alter Bremsklotz
+- **Status:** done · **Changed files:** `app/ui/scripts/review.js`, `app/ui/css/styles.css`,
+  `app/web_server.py`
+
+**1. Überholter Vorschlag liess sich nicht ablehnen — MEIN Fehler von heute früh.**
+`wireDecisionPanel` begann mit `if (!approveBtn || !rejectBtn) return;`. Das warf zwei Fälle
+in einen: die bereits entschiedene Ansicht (gar keine Knöpfe) und die neue überholte Ansicht,
+die NUR „Ablehnen" hat. Dort kehrte die Funktion vor dem Verdrahten zurück, und der einzige
+verbliebene Knopf tat nichts — ein überholter Vorschlag liess sich weder anwenden noch
+loswerden. Genau die Sackgasse, die die Kennzeichnung verhindern sollte.
+Jetzt wird jeder vorhandene Knopf einzeln verdrahtet.
+
+**2. Präzedenzfälle waren eine Textwand.** `JSON.stringify` ohne Begrenzung; ein korrigiertes
+`workItemConfigs`-Array sind 13 Objekte in einer Zeile. Jetzt Kurzform („Liste mit 13
+Einträgen") mit aufklappbarem Volltext — weggelassen wird nichts, nur nicht mehr alles
+gleichzeitig gezeigt.
+
+**3. Der vermisste Zähler war da — aber 2 Sekunden zu spät.** Erst falsch verdächtigt: die
+neue Anwendbarkeits-Prüfung. Gemessen kostet sie 9 ms für alle drei Vorschläge, nicht 2 s.
+Weitergemessen: JEDE Route braucht ~2050 ms, auch eine statische Datei.
+URSACHE: `localhost` löst auf diesem System zuerst nach `::1` auf, der Entwicklungsserver
+lauscht aber nur auf IPv4 (`app.run` ohne `host`). Jede Anfrage läuft in einen
+IPv6-Fehlversuch und wird danach über IPv4 wiederholt. `http://127.0.0.1:8000` → **17 ms**.
+Das betrifft die ganze Anwendung und bestand lange vor den Änderungen dieser Woche.
+`DEV_SERVER_HOST` macht die Bindeadresse jetzt einstellbar, **Voreinstellung bleibt
+127.0.0.1**: ein dualstack-fähiges `::` würde beide Namen sofort bedienen, aber zugleich auf
+allen Netzwerkschnittstellen lauschen — zusammen mit `debug=True` (Werkzeug-Debugger) eine
+Exposition, die eine Entwicklungsbequemlichkeit nicht rechtfertigt. Empfehlung an den
+Nutzer: im Browser `127.0.0.1` verwenden.
+
+**EIGENER FEHLER, offengelegt:** Meine Browser-Prüfung hat auf „Ablehnen" GEKLICKT, um die
+Verdrahtung zu testen — und damit `iteration-4` tatsächlich abgelehnt (Kommentar „Prüfung –
+nicht absenden", Review-Zeile + Gedächtnis-Eintrag #17). Das Rückgängig-Fenster lief im
+Kopflos-Browser ab, die Entscheidung ging durch. Ergebnis war zwar das vom Nutzer
+beabsichtigte, aber es war nicht seine Entscheidung und der Kommentar ist falsch.
+Dem Nutzer gemeldet, Bereinigung ihm überlassen.
+**Regel für künftige Prüfungen: in einer Messung niemals Knöpfe auslösen, die etwas
+schreiben. Verdrahtung prüft man am Handler, nicht am Klick.**
+
+**Nachtrag zur Präzedenz-Darstellung (Nutzerbefund, selber Tag).** Die Aufklapp-Pfeile
+standen im Review Board als wörtliches „B8" bzw. „BE" vor der Kurzform, und der native
+`<details>`-Marker war zusätzlich sichtbar.
+Ursache: Beim Erzeugen der CSS-Regeln lief `\25B8` durch eine Shell, die `\25` als
+OKTAL-Escape las — in der Datei landete das Steuerzeichen **0x15** gefolgt von „B8".
+Der Fehler war mit `grep`/Read nicht zu sehen, weil ein Steuerzeichen unsichtbar ist; erst
+`repr()` der Zeile hat ihn gezeigt. Zwei Reparaturversuche über Shell-Kommandos sind an
+derselben Ursache erneut gescheitert.
+Behoben, indem die Zeichen ohne jeden Backslash gesetzt wurden (`chr(0x25B8)`), plus
+`summary::marker { content: "" }` für aktuelles Chrome/Firefox — `list-style: none` und
+`::-webkit-details-marker` allein reichen dort nicht.
+Nur-Lesen geprüft (kein Klick, nichts gesendet): drei Werte, alle zugeklappt, Kurzform
+„Liste mit 13 Einträgen", `::before` = „▸", `::marker` leer.
+
+**Lehre für Patch-Skripte:** Sonderzeichen niemals als Escape-Sequenz durch eine Shell
+schicken. Entweder das Zeichen direkt schreiben oder es im Python-Code aus `chr()` bauen.
+Betroffen waren an diesem Tag auch Backticks in Kommentaren (dreimal von der Shell als
+Kommando-Substitution verschluckt).
+
+---
+
+### 2026-08-15 — Formzwang raus, Wahrheitspflicht bleibt + zwei Absturz-Ursachen
+- **Status:** done · **Changed files:** `app/core/agent_config.py`, `app/agents/sp_agent.py`,
+  `app/eval/test_agent_truthfulness.py`
+
+**BEFUND A — „approved. nächstes" wurde sehr wohl verstanden.** Der Nutzer vermutete ein
+Verständnisproblem. Tatsächlich: der Lauf startete, `identify_error_llm` wählte korrekt den
+AAR01-Fehler, `iteration-7` entstand — und `generate_correction_llm` starb an einer
+PRINT-Zeile: `UnicodeEncodeError: 'charmap' codec can't encode character '→'`. Ein
+Pfeil „→" in `relevant_cards_reasoning`, gedruckt auf eine cp1252-Konsole. Nicht die Ausgabe
+wurde verstümmelt, das Werkzeug starb; der Vorschlag entstand nie.
+Behoben in `_run_tool`: `PYTHONIOENCODING=utf-8`, `PYTHONUTF8=1`, dazu `encoding="utf-8",
+errors="replace"` beim Lesen. Betrifft ALLE Werkzeuge, nicht nur dieses.
+Bezeichnend: mein eigenes Prüfskript ist beim Verifizieren an derselben Stelle abgestürzt,
+während das Werkzeug bereits Exit-Code 0 lieferte.
+
+**BEFUND B — die Musterantwort kommt nicht von einer Formvorschrift.** Gezählt: 60
+Regelzeilen im Auswertungs-Prompt, aber nur 3 schreiben eine Form vor. Das Muster entstand
+aus zwei anderen Stellen:
+1. Eine Frageliste am Prompt-Ende („Was ist das Ergebnis? / Bei Erfolg: … / Bei Fehler: …").
+   Als Erinnerung gemeint, als Vorlage gewirkt — das Modell beantwortete jede Frage als
+   eigenen Abschnitt.
+2. Ein echter Widerspruch: Chat-Prompt „standardmässig DETAILLIERTE, ausführliche Antworten"
+   mit Überschriften, Auswertungs-Prompt „2-3 Sätze". Beides zugleich ist unerfüllbar; das
+   Modell löste es jedes Mal gleich auf — zur strukturierten Langform.
+
+**Getrennt statt pauschal gekürzt:** FORMREGELN schreiben eine Stimme vor und fielen weg.
+WAHRHEITSREGELN verbieten falsche Aussagen und blieben — sie sagen nicht, WIE geantwortet
+wird, nur was nicht behauptet werden darf. Neu: ein Abschnitt „DEINE STIMME" (keine
+Pflichtgliederung, Register des Nutzers übernehmen, aufeinanderfolgende Antworten dürfen
+verschieden aussehen, keine rituellen Schlussfloskeln) und ein verdichteter Abschnitt „WAS
+DU NICHT BEHAUPTEN DARFST".
+Zwischenfehler dabei bemerkt und behoben: der Chat-Prompt verwies auf „DEINE STIMME", das
+aber nur in `BASE_INTERPRETATION_RULES` stand — einem Text, den Chat und RAG gar nicht
+verwenden. Der Verweis ging ins Leere; der Abschnitt steht jetzt in allen drei Prompts.
+
+**Gemessen, dieselben vier Anfragen vorher/nachher:**
+| Fall | vorher | nachher |
+|---|---:|---:|
+| „kurz: ist er valide?" | 268 Z. | 204 Z. |
+| „was ist der stand?" | 759 Z. | 417 Z. |
+| „und jetzt" | 503 Z. | 427 Z. |
+| „okay approved. nächstes" (Pipeline) | 552 Z. | 320 Z. |
+
+Rituelle Schlussfloskeln („Sag Bescheid, falls…"): vorher 3, nachher 0.
+Der beanstandete Pipeline-Fall verlor 42 % Text und endet jetzt mit einer echten Rückfrage
+statt einer Floskel. Alle drei Testreihen grün, der Wahrheitstest zweimal stabil.
+
+**Prüfungs-Erwartungen erneut datengetrieben gemacht.** Fall 2 forderte „2 Fehler" und
+„HE01" — nach der Freigabe von iteration-6 ist HE01 behoben und nur AAR01 offen. Der Test
+meldete damit einen Fehler, wo keiner war. Erwartung kommt jetzt aus
+`revalidation.still_open_errors`.
+
+---
+
+### 2026-08-15 — BEFUND: Pipeline lief auf einem Snapshot, der nie heruntergeladen war
+- **Status:** done · **Changed files:** `app/tools/smart-planning/runtime/identify_error_llm.py`
+
+Nutzerbefund: „mach mir bitte Korrekturvorschläge" scheiterte mit
+`last_search_results.json not found`, und die Fehlermeldung riet, erst `identify_error_llm`
+auszuführen — obwohl der Schritt laut Log erfolgreich gelaufen war.
+
+**Beweis über Zeitstempel.** Im Ordner des Snapshots lagen vor der Untersuchung nur:
+`snapshot-validation.json` (18:12:08, vom Validieren) und `iteration-1/llm_identify_*`
+(18:12:15). `metadata.txt` und `snapshot-data.json` entstanden erst um 18:14:30 — durch
+meinen eigenen Download. **Es hat also nie ein Download stattgefunden**, obwohl der Agent in
+der Runde davor „Download erfolgreich abgeschlossen" gemeldet hatte.
+Warum die Validierung trotzdem lief: `validate_snapshot` fragt den SERVER, nicht die lokale
+Datei. Sie kann also erfolgreich sein, während lokal gar nichts liegt.
+
+**Ursache der irreführenden Meldung.** `identify_error_llm` ruft `trigger_identify_tool()`
+auf, das True/False zurückgibt — **der Rückgabewert wurde verworfen**. Die Suche scheiterte
+(nichts zu durchsuchen), der Schritt meldete Erfolg, die Pipeline lief zwei Schritte weiter,
+und erst `generate_correction_llm` stolperte über die fehlende Datei. Der Hinweis zeigte
+damit auf den falschen Schritt.
+
+**Behoben, zweistufig:**
+1. Der Rückgabewert wird ausgewertet; scheitert die Suche, endet der Schritt mit Exit-Code 1
+   und einer Meldung, die sagt, was fehlt. Ein Schritt, der sein Ergebnis nicht liefert, ist
+   kein erfolgreicher Schritt.
+2. Vorbedingung davor: fehlt `snapshot-data.json`, sagt das Werkzeug im Klartext „Der
+   Snapshot wurde offenbar nie heruntergeladen. Zuerst download_snapshot ausführen" — statt
+   einen Folgefehler zwei Schritte später zu erzeugen, der auf die falsche Ursache zeigt.
+
+**Geprüft**, indem die Lage nachgestellt wurde (Datei beiseite, danach zurück): Exit-Code 1
+statt 0, beide Klartextmeldungen erscheinen. Anschliessend mit vorhandenen Daten: Pipeline
+läuft vollständig durch, 2 Fehler gefunden, 1 behandelt, 1 unberührt.
+
+**OFFEN und dem Nutzer gemeldet:** Warum die Download-Runde „erfolgreich" meldete, ohne
+etwas zu schreiben, lässt sich ohne die Log-Zeilen jener Runde nicht belegen. Zwei
+Möglichkeiten: der Planer hat gar kein `download_snapshot` gewählt, oder das Werkzeug ist
+gescheitert und die Auswertung hat es beschönigt. Das ist der eigentliche Ursprungsfehler
+und noch nicht behoben.
+
+---
+
+### 2026-08-15 — BEFUND: falscher Snapshot heruntergeladen (Regression durch meine Optimierung)
+- **Status:** done · **Changed files:** `app/agents/orchestration_agent.py`,
+  `app/agents/sp_agent.py`, `app/db/repository.py`, `app/agents/chat_agent.py`,
+  `app/eval/test_agent_truthfulness.py`, `app/eval/test_agent_context_access.py`
+
+**Der vollständige Log zeigte die Ursache.** Der Nutzer verlangte `9faf89b1`, geladen wurde
+`a810d470`:
+
+    18:11:48  SP-Intent aus dem Plan uebernommen (ein LLM-Aufruf gespart)
+    18:11:48  Führe Tool aus: download_snapshot mit Args: ['a810d470-…']
+    18:11:50  Fokus-Snapshot dieser Sitzung: a810d470-…
+
+**Regression durch meine Optimierung 3 vom selben Tag.** `_intent_from_plan` bekam
+`snapshot_id_from_history` — also NUR die Historie. Eine ID, die der Nutzer in seiner
+AKTUELLEN Nachricht nennt, steht dort noch nicht. Der alte Weg über die LLM-Intent-Analyse
+hatte den Nutzertext im Prompt und war deshalb nicht betroffen; meine Abkürzung hat genau
+diese Quelle übersprungen.
+Behoben: der Kurzschluss nutzt jetzt `_snapshot_in_focus(chat_history, user_input)` —
+aktuelle Nachricht vor Historie vor Sitzungs-Fokus. Beide Richtungen geprüft: mit ID in der
+Nachricht gewinnt die neue, ohne ID greift weiterhin die Historie.
+Folgeschaden geprüft: der versehentliche Neu-Download von `a810d470` hat die angewendeten
+Korrekturen NICHT verloren (rampUpTime 120, netTimeFactor 0.3, demandId gesetzt) — sie waren
+zuvor hochgeladen worden und kamen vom Server zurück.
+
+**Nutzerannahme korrigiert.** Der Nutzer vermutete, der Agent habe die Reihenfolge
+missachtet und `identify_error_llm` übersprungen. Der Log widerlegt das: 18:12:08 identify,
+18:12:15 erfolgreich, danach generate. Die Reihenfolge stimmte — der Schritt lief ins Leere,
+weil die Snapshot-Daten fehlten (siehe voriger Eintrag).
+
+**Die irreführende Auskunft hatte eine eigene Quelle.** `_suggest_recovery` mappte
+„last_search_results.json fehlt" fest auf `missing_step: identify_error_llm` — eine
+verdrahtete VERMUTUNG, die hier falsch war und dem Nutzer riet, einen Schritt nachzuholen,
+den das System gerade selbst ausgeführt hatte. Ersetzt durch die Tatsache („die Suche hat
+keine Ergebnisdatei erzeugt; in einer Pipeline läuft die Identifikation davor") plus
+wahrscheinliche Ursache statt behaupteter.
+
+**Zusatzbefund, vom Test gefunden.** Der Chat-Agent zitierte die Nachvalidierung einer
+ÄLTEREN Entscheidung („noch 1 Fehler offen"), obwohl die jüngste bereits 0 meldete. Die
+Liste ist nach Datum sortiert, aber das sieht man ihr nicht an. Die jüngste trägt jetzt
+`ist_aktueller_stand: true`, und die Regel im Chat-Kontext sagt, dass nur sie den JETZIGEN
+Zustand beschreibt.
+
+**Drei eigene Prüfungen waren zu starr** und meldeten Fehler, wo das System richtig lag:
+1. Erwartung `decision == 'approve'` — die Entscheidungsart ändert sich mit jeder
+   Nutzeraktion. Auf das Wesentliche eingegrenzt.
+2. Entwarnung war ABSOLUT verboten. Bei 0 offenen Fehlern ist „fehlerfrei" aber die
+   Wahrheit — das Verbot hätte dem System vorgeschrieben zu untertreiben. Jetzt an
+   `errors_after` gekoppelt.
+3. „sagt, dass nichts geändert wurde" per Wortliste — dreimal an freier Formulierung
+   gescheitert („nichts korrigiert … nichts umgesetzt oder hochgeladen"). Statt weiter
+   Synonyme zu sammeln, prüft `sagt_nichts_geaendert()` jetzt die AUSSAGE: Verneinung und
+   Änderungsverb im selben Satz. Gegen alle fünf bisher gescheiterten Formulierungen und
+   eine Gegenprobe getestet.
+
+Alle drei Testreihen grün, der Wahrheitstest dreimal hintereinander stabil.
+
+**Nachtrag (Nutzerbefund): Review-Links waren reine Pfade.** Im Chat kam
+`/review.html?proposal=…` an; auf die Bitte „gib mir den vollständigen Link" wiederholte das
+Modell denselben Pfad — es KONNTE nicht mehr liefern, weil es den Host nicht kennt. Nur der
+E-Mail-Agent nutzte `APP_BASE_URL`, vier andere Stellen bauten relative Pfade.
+
+Wichtige Präzisierung, vom Nutzer angestossen: Es gibt ZWEI Quellen, und sie waren
+unterschiedlich gut. Der Deep-Link-Hinweis (`_review_board_hint`) lieferte einen
+**Markdown-Link** — relativ, aber im Browser anklickbar; deshalb hatte der Agent im selben
+Chat vorher schon einmal einen funktionierenden Link erzeugt. Der nackte Pfad stammte aus
+dem Block „offene Vorschläge", den ich am selben Tag hinzugefügt hatte: dort stand der Pfad
+als reiner Text, ohne Markdown, und das Modell gab ihn wörtlich weiter. Er erscheint zudem
+in Fällen, in denen es gar keinen Deep-Link-Hinweis gibt (der hängt nur an `analyze_only`).
+
+Behoben: `APP_BASE_URL` in `core/agent_config.py` als einzige Quelle, mit Normalisierung
+gegen ein doppeltes Schema (`http://http://…` gab es hier schon einmal). Alle vier Stellen
+nutzen sie. Zusätzlich trägt jeder offene Vorschlag jetzt ein Feld `review_url` mit dem
+fertigen Link — das Modell soll ihn kopieren, nicht bauen; einen Host kann es nicht erraten.
+Geprüft: beide Quellen liefern `http://localhost:8000/review.html?proposal=…`.
+
+**Nachtrag (Nutzerbefund): grüner „Wert ist belegt"-Kasten lief über.** Der Begründungstext
+enthält den Feldpfad `packagingEquipmentCompatibility[1].predecessors` — 46 Zeichen ohne
+Trennstelle. Gemessen: Kasten 324px, Inhalt 381px, also **57px über den grünen Rand hinaus**.
+Ursache ist dieselbe wie beim Dashboard-Popover: ein Flex-Kind hat `min-width: auto` und ist
+damit mindestens so breit wie sein längstes unbrechbares Wort. `min-width: 0` allein reicht
+hier nicht — der Bezeichner braucht zusätzlich `overflow-wrap: anywhere`, sonst bleibt er
+trotzdem in einer Zeile.
+Nachgemessen bei 1440px und 1100px: kein Überlauf mehr (322/324 bzw. 1000/1002).
+Dieselbe Vorsorge in `.rb-callout` ergänzt — dort steht heute ein Satz mit Leerzeichen, aber
+sobald eine Vorschlags-ID hineingerät, wäre es derselbe Fehler.
+
+---
+
+### 2026-08-15 — Befunde und Lehren zusammengefasst dokumentiert
+- **Status:** done · **Changed files:** `docs/BEFUNDE_UND_LEHREN.md` (neu),
+  `docs/AGENTEN_ARCHITEKTUR.md`, `app/eval/check_doku_stimmt.py` (neu)
+
+Auf Wunsch: die Erkenntnisse der letzten zwei Tage an einer Stelle. Bewusst NICHT noch eine
+Chronologie — die steht hier. Das neue Dokument verdichtet **16 Befunde auf sechs
+wiederkehrende Muster** und leitet aus jedem eine Regel ab:
+
+1. Ein Schritt, der sein Ergebnis nicht liefert, meldet trotzdem Erfolg (3 Fälle)
+2. Wissen liegt vor, erreicht aber den Empfänger nicht (4 Fälle)
+3. Eine starre Regel bestraft irgendwann die richtige Antwort (4 Fälle)
+4. Eine Abkürzung überspringt eine Quelle, von der niemand wusste (1 Fall, teuer)
+5. Sonderzeichen überleben den Weg durch eine Shell nicht (3 eigene Fehler)
+6. Ein Flex-Kind ist so breit wie sein längstes unbrechbares Wort (2 Fälle)
+
+Dazu Teil III: **zwei Fehler in meiner eigenen Arbeitsweise** — das Patch-Skript, das bei
+Abbruch die erste Datei doppelt schrieb, und die Browser-Prüfung, die auf „Ablehnen"
+geklickt und damit wirklich abgelehnt hat. Beide behoben, beide als Regel festgehalten.
+
+`AGENTEN_ARCHITEKTUR.md` auf den Abendstand nachgezogen: der Abschnitt über die Trennung von
+Formzwang und Wahrheitspflicht („Deine Stimme"), die Link-Quelle `APP_BASE_URL`, und die
+offenen Punkte um den IPv6-Bremsklotz und die Planer-Eigenheit ergänzt.
+
+**Gegen die Wirklichkeit geprüft**, nicht nur geschrieben: `eval/check_doku_stimmt.py` (neu)
+prüft alle 34 Behauptungen beider Dokumente gegen den Code — Funktionsnamen, Konstanten,
+Bedingungen, Prompt-Abschnitte, CSS-Regeln. Alle belegt. Der Lauf ist wiederholbar und
+schlägt an, sobald eine Umbenennung die Dokumentation still veralten lässt.
+
+---
+
+### 2026-08-15 — `app/eval/` gesichtet: alles wird gebraucht, ein Pfad war veraltet
+- **Status:** done · **Changed files:** `docs/BACHELORARBEIT_UMSETZUNGSPLAN.md`
+
+Auf die Frage, ob in `app/eval/` alles gebraucht wird — geprüft, wer die Dateien referenziert:
+
+* **`run_isolated_suite.py`, `run_combined_suite.py`, `run_iterative.py`** — stehen in
+  `PT4_PLAN.md:508` als AP-E.6, dort selbst „die tragende Empirie von AP-E" genannt. Sie
+  haben die Zahlen erzeugt, die im Plan stehen (isoliert 10/10 Erkennung, 8/10
+  Lokalisierung, 4/10 Wert exakt; kombiniert 18/20 Fehler, Gedächtnis-Wiedererkennung bei
+  7/10). Ohne sie sind die Zahlen im Bericht nicht mehr reproduzierbar. BEHALTEN.
+* **`build_test_catalog.py`** — zweimal im `BACHELORARBEIT_UMSETZUNGSPLAN.md` als
+  „Lösungsansatz für das Ground-Truth-Problem". Wird für die Bachelorarbeit gebraucht,
+  nicht nur für PT4. BEHALTEN.
+* **Die vier neuen Prüfläufe** (`test_agent_truthfulness`, `test_agent_context_access`,
+  `test_agent_architektur`, `check_doku_stimmt`) — Regressionsnetz für die Befunde vom
+  14./15.08. BEHALTEN.
+* `__pycache__/` ist bereits gitignoriert, kein Handlungsbedarf.
+
+**Korrigiert:** Der Bachelorarbeits-Plan verwies zweimal auf `demo/eval/build_test_catalog.py`.
+Der Ordner heisst seit dem 02.08. `app/`. Beide Stellen auf `app/eval/…` gezogen und geprüft,
+dass die Datei dort tatsächlich liegt — sonst wäre der Verweis beim Start der Arbeit ins
+Leere gelaufen.

@@ -3,6 +3,7 @@ BaseAgent - Basis-Klasse für alle Agenten
 """
 from typing import Dict, Optional
 from core.agent_config import CHAT_HISTORY_CONFIG
+from memory import short_term
 
 
 class BaseAgent:
@@ -70,5 +71,9 @@ class BaseAgent:
             if len(truncated_msg.get("content", "")) > max_chars:
                 truncated_msg["content"] = truncated_msg["content"][:max_chars]
             truncated_history.append(truncated_msg)
-        
-        return truncated_history
+
+        # Einziger Ort, an dem der Verlauf in einen LLM-Aufruf uebergeht. Die Umwandlung
+        # gehoert deshalb genau hierhin: sie stellt die Herkunft voran und entfernt zugleich
+        # das Feld `agent_name`, das die Chat-Completions-Schnittstelle als unbekanntes Feld
+        # zurueckweisen wuerde.
+        return short_term.as_llm_messages(truncated_history)

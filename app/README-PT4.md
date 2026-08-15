@@ -96,25 +96,43 @@ Bei `true` werden folgende Pfade blockiert (kein automatisches Schreiben in `sna
 
 ## Confidence-Score
 
-Jeder erzeugte Korrekturvorschlag trägt drei Felder:
-
-```json
-"correction_proposal": {
-  "llm_confidence": 0.95,      // LLM-Selbsteinschätzung (0.0–1.0)
-  "schema_valid": true,        // Pydantic-Validierung bestanden
-  "confidence_score": 0.775    // berechnetes Komposit
-}
-```
-
-**Formel** (in `generate_correction_llm.py`, Funktion `compute_confidence_score`):
+Jeder Korrekturvorschlag trägt eine Konfidenz zwischen 0 und 1, zusammengesetzt aus drei
+Signalen:
 
 ```
-confidence = 0.5 · llm_confidence
-           + 0.3 · schema_valid     (1.0 wenn gültig, 0.0 sonst)
-           + 0.2 · memory_support   (AP7; derzeit 0.0)
+Konfidenz = 0.5 · llm_confidence     Selbsteinschätzung des Modells
+          + 0.3 · value_grounded     Wert aus den Daten belegbar? (deterministisch, kein LLM)
+          + 0.2 · memory_support     Rückhalt aus früheren menschlichen Entscheidungen
+
+danach:  ist memory_support == 1.0, gilt mindestens 0.9
 ```
 
-**Sonderfall:** `action == "manual_intervention_required"` → Score wird zwingend auf `0.0` gesetzt.
+Sonderfall: `action == "manual_intervention_required"` → Score zwingend `0.0`.
+
+Die drei Signale stammen aus **drei verschiedenen Quellen** — das ist der Kern der Konstruktion:
+
+| Signal | Quelle |
+|---|---|
+| `llm_confidence` | das Modell selbst |
+| `value_grounded` | der Snapshot (`snapshot-data.json`), deterministisch geprüft |
+| `memory_support` | die Tabelle `memory_items` (frühere menschliche Entscheidungen) |
+
+Nur das erste kommt aus dem Modell. Die beiden anderen sind reproduzierbar und dürfen die
+Selbsteinschätzung deshalb korrigieren.
+
+> **Diese Darstellung ist bewusst knapp.** Die Zahl ist governance-relevant — welche Frage
+> hinter jedem Signal steckt, warum die Selbsteinschätzung nur halb zählt, warum es die
+> Untergrenze gibt und wie ein Prüfer die Zahl lesen sollte, steht in
+> **[`docs/KONFIDENZ.md`](../docs/KONFIDENZ.md)**, samt durchgerechnetem Beispiel und der
+> Entwicklung der Formel von v0 bis v4.
+
+Der Formelstand wird pro Vorschlag in `formula_version` mitgespeichert, damit alte Vorschläge
+erkennbar bleiben und nicht stillschweigend mit neuen vermischt werden.
+
+> **Wie die Agenten zusammenarbeiten**, was jeder von ihnen weiss, warum Chat und RAG ihre
+> Antwort selbst formulieren, wie sich betreuter und automatischer Betrieb unterscheiden und
+> ob das gesammelte Feedback auch ohne Human-in-the-Loop wirkt, steht in
+> **[`docs/AGENTEN_ARCHITEKTUR.md`](../docs/AGENTEN_ARCHITEKTUR.md)**.
 
 ---
 

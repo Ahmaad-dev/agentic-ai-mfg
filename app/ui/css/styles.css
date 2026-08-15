@@ -63,7 +63,6 @@
        Die Farbfamilien bleiben in beiden Themes dieselben wie im Review Board
        (grün = freigegeben, indigo = korrigiert, rot = verworfen). */
     --chart-bar: #4d6fa8;
-    --chart-legacy: #b8821f;
     --chart-approve: #3f7d5c;
     --chart-modify: #5b63c4;
     --chart-reject: #bb5546;
@@ -99,7 +98,6 @@
 
     /* Chart-Farben: die validierten Dark-Werte (siehe Kommentar oben) */
     --chart-bar: #818cf8;
-    --chart-legacy: #eab308;
     --chart-approve: #16a34a;
     --chart-modify: #6366f1;
     --chart-reject: #ef4444;
@@ -823,7 +821,12 @@ body.sidebar-collapsed .sb-reopen { display: flex; }
 }
 .input-wrapper textarea:focus-visible { outline: none; }
 
-textarea {
+/* NUR das Chat-Eingabefeld. Frueher stand hier ein nacktes `textarea` — die Regel setzt
+   `height: 24px` (eine Zeile, waechst per JS mit) und traf damit JEDES Textfeld der
+   Anwendung: das Kommentarfeld im Review Board hatte `rows="3"`, war aber 24 px hoch, und
+   der JSON-Editor mit `rows="16"` genauso. Beide waren praktisch unbenutzbar.
+   Eine Elementregel ohne Kontext ist an dieser Stelle zu grob. */
+.input-wrapper textarea {
     flex: 1;
     align-self: center; /* vertically centre in the input-wrapper row */
     background: transparent;
@@ -843,7 +846,7 @@ textarea {
     margin-bottom: 0;
 }
 
-textarea::placeholder { color: var(--faint); }
+.input-wrapper textarea::placeholder { color: var(--faint); }
 
 .send-btn {
     background: var(--accent-primary);
@@ -1226,7 +1229,7 @@ body.review-page:has(#detailView:not([hidden])) .review-main { max-width: 1320px
    DETAIL VIEW (AP4.2) — before/after diff. Colour convention: old = red/struck,
    new = green. Additive; existing chat + list styles untouched.
    ============================================================================= */
-.rb-detail-topbar { margin-bottom: 20px; }
+.rb-detail-topbar { margin-bottom: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
 
 .rb-detail-context {
     background: var(--rb-card-bg);
@@ -1412,7 +1415,18 @@ body.review-page:has(#detailView:not([hidden])) .review-main { max-width: 1320px
     background: var(--rb-card-bg);
 }
 .rb-grounded .material-symbols-outlined { font-size: 22px; flex: 0 0 auto; }
-.rb-grounded p { margin-top: 4px; font-size: 0.86rem; line-height: 1.5; }
+/* Der Textteil MUSS unter seine Inhaltsbreite schrumpfen duerfen. Ein Flex-Kind hat von
+   sich aus `min-width: auto` und ist damit mindestens so breit wie sein laengstes
+   unbrechbares Wort — und Feldpfade wie `packagingEquipmentCompatibility[1].predecessors`
+   enthalten keine Trennstelle. Gemessen am 15.08.2026: Kasten 324px, Inhalt 381px, also
+   57px Ueberlauf ueber den gruenen Rand hinaus.
+   `overflow-wrap: anywhere` erlaubt zusaetzlich den Umbruch INNERHALB eines solchen
+   Bezeichners; ohne das bliebe er trotz `min-width: 0` in einer Zeile stehen. */
+.rb-grounded > div { min-width: 0; }
+.rb-grounded p {
+    margin-top: 4px; font-size: 0.86rem; line-height: 1.5;
+    overflow-wrap: anywhere;
+}
 .rb-grounded.ok { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.08); }
 .rb-grounded.ok .material-symbols-outlined { color: var(--accent); }
 .rb-grounded.warn { border-color: rgba(234, 179, 8, 0.45); background: rgba(234, 179, 8, 0.10); }
@@ -1827,7 +1841,6 @@ body.review-page:has(#detailView:not([hidden])) .review-main { max-width: 1320px
 .db-tip b { display: block; margin-bottom: 3px; font-weight: 600; }
 .db-cat, .db-val { font-family: var(--font-body); }
 .db-tick { font-family: var(--font-body); font-variant-numeric: tabular-nums; }
-.db-legacy-tag { fill: var(--amber); font-size: 10px; }
 /* Trefferflaeche: die ganze Gruppe reagiert, nicht nur der schmale Balken.
    Die ueberfahrene Saeule hellt auf — die Rueckmeldung haengt nicht nur am Tooltip.
    NUR EINE Regel: vorher stand hier zusaetzlich ein `opacity: 0.82`, das gegen das
@@ -1904,6 +1917,22 @@ body.review-page:has(#detailView:not([hidden])) .review-main { max-width: 1320px
    ============================================================================= */
 
 /* --- Filterleiste: EINE Reihe ueber allem, was sie einschraenkt --------------- */
+/* Sprung zurueck in die laufende Woche. Steht bewusst bei den Pfeilen und nicht bei
+   den Aufloesungs-Schaltern: er bewegt den Zeitraum, er waehlt keine Aufloesung. */
+.db-today-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-left: 4px; padding: 5px 11px 5px 8px;
+    border: 1px solid var(--border-color); border-radius: 999px;
+    background: var(--input-bg); color: var(--text-main);
+    font-family: inherit; font-size: 0.8rem; font-weight: 500;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.db-today-btn:hover { border-color: var(--accent-primary); }
+.db-today-btn .material-symbols-outlined { font-size: 16px; }
+/* Steht die Ansicht schon auf der laufenden Woche, fuehrt der Schalter nirgendwohin.
+   Er bleibt sichtbar (sonst springt die Leiste), ist aber nicht mehr bedienbar. */
+.db-today-btn.off { opacity: 0.4; pointer-events: none; }
+
 .db-filter {
     display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     background: var(--rb-card-bg);
@@ -1953,13 +1982,28 @@ body.review-page:has(#detailView:not([hidden])) .review-main { max-width: 1320px
 /* Die Aufloesung ist eine ANZEIGE, kein Bedienelement: sie folgt dem gewaehlten
    Zeitraum. Deshalb rechtsbuendig abgesetzt und ohne Rahmen — nichts an ihr soll
    nach „hier kann man klicken" aussehen. */
+/* Die Auflösungs-Anzeige rutschte je nach gewähltem Zeitraum in eine zweite Zeile: bei
+   „Monate" (140px) passte sie neben Navigation und Schaltern, bei „Kalenderwochen" (197px)
+   nicht mehr — nutzbar sind 818px, gebraucht wurden 847px. Der Umbruch hing also am
+   ANGEZEIGTEN WORT, nicht an der Fensterbreite, und wirkte dadurch zufällig.
+   Zwei Änderungen dagegen:
+   1. Der Wert bekommt einen festen Platz, breit genug für den längsten Fall
+      („Kalenderwochen", gemessen 102px). Damit ist die Anzeige immer gleich breit, und ob
+      umbrochen wird, hängt nur noch von der Fensterbreite ab — wie man es erwartet.
+   2. Das Wort „Auflösung:" entfällt zugunsten des Kalendersymbols samt Titel und
+      Vorlesetext. Das spart die fehlenden ~70px, sodass die Zeile in allen vier
+      Einstellungen geschlossen bleibt. */
 .db-filter-gran {
     display: inline-flex; align-items: center; gap: 7px;
     margin-left: auto;
     font-size: 0.78rem; color: var(--text-sub);
+    white-space: nowrap;
 }
 .db-filter-gran .material-symbols-outlined { font-size: 17px; }
-.db-filter-gran b { color: var(--text-main); font-weight: 600; }
+.db-filter-gran b {
+    color: var(--text-main); font-weight: 600;
+    display: inline-block; min-width: 104px;
+}
 
 .db-filter-note {
     display: inline-flex; align-items: center; gap: 5px;
@@ -1974,15 +2018,22 @@ body.review-page:has(#detailView:not([hidden])) .review-main { max-width: 1320px
 .db-empty span { font-size: 0.8rem; }
 
 /* --- Vorbehalt AN der Kennzahl (statt Textblock oben) ------------------------ */
+/* Die KOPFZEILE ist der Bezugsrahmen des aufgeklappten Vorbehalts, nicht das Symbol.
+   Sie ist genau so breit wie der Inhaltsbereich der Kachel bzw. Karte — damit begrenzt
+   ein schlichtes `width: min(340px, 100%)` das Feld von selbst auf die verfuegbare
+   Breite, in der schmalen Kachel wie in der breiten Karte. Am Symbol verankert stand
+   dagegen nur seine eigene Breite (~50px) als Bezug zur Verfuegung, und das Feld trat
+   in den Kacheln seitlich in die Nachbarkachel aus. */
 .db-tile-head, .db-card-head {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    position: relative;
 }
 .db-card-head { align-items: center; margin-bottom: 4px; }
 .db-card-head .db-section-title { margin: 0; }
 
 /* Das Symbol ist der Klickpunkt; der Klartext klappt direkt darunter auf. Damit steht
    die Warnung genau dort, wo die Zahl gelesen wird. */
-.db-caveat { position: relative; flex-shrink: 0; }
+.db-caveat { position: static; flex-shrink: 0; }
 .db-caveat > summary {
     display: inline-flex; align-items: center; gap: 3px;
     padding: 4px 8px 4px 6px; border-radius: 999px;   /* war 2px: Trefferflaeche lag exakt auf der 24px-Untergrenze */
@@ -2010,13 +2061,79 @@ body.review-page:has(#detailView:not([hidden])) .review-main { max-width: 1320px
     display: block; font-family: var(--font-code); font-size: 0.68rem;
     letter-spacing: 0.03em; color: var(--text-sub); margin-bottom: 2px;
 }
-/* In der Kachel darf der aufgeklappte Text die Kachelbreite nicht sprengen. */
-.db-tile .db-caveat[open] .db-caveat-body {
-    position: absolute; right: 0; top: 100%; z-index: 20;
-    width: 300px; max-width: 78vw;
+/* Der aufgeklappte Text SCHWEBT ueber dem Inhalt, statt im Fluss zu stehen.
+   Stand er im Fluss, verbreiterte er das <details> im Kopf-Flexbox und quetschte die
+   Ueberschrift daneben zu einer einbuchstabigen Spalte zusammen — dabei trat er zugleich
+   rechts aus der Karte heraus (beobachtet am 13.08.2026 bei „Entscheidungen im Zeitverlauf"
+   und „Aussagekraft der Konfidenz").
+   Die Regel gilt fuer JEDEN Vorbehalt — Kachel, Kartenkopf und Hero. Vorher war sie auf
+   `.db-tile` eingeschraenkt, weshalb genau die beiden anderen Orte defekt blieben.
+   `right: 0` verankert das Feld an der rechten Kante des Symbols, oeffnet also nach innen;
+   die Breite ist zusaetzlich an das Fenster gekoppelt, damit es auf schmalen Fenstern nicht
+   seitlich austritt und keinen Seiten-Scrollbalken erzeugt. */
+.db-caveat[open] .db-caveat-body {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
+    width: min(340px, 100%);
+    margin-top: 0;
     background: var(--input-bg);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
+/* Die Ueberschrift bekommt den Rest der Zeile und darf umbrechen; ohne `min-width: 0`
+   wuerde ein Flex-Kind nie unter seine Inhaltsbreite schrumpfen. */
+.db-card-head .db-section-title { flex: 1 1 auto; min-width: 0; }
+
+/* Grosser Praezedenzwert: Kurzform sichtbar, Vollwert aufklappbar. */
+.rb-mem-val > summary {
+    cursor: pointer; list-style: none;
+    display: inline-flex; align-items: center; gap: 5px;
+}
+/* Der native Marker wird DREIFACH abgeschaltet: `list-style` fuer aeltere Engines,
+   `::-webkit-details-marker` fuer WebKit, `::marker` fuer aktuelles Chrome und Firefox.
+   Fehlt der letzte, steht neben dem eigenen Pfeil noch das eingebaute Dreieck.
+
+   Die Pfeile stehen als ZEICHEN da, nicht als Unicode-Escape. Die Escape-Schreibweise ist
+   beim Erzeugen dieser Regeln durch eine Shell gelaufen, die die Oktal-Escape-Schreibweise las —
+   in der Datei landete das Steuerzeichen 0x15 gefolgt von "B8". Im Review Board stand
+   dann "BE Liste mit 13 Eintraegen" (Nutzerbefund 15.08.2026). Einem direkt
+   geschriebenen Zeichen kann das nicht passieren. */
+.rb-mem-val > summary::-webkit-details-marker { display: none; }
+.rb-mem-val > summary::marker { content: ""; }
+.rb-mem-val > summary::before {
+    content: "▸"; color: var(--text-sub); font-size: 0.9em; line-height: 1;
+}
+.rb-mem-val[open] > summary::before { content: "▾"; }
+.rb-mem-val > summary:hover .rb-value { color: var(--accent-primary); }
+.rb-mem-val > .rb-code {
+    margin-top: 6px; max-height: 260px; overflow: auto;
+    font-size: 0.7rem; line-height: 1.45;
+}
+
+/* --- Ueberholter Vorschlag ---------------------------------------------------
+   Sichtbar, aber zurueckgenommen: er steht noch in der Liste (man muss ihn ablehnen
+   koennen), soll aber nicht mehr um Aufmerksamkeit konkurrieren. */
+.rb-card-stale { opacity: 0.62; }
+.rb-card-stale:hover, .rb-card-stale:focus-within { opacity: 1; }
+.rb-status-stale {
+    background: rgba(234, 179, 8, 0.12);
+    color: var(--amber);
+    border: 1px solid rgba(234, 179, 8, 0.4);
+}
+.rb-callout {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 12px 14px; border-radius: 10px; margin-bottom: 14px;
+}
+/* Gleiche Vorsorge wie bei .rb-grounded: der Textteil eines Flex-Kastens muss unter seine
+   Inhaltsbreite schrumpfen duerfen. Hier steht heute ein Satz mit Leerzeichen, der ohnehin
+   umbricht — aber sobald eine Vorschlags-ID oder ein Feldpfad hineingerat, waere es
+   derselbe Ueberlauf. */
+.rb-callout > div { min-width: 0; }
+.rb-callout .rb-mono { overflow-wrap: anywhere; }
+.rb-callout-warn {
+    background: rgba(234, 179, 8, 0.10);
+    border: 1px solid rgba(234, 179, 8, 0.40);
+}
+.rb-callout-warn .material-symbols-outlined { color: var(--amber); font-size: 20px; }
+.rb-callout p { margin: 6px 0 0; font-size: 0.82rem; line-height: 1.5; }
 
 /* --- Legende (Pflicht ab 2 Serien) ------------------------------------------- */
 .db-legend {
@@ -2409,3 +2526,32 @@ details.db-quality .db-flags { padding: 0 20px 18px; }
 
     a[href]::after { content: ""; }   /* keine URLs hinter jeden Link drucken */
 }
+
+/* Datum eines Praezedenzfalls — zurueckhaltend, aber lesbar (4,84:1 auf der Karte). */
+.rb-mem-date {
+    margin: 2px 0 8px;
+    font-size: 0.7rem;
+    color: var(--text-sub);
+    font-variant-numeric: tabular-nums;
+}
+.rb-mem-more {
+    margin-top: 8px;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+/* Selbsteinschaetzung, die sich auf einen ERSETZTEN Wert bezieht: abgesetzt, damit der
+   Zusammenhang beim Ueberfliegen nicht verlorengeht. Kein Warnton — es ist kein Fehler,
+   sondern eine Einordnung. */
+.rb-conf-rationale.superseded {
+    border-left: 2px solid var(--border-color);
+    padding-left: 10px;
+}
+.rb-conf-rationale.superseded em { font-style: normal; font-weight: 600; }
+
+/* Einspruch gegen eine fruehere menschliche Entscheidung. Kraeftiger als die uebrigen
+   Hinweiskaesten: das ist die eine Stelle, an der ein Pruefer NICHT durchwinken darf. */
+.rb-grounded.rb-dissent {
+    border-width: 2px;
+}
+.rb-grounded.rb-dissent strong { display: block; margin-bottom: 4px; }

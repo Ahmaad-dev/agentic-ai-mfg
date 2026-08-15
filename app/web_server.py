@@ -294,11 +294,14 @@ def chat():
         metadata = result["metadata"]
         
         # Historie aktualisieren
-        messages.append({"role": "user", "content": user_message})
-        messages.append({"role": "assistant", "content": response})
-        
         # Agent-Name extrahieren
         agent_name = metadata.get("agent", "Unknown")
+
+        # Die Herkunft wandert MIT in den Verlauf, nicht nur in die Datenbank. Ohne sie kann
+        # ein Agent in der naechsten Runde nicht unterscheiden, ob ein frueherer Satz
+        # gemessen (Werkzeug) oder frei formuliert (Gespraech) war.
+        messages.append({"role": "user", "content": user_message, "agent_name": None})
+        messages.append({"role": "assistant", "content": response, "agent_name": agent_name})
 
         # DB (AP2/AP2.5): persist assistant message + agent run incl. token/cost telemetry
         if db_sid is not None:
@@ -438,4 +441,23 @@ if __name__ == '__main__':
     
     # Nutze 'stat' reloader statt 'watchdog' - vermeidet Probleme mit SP Tool Execution
     # 'stat' überwacht nur main files, nicht alle Python-Dateien im Workspace
-    app.run(debug=True, port=8000, use_reloader=True, reloader_type='stat')
+    # Bindeadresse (15.08.2026).
+    #
+    # BEFUND: "localhost" loest auf diesem System zuerst nach ::1 auf, der Server lauscht
+    # aber nur auf IPv4. Jede Anfrage aus dem Browser laeuft deshalb erst in einen
+    # IPv6-Fehlversuch und wird dann ueber IPv4 wiederholt. Gemessen: 2050 ms ueber
+    # http://localhost:8000 gegenueber 17 ms ueber http://127.0.0.1:8000 — fuer JEDE
+    # Anfrage, auch fuer statische Dateien. Zaehler und Listen erscheinen dadurch
+    # sekundenlang verspaetet und wirken, als fehlten sie.
+    #
+    # EINFACHSTE ABHILFE: im Browser http://127.0.0.1:8000 aufrufen statt localhost.
+    #
+    # Die Voreinstellung bleibt bewusst der reine Loopback-Zugang. Ein dualstack-faehiges
+    # "::" wuerde zwar beide Namen sofort bedienen, aber zugleich auf ALLEN
+    # Netzwerkschnittstellen lauschen — zusammen mit debug=True (Werkzeug-Debugger) ist das
+    # eine Exposition, die eine Entwicklungsbequemlichkeit nicht rechtfertigt.
+    # Wer sie braucht, setzt DEV_SERVER_HOST bewusst selbst.
+    dev_host = os.getenv("DEV_SERVER_HOST", "127.0.0.1")
+    if dev_host != "127.0.0.1":
+        logger.warning("Entwicklungsserver lauscht auf %s — nicht nur lokal!", dev_host)
+    app.run(debug=True, host=dev_host, port=8000, use_reloader=True, reloader_type='stat')

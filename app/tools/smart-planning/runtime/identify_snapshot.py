@@ -490,7 +490,16 @@ def get_array_context(data: Dict, result_path: str, items_before: int = 3, items
         "total_items": len(array_data),
         "found_at_index": target_index,
         "items_before": items_before_list,
-        "items_after": items_after_list
+        "items_after": items_after_list,
+        # Ohne diesen Satz wurden die Nachbarn als „vergleichbare Artikel" gelesen und ihre
+        # Werte als Beleg zitiert. Ein Array ist aber keine fachliche Ordnung: benachbart
+        # heisst nur benachbart (Nutzerbefund 15.08.2026).
+        "items_neighbours_note": (
+            "items_before/items_after sind reine ARRAY-NACHBARN. Ihre Naehe sagt NICHTS "
+            "ueber fachliche Vergleichbarkeit — sie koennen zu einem anderen Department "
+            "oder Arbeitsplan gehoeren. Als Beleg fuer einen Wert taugen sie NICHT; dafuer "
+            "sind similar_items und die *_same_department-Statistiken da."
+        ),
     }
     
     # DOMAIN INTELLIGENCE: For articles array, add similar_items with statistics
@@ -562,6 +571,52 @@ def get_array_context(data: Dict, result_path: str, items_before: int = 3, items
                         'count': len(density_max_values)
                     }
             
+            # ZEITWERTE JE ARBEITSGANG im fachlichen Kollektiv (15.08.2026).
+            #
+            # Vorher trug `similar_items` nur die Dichtewerte. Ging es um Zeitwerte, war das
+            # fachlich richtige Kollektiv stumm — und die einzigen Zahlen im Kontext kamen
+            # von den Array-Nachbarn, die mit dem Zielartikel nichts zu tun haben muessen.
+            #
+            # Uebertragen wird bewusst eine VERTEILUNG, keine Liste: 331 vergleichbare
+            # Artikel mit je ~13 Arbeitsgaengen wuerden den Prompt sprengen und die Aussage
+            # zugleich verstecken. Die Haeufigkeit ist ohnehin das Argument — „326 von 331"
+            # traegt eine Entscheidung, drei Beispiele tun das nicht.
+            work_item_stats = {}
+            for item in array_data:
+                if not isinstance(item, dict) or item.get('departmentId') != target_dept:
+                    continue
+                if item is target_item:
+                    continue          # der zu korrigierende Artikel belegt nichts
+                for cfg in (item.get('workItemConfigs') or []):
+                    if not isinstance(cfg, dict):
+                        continue
+                    key = cfg.get('workItemKey')
+                    if not key:
+                        continue
+                    kombi = (cfg.get('rampUpTime'), cfg.get('netTimeFactor'))
+                    work_item_stats.setdefault(key, {})
+                    eintrag = work_item_stats[key].setdefault(
+                        f"rampUpTime={kombi[0]}, netTimeFactor={kombi[1]}", 0)
+                    work_item_stats[key][f"rampUpTime={kombi[0]}, netTimeFactor={kombi[1]}"] = eintrag + 1
+
+            if work_item_stats:
+                # Je Arbeitsgang nur die haeufigsten Auspraegungen — der Rest ist Rauschen.
+                verdichtet = {}
+                for key, verteilung in work_item_stats.items():
+                    gesamt = sum(verteilung.values())
+                    top = sorted(verteilung.items(), key=lambda x: -x[1])[:3]
+                    verdichtet[key] = {
+                        'articles_compared': gesamt,
+                        'most_common': [{'values': v, 'articles': n,
+                                         'share': round(n / gesamt, 3)} for v, n in top],
+                    }
+                array_context['work_item_config_stats_same_department'] = verdichtet
+                array_context['work_item_config_stats_note'] = (
+                    f"Verteilung der Zeitwerte je workItemKey ueber ALLE Artikel mit "
+                    f"departmentId={target_dept} (das fachliche Vergleichskollektiv). "
+                    f"MASSGEBLICH fuer Zeitwerte — nicht items_before/items_after."
+                )
+
             array_context['similar_items'] = similar_items
             array_context['similar_items_count'] = len(similar_items)
             if stats:

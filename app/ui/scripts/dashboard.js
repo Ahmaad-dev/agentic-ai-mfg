@@ -61,7 +61,6 @@ function cssColor(name, fallback) {
 
 const COLOR = {
     get bar()     { return cssColor('--chart-bar', '#818cf8'); },
-    get legacy()  { return cssColor('--chart-legacy', '#eab308'); },
     get approve() { return cssColor('--chart-approve', '#16a34a'); },
     get modify()  { return cssColor('--chart-modify', '#6366f1'); },
     get reject()  { return cssColor('--chart-reject', '#ef4444'); },
@@ -115,6 +114,7 @@ const GRAN_LABEL = { day: 'Tage', week: 'Kalenderwochen', month: 'Monate' };
 const state = {
     view: 'all',
     anchor: null,        // 'YYYY-MM-DD' — Ende des Fensters; null = bis heute
+    formulaVersion: null, // nur per Adresszeile; grenzt ALLE Zahlen auf eine Konfidenz-Generation ein
 };
 
 /** Zuletzt geladene Antwort — die Filterleiste zeigt den vom Server AUFGELÖSTEN Zeitraum. */
@@ -170,15 +170,31 @@ function runCountUps(scope) {
         if (!f || !isFinite(end)) return;
         const final = f(end);
         let start = null;
+        let done = false;
+        const finish = () => { if (!done) { done = true; el.textContent = final; } };
         const tick = (t) => {
+            if (done) return;
             if (start === null) start = t;
             const p = Math.min(1, (t - start) / COUNTUP_MS);
             /* kubisch ausklingend: schnell los, weich stehenbleiben (wie im Entwurf) */
-            el.textContent = p < 1 ? f(end * (1 - Math.pow(1 - p, 3))) : final;
-            if (p < 1) requestAnimationFrame(tick);
+            if (p < 1) {
+                el.textContent = f(end * (1 - Math.pow(1 - p, 3)));
+                requestAnimationFrame(tick);
+            } else {
+                finish();
+            }
         };
         el.textContent = f(0);
         requestAnimationFrame(tick);
+        /* SICHERUNGSNETZ. Ohne das hängt die angezeigte Zahl davon ab, dass die
+           Bildwiederholung bis zum Schluss läuft — und genau das ist nicht garantiert:
+           `requestAnimationFrame` pausiert in Hintergrund-Tabs und wird von Headless-Browsern
+           gedrosselt. Gemessen blieb die Anzeige dort bei 34,2 % statt 35,7 %, bei 16 statt 17
+           und bei 13 statt 14 stehen — die Kachel „Entscheidungen" widersprach damit sogar
+           ihrer eigenen Aufschlüsselung darunter (5+8+1). Eine Kennzahl darf nicht davon
+           abhängen, ob eine Animation zu Ende gelaufen ist; der Zeitgeber setzt den Endwert
+           unabhängig davon. Das ist besonders wichtig für Screenshots im Projektbericht. */
+        setTimeout(finish, COUNTUP_MS + 120);
     });
 }
 
@@ -314,12 +330,12 @@ function caveat(...keys) {
     const body = fs.map(f => `<p><code>${esc(f.code)}</code> ${esc(f.message)}</p>`).join('');
     return `
         <details class="db-caveat db-caveat-${worst}">
-            <summary title="Was diese Zahl einschränkt">
+            <summary title="Einschränkungen dieser Kennzahl">
                 <span class="material-symbols-outlined" aria-hidden="true">
                     ${worst === 'warning' ? 'warning' : 'info'}
                 </span>
                 <span class="db-caveat-count">${fs.length}</span>
-                <span class="sr-only">Hinweise zur Belastbarkeit dieser Zahl</span>
+                <span class="sr-only">Hinweise zur Belastbarkeit dieser Kennzahl</span>
             </summary>
             <div class="db-caveat-body">${body}</div>
         </details>`;
@@ -345,7 +361,7 @@ function timelineChart(rows, granularity) {
             <div class="db-empty">
                 <span class="material-symbols-outlined" aria-hidden="true">event_busy</span>
                 <p>Keine Entscheidungen in diesem Zeitraum</p>
-                <span>Blättere zurück oder wähle einen größeren Zeitraum.</span>
+                <span>Zurückblättern oder einen größeren Zeitraum wählen.</span>
             </div>`;
     }
 
@@ -515,17 +531,12 @@ function errorTypeChart(rows) {
         const top = padT + i * rowH;
         const y = top + 20;
         const bw = Math.max((r.count / max) * plotW, 2);
-        const fill = r.legacy_label ? COLOR.legacy : COLOR.bar;
-        // Gelb allein trägt keine Bedeutung — die Textmarke daneben tut es.
-        const tag = r.legacy_label
-            ? ` <tspan class="db-legacy-tag">⚠ Alt-Label (Zähl-Heuristik)</tspan>` : '';
         return `
             <g class="db-bar-g">
-                <title>${esc(r.error_type)}: ${r.count} Vorschlag/Vorschläge${
-                    r.legacy_label ? ' — Label stammt aus der alten Zähl-Heuristik, nicht aus einer Fehlerklassifikation' : ''}</title>
+                <title>${esc(r.error_type)}: ${r.count} Vorschlag/Vorschläge</title>
                 <text x="${padL}" y="${top + 12}" fill="${COLOR.ink}" font-size="12"
-                      class="db-cat">${esc(r.error_type)}${tag}</text>
-                <path d="${barPath(padL, y, bw, barH, true)}" fill="${fill}"/>
+                      class="db-cat">${esc(r.error_type)}</text>
+                <path d="${barPath(padL, y, bw, barH, true)}" fill="${COLOR.bar}"/>
                 <text x="${padL + bw + 8}" y="${y + barH / 2 + 4}" fill="${COLOR.ink}"
                       font-size="12" class="db-val">${r.count}</text>
             </g>`;
@@ -587,7 +598,24 @@ function distributionChart(rows) {
  * „0 % angenommen" sind verschiedene Aussagen, und ein Nullbalken würde sie
  * verwechselbar machen. Es bekommt stattdessen ein sichtbares „n=0".
  */
-function calibrationChart(rows) {
+function calibrationChart(rows, scope) {
+    /* Kein Achsenkreuz mit fuenf Mal „n=0". Seit dem 13.08.2026 rechnet der Server die
+       Kurve NUR auf der aktuellen Konfidenz-Formel — solange darauf noch nichts entschieden
+       wurde, ist die Kurve leer, und zwar aus einem nennenswerten Grund. Ein leeres
+       Diagramm, das aussieht wie ein Messergebnis von 0 %, waere genau die Verwechslung,
+       die diese Karte vermeiden soll. */
+    if (!rows.some(r => r.decisions > 0)) {
+        const raus = scope && scope.decisions_excluded;
+        return `
+            <div class="db-empty">
+                <span class="material-symbols-outlined" aria-hidden="true">hourglass_top</span>
+                <p>Noch keine Entscheidungen auf Basis der aktuellen Konfidenz-Formel</p>
+                <span>Die Kurve entsteht, sobald die ersten Vorschläge mit der heutigen
+                Berechnung geprüft sind.${raus ? ` Ältere Entscheidungen (${raus}) beruhen auf
+                einer anderen Berechnung und sind hier bewusst nicht mitgezählt.` : ''}</span>
+            </div>`;
+    }
+
     const w = 720, h = 240, padL = 44, padR = 12, padT = 14, padB = 60;
     const plotW = w - padL - padR, plotH = h - padT - padB;
     const slot = plotW / rows.length;
@@ -623,7 +651,7 @@ function calibrationChart(rows) {
         const y = padT + plotH - bh;
         return `
             <g class="db-bar-g">
-                <title>Konfidenz ${esc(r.bucket)}: ${r.accepted_unchanged} von ${r.decisions} ohne Änderung angenommen</title>
+                <title>Konfidenz ${esc(r.bucket)}: ${r.accepted_unchanged} von ${r.decisions} unverändert freigegeben</title>
                 ${bh > 0 ? `<path d="${barPath(x, y, barW, bh, false)}" fill="${COLOR.bar}"/>` : ''}
                 <text x="${x + barW / 2}" y="${(bh > 0 ? y : padT + plotH) - 7}" fill="${COLOR.ink}"
                       font-size="12" text-anchor="middle" class="db-val">${pct(r.accept_rate)}</text>
@@ -632,7 +660,7 @@ function calibrationChart(rows) {
     }).join('');
 
     return `<svg viewBox="0 0 ${w} ${h}" class="db-svg" role="img"
-                 aria-label="Säulendiagramm: Annahmequote ohne Änderung je Konfidenz-Band">
+                 aria-label="Säulendiagramm: Anteil unveränderter Freigaben je Konfidenz-Band">
                 ${grid}
                 ${bars}
             </svg>`;
@@ -642,6 +670,11 @@ function calibrationChart(rows) {
  * Die Kalibrierungskurve ist nur dann eine Aussage, wenn sie überhaupt streut. Streuen die
  * belegten Bänder um weniger als 5 Prozentpunkte, sagt die Konfidenz nichts vorher — das
  * muss AN der Kurve stehen, sonst liest man sie als Befund.
+ *
+ * Der Hinweis nannte bis 13.08.2026 als Ursache die abgelösten Konfidenz-Formeln der
+ * eigenen Vorgängerstände. Das ist Entwicklungsgeschichte und im Betrieb ohne Belang; er
+ * beschreibt jetzt nur noch, was die Kurve zeigt — und ausdrücklich, dass sie in DIESEM
+ * Zustand weder für noch gegen die Konfidenz spricht.
  */
 function calibrationWarning(calibration) {
     const filled = calibration.filter(b => b.decisions > 0);
@@ -651,11 +684,10 @@ function calibrationWarning(calibration) {
     return `
         <p class="db-callout warn">
             <span class="material-symbols-outlined" aria-hidden="true">warning</span>
-            <span>Die Kurve ist <strong>flach</strong>: eine hohe Konfidenz sagt derzeit nicht
-            voraus, ob der Mensch den Wert unverändert übernimmt. Das ist kein Messergebnis,
-            sondern konstruktionsbedingt — die entschiedenen Vorschläge tragen noch die alte
-            Konfidenz-Formel. Aussagekräftig wird die Kurve erst mit Entscheidungen auf
-            Vorschlägen, die nach AP4.5 bewertet wurden.</span>
+            <span>Die Kurve verläuft <strong>flach</strong>: über die bisher entschiedenen
+            Vorschläge hinweg sagt eine hohe Konfidenz nicht voraus, ob unverändert
+            freigegeben wird. Die Kurve belegt damit noch nichts über die Güte der
+            Konfidenz — weder dafür noch dagegen.</span>
         </p>`;
 }
 
@@ -699,15 +731,15 @@ function ak2Meter(k) {
             <div class="db-hero-head">
                 <div>
                     <div class="db-tile-head">
-                        <div class="db-tile-label">Angenommen ohne Änderung (AK2)</div>
+                        <div class="db-tile-label">Freigabequote ohne Änderung</div>
                         ${caveat('approval_rate')}
                     </div>
                     <div class="db-hero-value">
                         ${has ? countable(rate * 100, 'pct') : 'n/a'}
                     </div>
                     <div class="db-tile-note">
-                        ${k.approve_count} von ${k.decisions_total} Entscheidungen —
-                        der Mensch hat den KI-Wert unverändert übernommen.
+                        ${k.approve_count} von ${k.decisions_total} Entscheidungen
+                        unverändert freigegeben
                     </div>
                 </div>
                 <div class="db-hero-target ${reached ? 'ok' : 'below'}">
@@ -719,7 +751,7 @@ function ak2Meter(k) {
                 </div>
             </div>
             <div class="db-meter" role="img"
-                 aria-label="Annahmequote ${has ? pct(rate) : 'nicht verfügbar'} von Zielmarke ${AK2_TARGET * 100} Prozent">
+                 aria-label="Freigabequote ohne Änderung ${has ? pct(rate) : 'nicht verfügbar'}, Zielmarke ${AK2_TARGET * 100} Prozent">
                 <div class="db-meter-fill ${reached ? 'ok' : 'below'}" style="width:${width}%"></div>
                 <div class="db-meter-target" style="left:${AK2_TARGET * 100}%"></div>
             </div>
@@ -745,6 +777,9 @@ function filterBar(range) {
     const isAll = state.view === 'all';
     const atToday = !state.anchor || parseDay(state.anchor) >= todayStart();
     const gran = GRAN_LABEL[range.granularity] || range.granularity;
+    /* „Heute" fuehrt IMMER auf dieselbe Ansicht: laufende Woche, Aufloesung Wochen.
+       Genau dann ist der Schalter am Ziel und wird stillgelegt. */
+    const atNow = state.view === 'week' && !state.anchor;
 
     return `
         <div class="db-filter">
@@ -762,6 +797,12 @@ function filterBar(range) {
                         aria-label="Späterer Zeitraum">
                     <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
                 </button>
+                <button type="button" id="fToday" class="db-today-btn ${atNow ? 'off' : ''}"
+                        ${atNow ? 'disabled aria-disabled="true"' : ''}
+                        title="Zurück zur laufenden Woche">
+                    <span class="material-symbols-outlined" aria-hidden="true">today</span>
+                    Heute
+                </button>
             </div>
 
             <div class="db-filter-presets" role="group" aria-label="Zeitraum und Auflösung">
@@ -770,9 +811,9 @@ function filterBar(range) {
                             data-view="${k}" aria-pressed="${state.view === k}">${l}</button>`).join('')}
             </div>
 
-            <span class="db-filter-gran">
+            <span class="db-filter-gran" title="Auflösung der Zeitachse">
                 <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
-                Auflösung: <b>${esc(gran)}</b>
+                <span class="sr-only">Auflösung der Zeitachse:</span><b>${esc(gran)}</b>
                 ${range.granularity_adjusted_from ? `
                     <span class="db-filter-note"
                           title="Der Zeitraum ergäbe in ${esc(GRAN_LABEL[range.granularity_adjusted_from]
@@ -847,8 +888,8 @@ function dataQuality(flags) {
                 Belastbarkeit der Zahlen — ${flags.length} Hinweise${warnN ? `, davon ${warnN} Warnungen` : ''}
             </summary>
             <p class="db-section-sub">
-                Nichts auf dieser Seite ist herausgefiltert. Jeder Hinweis hängt zusätzlich
-                als Symbol an der Kennzahl, die er betrifft.
+                Nichts auf dieser Seite ist herausgefiltert. Jeder Hinweis ist zusätzlich
+                als Symbol an der betroffenen Kennzahl vermerkt.
             </p>
             <ul class="db-flags">${flags.map(item).join('')}</ul>
         </details>`;
@@ -867,23 +908,23 @@ function render(d) {
         <div class="db-tiles">
             ${tile('Offene Reviews', countable(k.proposals_open, 'int'),
                    k.proposals_open
-                       ? 'warten auf eine Entscheidung <em>(unabhängig vom Zeitraum)</em>'
-                       : 'nichts offen')}
+                       ? 'ausstehende Entscheidungen <em>(zeitraumunabhängig)</em>'
+                       : 'kein Vorgang offen')}
             ${tile('Vorschläge erzeugt', countable(k.proposals_total, 'int'),
                    'im gewählten Zeitraum')}
             ${tile('Entscheidungen', countable(k.decisions_total, 'int'),
                    `${k.approve_count}× freigegeben · ${k.modify_count}× korrigiert · ${k.reject_count}× verworfen`)}
-            ${tile('Ø Konfidenz', countable(k.avg_confidence * 100, 'pct'),
-                   'über die Vorschläge im Zeitraum',
+            ${tile('Mittlere Konfidenz', countable(k.avg_confidence * 100, 'pct'),
+                   'über alle Vorschläge im Zeitraum',
                    ['avg_confidence'])}
-            ${tile('Revalidierung erfolgreich',
+            ${tile('Revalidierung bestanden',
                    countable(k.revalidation_success_rate * 100, 'pct'),
                    `${k.revalidation_success} von ${k.revalidation_attempts} belastbaren Anwendungen`
-                   + (k.revalidation_untrusted ? ` · ${k.revalidation_untrusted} ausgenommen` : ''),
+                   + (k.revalidation_untrusted ? ` · ${k.revalidation_untrusted} nicht belastbar` : ''),
                    ['revalidation_success_rate'])}
-            ${tile('Ø Bearbeitungszeit', duration(k.handling_time_median_s),
-                   `Median über ${k.handling_time_n} Entscheidung(en)`
-                   + (k.handling_time_excluded_fixtures ? ` · ${k.handling_time_excluded_fixtures} Fixture(s) ausgenommen` : ''),
+            ${tile('Bearbeitungszeit (Median)', duration(k.handling_time_median_s),
+                   `über ${k.handling_time_n} Entscheidung(en)`
+                   + (k.handling_time_excluded_fixtures ? ` · ${k.handling_time_excluded_fixtures} automatisiert entschieden, ausgenommen` : ''),
                    ['handling_time'])}
             ${tile('Validierungen', countable(k.validations, 'int'),
                    `über ${k.snapshots_tracked} Snapshots`,
@@ -900,13 +941,13 @@ function render(d) {
 
         ${filterBar(r)}
 
-        ${card('Wann wurde entschieden?',
-               'Gestapelt nach Entscheidungstyp — so ist sichtbar, '
-               + '<strong>wann</strong> korrigiert wurde und <strong>wie</strong>.',
+        ${card('Entscheidungen im Zeitverlauf',
+               'Nach Entscheidungsart gestapelt — sichtbar wird, '
+               + '<strong>wann</strong> entschieden wurde und <strong>wie</strong>.',
                timelineChart(d.charts.timeline, r.granularity),
                ['timeline', 'range'])}
 
-        ${card('Entscheidungsquoten', 'Woran der Mensch den KI-Vorschlag gemessen hat.', `
+        ${card('Entscheidungsquoten', 'Anteil der Entscheidungsarten an allen geprüften Vorschlägen.', `
             <div class="db-rates">
                 <div class="db-rate"><span class="db-rate-val">${pct(k.approval_rate)}</span>
                      <span class="db-rate-lbl">freigegeben</span></div>
@@ -916,19 +957,22 @@ function render(d) {
                      <span class="db-rate-lbl">verworfen</span></div>
             </div>`, ['approval_rate'])}
 
-        ${card('Fehlerarten', 'Wie oft welche Fehlerart einen Vorschlag ausgelöst hat.',
+        ${card('Fehlerarten', 'Auslöser der erzeugten Vorschläge, nach Fehlerart.',
                errorTypeChart(d.charts.error_types), ['error_types'])}
 
-        ${card('Konfidenz-Verteilung', 'Wie sich die Konfidenzwerte über die Vorschläge verteilen.',
+        ${card('Konfidenz-Verteilung', 'Verteilung der Konfidenzwerte über alle Vorschläge im Zeitraum.',
                distributionChart(d.charts.confidence_distribution), ['confidence_distribution'])}
 
-        ${card('Kalibrierung — sagt die Konfidenz die menschliche Entscheidung voraus?',
-               'Anteil der Vorschläge, die der Mensch je Konfidenz-Band <strong>unverändert</strong> '
-               + 'übernommen hat. Wäre die Konfidenz aussagekräftig, müsste dieser Anteil nach rechts steigen.',
-               calibrationChart(d.charts.calibration) + calibrationWarning(d.charts.calibration),
+        ${card('Aussagekraft der Konfidenz',
+               'Anteil der je Konfidenz-Band <strong>unverändert</strong> freigegebenen Vorschläge. '
+               + 'Eine aussagekräftige Konfidenz lässt diesen Anteil nach rechts steigen. '
+               + 'Gerechnet nur auf Entscheidungen der <strong>aktuellen</strong> Konfidenz-Formel — '
+               + 'ältere Werte liegen auf einer anderen Skala und würden die Kurve verfälschen.',
+               calibrationChart(d.charts.calibration, d.charts.calibration_scope)
+               + calibrationWarning(d.charts.calibration),
                ['calibration'])}
 
-        ${card('Offene Reviews', 'Aktueller Rückstand — bewusst unabhängig vom Zeitraum.',
+        ${card('Offene Reviews', 'Offener Bestand — bewusst unabhängig vom gewählten Zeitraum.',
                openReviewsTable(d.open_reviews))}
 
         ${dataQuality(d.data_quality)}
@@ -993,6 +1037,12 @@ function syncUrl() {
     p.set('granularity', VIEWS[state.view].unit);
     p.set('view', state.view);
     if (state.anchor) p.set('anchor', state.anchor);
+    /* `formula_version` gehoert nicht zur Filterleiste, sondern ist ein Werkzeug fuer die
+       gezielte Nachschau in einer aelteren Konfidenz-Generation. Es wird nur von Hand in die
+       Adresse geschrieben — und muss deshalb hier durchgereicht werden. Ohne diese Zeile
+       loescht der erste Neuaufbau der Seite den Parameter still weg, und angezeigt wuerde
+       etwas anderes als in der Adresszeile steht. */
+    if (state.formulaVersion) p.set('formula_version', state.formulaVersion);
     history.replaceState(null, '', `?${p}`);
     return p;
 }
@@ -1003,6 +1053,8 @@ function readUrl() {
     if (view && VIEWS[view]) state.view = view;
     const anchor = p.get('anchor');
     if (anchor && /^\d{4}-\d{2}-\d{2}$/.test(anchor)) state.anchor = anchor;
+    const fv = (p.get('formula_version') || '').trim().toLowerCase();
+    if (/^v\d+$/.test(fv)) state.formulaVersion = fv;
 }
 
 /**
@@ -1024,6 +1076,15 @@ function shiftRange(direction) {
 function wireFilter() {
     root.querySelector('#fPrev').addEventListener('click', () => shiftRange(-1));
     root.querySelector('#fNext').addEventListener('click', () => shiftRange(+1));
+
+    /* Ein Klick, zwei Ruecksetzungen: Aufloesung auf Wochen UND Anker auf heute. Nach
+       mehrmaligem Zurueckblaettern ist das der Weg zurueck, ohne raten zu muessen, wie
+       viele Klicks es waren. */
+    root.querySelector('#fToday').addEventListener('click', () => {
+        state.view = 'week';
+        state.anchor = null;
+        load();
+    });
 
     root.querySelectorAll('[data-view]').forEach(btn => {
         btn.addEventListener('click', () => {

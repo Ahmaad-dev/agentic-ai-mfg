@@ -1,0 +1,74 @@
+# Thesis reference papers — arXiv download list
+# Format:  BaseName | https://arxiv.org/pdf/<arXiv-ID>
+# Lines starting with '#' are comments. download.sh reads this file.
+# Non-arXiv sources (SUS, UEQ, UCT, DSR, ...) are listed at the bottom for manual retrieval.
+
+# ── Hallucination, self-correction, reasoning, search ─────────────────────────
+Ji-2023-Survey-Hallucination-NLG | https://arxiv.org/pdf/2202.03629
+Tonmoy-2024-Survey-Hallucination-Mitigation | https://arxiv.org/pdf/2401.01313
+Dhuliawala-2023-Chain-of-Verification | https://arxiv.org/pdf/2309.11495
+Madaan-2023-Self-Refine | https://arxiv.org/pdf/2303.17651
+Shinn-2023-Reflexion | https://arxiv.org/pdf/2303.11366
+Pan-2023-Automatically-Correcting-LLMs-Survey | https://arxiv.org/pdf/2308.03188
+Kamoi-2024-When-Can-LLMs-Correct-Mistakes | https://arxiv.org/pdf/2406.01297
+Wei-2022-Chain-of-Thought-NeurIPS | https://arxiv.org/pdf/2201.11903
+Wang-2022-Self-Consistency-ICLR | https://arxiv.org/pdf/2203.11171
+Yao-2023-ReAct-ICLR | https://arxiv.org/pdf/2210.03629
+Yao-2023-Tree-of-Thoughts-NeurIPS | https://arxiv.org/pdf/2305.10601
+Schick-2023-Toolformer-NeurIPS | https://arxiv.org/pdf/2302.04761
+Besta-2024-Graph-of-Thoughts | https://arxiv.org/pdf/2308.09687
+Wen-2024-MindMap-KG-Prompting | https://arxiv.org/pdf/2308.09729
+Zhou-2024-LATS-Language-Agent-Tree-Search | https://arxiv.org/pdf/2310.04406
+PAC-MCTS-2026-Bias-Aware-Pruning | https://arxiv.org/pdf/2604.14345
+Silver-2017-AlphaZero | https://arxiv.org/pdf/1712.01815
+
+# ── Structured output & constrained decoding ─────────────────────────────────
+Geng-2023-Grammar-Constrained-Decoding-EMNLP | https://arxiv.org/pdf/2305.13971
+Tam-2024-Let-Me-Speak-Freely-Constraints-Hurt-EMNLP | https://arxiv.org/pdf/2408.02442
+Structure-Snowballing-2026-Constrained-Decoding | https://arxiv.org/pdf/2604.06066
+
+# ── Retrieval-Augmented Generation ───────────────────────────────────────────
+Lewis-2020-RAG-Original-NeurIPS | https://arxiv.org/pdf/2005.11401
+Gao-2024-RAG-Survey-Naive-Advanced-Modular | https://arxiv.org/pdf/2312.10997
+Engineering-the-RAG-Stack-Review-2026 | https://arxiv.org/pdf/2601.05264
+Sarthi-2024-RAPTOR-Hierarchical-Tree-Retrieval | https://arxiv.org/pdf/2401.18059
+Edge-2024-GraphRAG-Microsoft | https://arxiv.org/pdf/2404.16130
+Gutierrez-2024-HippoRAG | https://arxiv.org/pdf/2405.14831
+Guo-2024-LightRAG | https://arxiv.org/pdf/2410.05779
+HiRAG-2025-Hierarchical-Knowledge-RAG | https://arxiv.org/pdf/2503.10150
+Asai-2024-Self-RAG | https://arxiv.org/pdf/2310.11511
+Yan-2024-CRAG-Corrective-RAG | https://arxiv.org/pdf/2401.15884
+Jeong-2024-Adaptive-RAG | https://arxiv.org/pdf/2403.14403
+Singh-2025-Agentic-RAG-Survey | https://arxiv.org/pdf/2501.09136
+Reasoning-Agentic-RAG-Survey-2025 | https://arxiv.org/pdf/2506.10408
+Bheel-2024-Reducing-Hallucination-Structured-Outputs-RAG | https://arxiv.org/pdf/2404.08189
+Cheerla-2025-RAG-Structured-Enterprise-Data | https://arxiv.org/pdf/2507.12425
+T2-RAGBench-2025-Text-and-Table | https://arxiv.org/pdf/2506.12071
+
+# ── Evaluation & judging ─────────────────────────────────────────────────────
+Zheng-2023-LLM-as-Judge-MT-Bench-NeurIPS | https://arxiv.org/pdf/2306.05685
+Liu-2023-G-Eval-EMNLP | https://arxiv.org/pdf/2303.16634
+Es-2024-RAGAS | https://arxiv.org/pdf/2309.15217
+Case-Aware-LLM-as-Judge-Enterprise-RAG-2026 | https://arxiv.org/pdf/2602.20379
+RubricRAG-2026 | https://arxiv.org/pdf/2603.20882
+Jacovi-2020-Faithfully-Interpretable-NLP-ACL | https://arxiv.org/pdf/2004.03685
+
+# ── Knowledge graphs, agent systems, industrial context ──────────────────────
+Agrawal-2023-Can-KG-Reduce-Hallucinations-Survey | https://arxiv.org/pdf/2311.07914
+KG-as-Data-Layer-Industrial-Ops-2026 | https://arxiv.org/pdf/2605.26874
+GraphFlow-2026-Graph-Workflow-Management | https://arxiv.org/pdf/2605.22566
+Agent-Loops-to-Structured-Graphs-2026 | https://arxiv.org/pdf/2604.11378
+Survey-Workflow-Optimization-LLM-Agents-2026 | https://arxiv.org/pdf/2603.22386
+OpenAI-2023-GPT-4-Technical-Report | https://arxiv.org/pdf/2303.08774
+Industrial-LLM-Agentic-Automation-2025 | https://arxiv.org/pdf/2507.07115
+
+# ── NON-arXiv (retrieve manually via DOI / library; not downloadable here) ────
+# [UCT]        Kocsis & Szepesvari (2006). Bandit Based Monte-Carlo Planning. ECML 2006. doi:10.1007/11871842_29
+# [SUS]        Brooke (1996). SUS: A Quick and Dirty Usability Scale. Taylor & Francis.
+# [UEQ]        Laugwitz, Held & Schrepp (2008). UEQ. USAB 2008, Springer LNCS 5298. doi:10.1007/978-3-540-89350-9_6
+# [Kappa]      Cohen (1960). A Coefficient of Agreement for Nominal Scales. doi:10.1177/001316446002000104
+# [SigTest]    Dror et al. (2018). The Hitchhiker's Guide to Testing Statistical Significance in NLP. ACL 2018.
+# [DSR]        Hevner et al. (2004). Design Science in IS Research. MIS Quarterly. doi:10.2307/25148625
+# [CaseStudy]  Runeson & Host (2009). Guidelines for Case Study Research in SE. Empir. Softw. Eng. doi:10.1007/s10664-008-9102-8
+# [Industry40] Lasi et al. (2014). Industry 4.0. Bus. Inf. Syst. Eng. doi:10.1007/s12599-014-0334-4
+# [ManufLLM]   (2024). Survey of Emerging Applications of LLMs in Mechanics, Product Design & Manufacturing. Adv. Eng. Informatics (Elsevier).

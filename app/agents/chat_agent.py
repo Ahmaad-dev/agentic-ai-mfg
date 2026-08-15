@@ -78,12 +78,41 @@ class ChatAgent(BaseAgent):
                 "`ai_value` ist der ursprüngliche KI-Vorschlag — bei decision='modify' wurde er "
                 "vom Menschen VERWORFEN und darf NICHT als Lösung genannt werden. "
                 "Bei Fragen wie 'was war die Lösung?' immer `applied_value` nennen und, wenn "
-                "abweichend, erwähnen, dass der Mensch den KI-Vorschlag korrigiert hat."
+                "abweichend, erwähnen, dass der Mensch den KI-Vorschlag korrigiert hat.\n"
+                "Die Liste ist NEUESTE ZUERST sortiert. Nur die Nachvalidierung mit "
+                "`ist_aktueller_stand: true` beschreibt den JETZIGEN Zustand des Snapshots; "
+                "alle anderen sind Momentaufnahmen von damals und taugen nicht als Aussage "
+                "ueber heute. "
+                "`revalidation` ist der GEPRÜFTE Zustand NACH dem Anwenden und hat Vorrang vor "
+                "allem, was im Gesprächsverlauf steht. `errors_after` ist die Zahl der danach "
+                "noch vorhandenen Fehler, `still_open_errors` nennt sie einzeln. "
+                "Ist `errors_after` grösser als 0, darfst du den Snapshot NICHT als fehlerfrei, "
+                "valide oder einsatzbereit bezeichnen — dann sagst du, wie viele Fehler noch "
+                "offen sind, und nennst sie. Eine Entscheidung behebt EINEN Fehler, nicht alle."
             )
             logger.info(f"[{self.name} Agent] {len(decisions)} Review-Entscheidung(en) im Kontext")
 
+        # Offene Vorschlaege — die einzige Quelle fuer „was steht noch aus?". Sie stehen
+        # nicht in der Unterhaltung: erzeugt werden sie von der Pipeline, entschieden werden
+        # sie im Review Board.
+        open_context = ""
+        if context and context.get("open_proposals"):
+            import json
+            offen = context["open_proposals"]
+            open_context = (
+                f"\n\nOFFENE KORREKTURVORSCHLÄGE zu diesem Snapshot ({len(offen)} Stück), "
+                "die noch auf eine menschliche Entscheidung warten:\n"
+                f"{json.dumps(offen, indent=2, ensure_ascii=False, default=str)}\n"
+                "REGELN: Diese Vorschläge sind NICHT angewendet — am Snapshot hat sich durch "
+                "sie nichts geändert. Fragt der Nutzer, was noch aussteht oder offen ist, "
+                "nenne sie mit Fehlerart und dem Link aus dem Feld `review_url` — WOERTLICH und "
+                "vollstaendig, nicht gekuerzt und nicht als blosser Pfad. "
+                "Steht hier nichts, wartet auch kein Vorschlag auf eine Entscheidung."
+            )
+            logger.info(f"[{self.name} Agent] {len(offen)} offene(r) Vorschlag/Vorschläge im Kontext")
+
         messages = [
-            {"role": "system", "content": self.system_prompt + snapshot_context + review_context},
+            {"role": "system", "content": self.system_prompt + snapshot_context + review_context + open_context},
             *chat_history,
             {"role": "user", "content": user_input}
         ]

@@ -137,10 +137,81 @@ def parse_target_path(path):
     
     raise ValueError(f"Invalid target path format: {path}. Expected 'arrayName[index].fieldName', 'arrayName[index].nestedArray[index]', 'arrayName[index]', or 'arrayName'")
 
+#: Ein Pfad-Abschnitt: Name (`articles`) oder Index (`[3]`).
+_PATH_TOKEN = re.compile(r'([A-Za-z_]\w*)|\[(\d+)\]')
+
+
+def tokenize_target_path(path):
+    """`articles[0].workItemConfigs[3].rampUpTime` -> ['articles', 0, 'workItemConfigs', 3, 'rampUpTime'].
+
+    Zerlegt VOLLSTAENDIG und gibt [] zurueck, wenn ein Rest unverstanden bleibt — lieber ein
+    ehrlicher Abbruch als ein Schreibvorgang an der falschen Stelle.
+    """
+    tokens, pos = [], 0
+    for m in _PATH_TOKEN.finditer(path or ""):
+        if m.start() > pos and path[pos:m.start()] != ".":
+            return []
+        tokens.append(m.group(1) if m.group(1) is not None else int(m.group(2)))
+        pos = m.end()
+    return tokens if tokens and pos == len(path or "") else []
+
+
+def resolve_deep_path(data, path):
+    """(Elternobjekt, Blattschluessel) fuer beliebig tief verschachtelte Pfade.
+
+    Prueft jeden Abschnitt einzeln und benennt im Fehlerfall genau den, an dem der Pfad ins
+    Leere geht — sonst steht spaeter ein KeyError ohne Hinweis darauf, WO es klemmte.
+    """
+    tokens = tokenize_target_path(path)
+    if len(tokens) < 2:
+        raise ValueError(f"Invalid target path format: {path}")
+
+    node = data
+    for i, tok in enumerate(tokens[:-1]):
+        bisher = "".join(f"[{t}]" if isinstance(t, int) else f".{t}"
+                         for t in tokens[:i + 1]).lstrip(".")
+        if isinstance(tok, int):
+            if not isinstance(node, list) or tok >= len(node):
+                raise IndexError(f"Path segment out of range: {bisher} (in {path})")
+        else:
+            if not isinstance(node, dict) or tok not in node:
+                raise KeyError(f"Path segment not found: {bisher} (in {path})")
+        node = node[tok]
+
+    leaf = tokens[-1]
+    if isinstance(leaf, int):
+        if not isinstance(node, list) or leaf >= len(node):
+            raise IndexError(f"Leaf index out of range: {path}")
+    else:
+        if not isinstance(node, dict):
+            raise KeyError(f"Leaf parent is not an object: {path}")
+    return node, leaf
+
+
+def normalise_new_value(new_value):
+    """Arrays/Objekte, die das LLM als JSON-STRING liefert, in echte Strukturen wandeln."""
+    if isinstance(new_value, str) and (new_value.startswith('[') or new_value.startswith('{')):
+        try:
+            parsed = json.loads(new_value)
+            print(f"  ⚠ Parsed JSON string to proper structure: {type(parsed).__name__}")
+            return parsed
+        except json.JSONDecodeError:
+            pass
+    return new_value
+
+
 def apply_single_update(data, target_path, new_value):
     """Apply a single field update to the data"""
-    array_name, index, field_name = parse_target_path(target_path)
-    
+    try:
+        array_name, index, field_name = parse_target_path(target_path)
+    except ValueError:
+        # Tiefer verschachtelt als die vier bekannten Formen — allgemein aufloesen.
+        new_value = normalise_new_value(new_value)
+        parent, leaf = resolve_deep_path(data, target_path)
+        old_value = parent[leaf] if isinstance(parent, list) else parent.get(leaf)
+        parent[leaf] = new_value
+        return old_value, new_value
+
     if index is None or field_name is None:
         raise ValueError(f"update_field action requires full path with index and field: {target_path}")
     
@@ -152,16 +223,8 @@ def apply_single_update(data, target_path, new_value):
     if index >= len(data[array_name]):
         raise IndexError(f"Index {index} out of range for array '{array_name}' (length: {len(data[array_name])})")
     
-    # FIX: Parse JSON strings to proper structures if needed
-    # Sometimes LLM returns arrays/objects as JSON strings
-    if isinstance(new_value, str) and (new_value.startswith('[') or new_value.startswith('{')):
-        try:
-            parsed_value = json.loads(new_value)
-            print(f"  ⚠ Parsed JSON string to proper structure: {type(parsed_value).__name__}")
-            new_value = parsed_value
-        except json.JSONDecodeError:
-            # Not a valid JSON string, keep as-is
-            pass
+    # Arrays/Objekte, die als JSON-String kommen, in echte Strukturen wandeln.
+    new_value = normalise_new_value(new_value)
     
     # Handle nested array access (e.g., equipment[0].predecessors[0])
     if field_name.startswith("nested:"):

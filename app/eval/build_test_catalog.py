@@ -22,7 +22,7 @@ Ablauf je Katalogeintrag:
 
 Schritt 5 ist nicht optional: `validate_snapshot.py` holt nur die Nachrichtenliste und stösst
 den Job NICHT an — ohne Trigger meldet der Server "0 Fehler, Snapshot ist valide", obwohl der
-Fehler nachweislich drinsteht. Das ist der `REVALIDATION_PRE_AP33D`-Fehlgrün aus dem
+Fehler nachweislich drinsteht. Das ist der `REVALIDATION_UNVERIFIED`-Fehlgrün aus dem
 PROJECT_LOG; ein Katalog, der darauf hereinfällt, evaluiert leere Snapshots.
 
 Umgebung: TESTINSTANZ (vm-t-...-test02..., cca-dev.com) — vom Nutzer ausdrücklich freigegeben.

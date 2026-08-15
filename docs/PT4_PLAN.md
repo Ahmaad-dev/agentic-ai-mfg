@@ -449,7 +449,7 @@ a demonstrably correct proposal from then on.
 
   **Two traps documented so nobody steps in them again:** (1) `validate_snapshot.py` only FETCHES
   the message list, it does NOT trigger the validation job — it reported "0 errors, snapshot is
-  valid" on a demonstrably broken snapshot (the `REVALIDATION_PRE_AP33D` false green). Always call
+  valid" on a demonstrably broken snapshot (the `REVALIDATION_UNVERIFIED` false green). Always call
   `trigger_server_validation` first. (2) Every freshly crawled snapshot carries a real base error
   (article 124211 without `workItemConfigs`) that the prioritiser ranks ABOVE the injected one.
   Repaired using the values a human confirmed in memory case #6 — no invented values.

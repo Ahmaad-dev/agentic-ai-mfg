@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kommunikationsweg · Multi-Agent System</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #f8f9fc;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    color: #1a202c;
+  }
+
+  .page-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 0.5rem;
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 3.5rem;
+    text-align: center;
+    letter-spacing: -0.02em;
+  }
+
+  /* ── CANVAS ── */
+  .diagram {
+    width: 100%;
+    max-width: 900px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* ── NODES ── */
+  .node {
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* USER */
+  .node-user {
+    background: #fff;
+    border: 2px solid #e2e8f0;
+    padding: 1.0rem 2rem 1.0rem 3rem; /* Reduced top padding to move text up */
+    border-radius: 12px; /* standard box radius, not pill */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem; /* Reduced gap */
+    position: relative; /* Context for absolute icon */
+    min-width: 200px;
+  }
+
+  .node-user .icon {
+    width: 28px; height: 28px;
+    background: #f1f5f9;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem;
+    
+    /* Absolute Top Left of the Box */
+    position: absolute;
+    top: 10px;
+    left: 10px;
+  }
+
+  .node-user .label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #334155;
+  }
+
+  .node-user .sublabel {
+    font-size: 0.7rem;
+    color: #1a202c;
+    font-style: italic;
+  }
+
+  /* ORCHESTRATOR */
+  .node-orch {
+    background: #f0f6ff;
+    border: 2px solid #3b82f6;
+    padding: 1.4rem 2.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(59,130,246,0.12);
+    color: #1e293b;
+    min-width: 260px;
+  }
+
+  .node-orch .icon { font-size: 1.4rem; margin-bottom: 0.4rem; }
+  .node-orch .label { font-size: 0.95rem; font-weight: 700; color: #1e40af; }
+  .node-orch .sublabel { font-size: 0.68rem; color: #64748b; margin-top: 0.2rem; }
+
+  /* AGENT */
+  .node-agent {
+    background: #fff;
+    border: 2px solid #e2e8f0;
+    padding: 1.1rem 1.4rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    min-width: 180px;
+    transition: box-shadow 0.2s;
+  }
+
+  .node-agent:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+
+  .node-agent .icon { font-size: 1.2rem; margin-bottom: 0.35rem; }
+  .node-agent .label { font-size: 0.8rem; font-weight: 700; color: #1e293b; }
+  .node-agent .sublabel { font-size: 0.64rem; color: #94a3b8; margin-top: 0.15rem; }
+
+  .agent-default { border-top: 3px solid #64748b; }
+  .agent-sp       { border-top: 3px solid #3b82f6; }
+  .agent-doc      { border-top: 3px solid #8b5cf6; }
+
+  /* TOOL */
+  .node-tool {
+    background: #f8faff;
+    border: 1.5px dashed #cbd5e1;
+    padding: 0.8rem 1.2rem;
+    border-radius: 8px;
+    min-width: 150px;
+    transition: border-color 0.2s;
+  }
+
+  .node-tool:hover { border-color: #94a3b8; }
+
+  .node-tool .icon { font-size: 1rem; margin-bottom: 0.2rem; }
+  .node-tool .label { font-size: 0.7rem; font-weight: 600; color: #475569; }
+  .node-tool .sublabel { font-size: 0.6rem; color: #94a3b8; margin-top: 0.1rem; }
+
+  /* RESULT */
+  .node-result {
+    background: #f0fdf4;
+    border: 2px solid #86efac;
+    padding: 1rem 2rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(34,197,94,0.1);
+    min-width: 260px;
+  }
+
+  .node-result .icon { font-size: 1.1rem; margin-bottom: 0.3rem; }
+  .node-result .label { font-size: 0.85rem; font-weight: 700; color: #15803d; }
+  .node-result .sublabel { font-size: 0.65rem; color: #4ade80; margin-top: 0.15rem; }
+
+  /* ── ARROWS ── */
+  .arrow-v {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin: 0;
+  }
+
+  .arrow-v .line {
+    width: 2px;
+    height: 36px;
+    background: #334155;
+  }
+
+  .arrow-v .head {
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #334155;
+  }
+
+  .arrow-v .tag {
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #334155;
+    background: #ffffff;
+    border: 1.5px solid #334155;
+    border-radius: 5px;
+    padding: 0.15rem 0.55rem;
+    position: absolute;
+    white-space: nowrap;
+    left: calc(50% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+
+  .arrow-v-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── AGENTS ROW ── */
+  .agents-row {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .agent-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Horizontal connector above agents */
+  .h-connector {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    height: 28px;
+    margin-bottom: 0;
+  }
+
+  .h-connector svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  /* ── TOOLS ROW ── */
+  .tools-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 640px;
+  }
+
+  /* ── RETURN PATH ── */
+  .return-note {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    font-style: italic;
+    margin-top: 0.5rem;
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 3rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.65rem;
+    color: #64748b;
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #1a202c;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    margin-bottom: 0.6rem;
+    display: inline-block;
+  }
+
+  /* response arrow */
+  .return-arrow {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    margin: 0.5rem 0;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.6rem;
+    font-weight: 500;
+    padding: 0.15rem 0.5rem;
+    border-radius: 20px;
+    margin-top: 0.25rem;
+  }
+
+  .badge-blue { background: #eff6ff; color: #3b82f6; }
+  .badge-purple { background: #f5f3ff; color: #8b5cf6; }
+  .badge-gray { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+</style>
+</head>
+<body>
+
+<header style="position: absolute; top: 0; left: 0; width: 100%; padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; box-sizing: border-box; z-index: 100;">
+  <div class="logo-left" style="pointer-events: auto;">
+    <img src="KBC3353 CANCOM_Logo.jpg" alt="CANCOM" style="height: 48px; object-fit: contain;">
+  </div>
+  <div class="logos-right" style="pointer-events: auto; display: flex; flex-direction: column; gap: 0.8rem; align-items: flex-end;">
+    <img src="microsoft-azure-logo.png" alt="Microsoft Azure" style="height: 54px; object-fit: contain;">
+    <img src="azure-ai-foundry-logo.jpg" alt="Azure AI Foundry" style="height: 96px; object-fit: contain;">
+  </div>
+</header>
+
+
+<div class="page-title">kommunikationsweg</div>
+<h1>Multi-Agent System</h1>
+
+<!-- ① USER (Moved out of flow to top left via CSS) -->
+<!-- <div class="node node-user">
+  <div class="icon">👤</div>
+  <div>
+    <div class="label">Nutzer</div>
+  </div>
+</div> -->
+
+<div class="diagram">
+
+  <!-- USER -->
+  <div class="node node-user">
+    <div class="icon">👤</div>
+    <div style="margin-top: 0.5rem">
+      <div class="label">Nutzer</div>
+      <div class="sublabel">"Erstelle einen Snapshot und validiere ihn"</div>
+    </div>
+  </div>
+
+  <!-- Arrow down with Prompt Box -->
+  <div class="arrow-v-wrap" style="position: relative; margin: 10px 0;">
+    <!-- Top half of arrow -->
+    <div style="width: 2px; height: 15px; background: #334155;"></div>
+    
+    <!-- The Box -->
+    <div style="
+      background: #fff; 
+      border: 2px solid #334155; 
+      border-radius: 6px; 
+      padding: 0.4rem 1rem; 
+      font-size: 0.75rem; 
+      font-weight: 600; 
+      color: #334155;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      z-index: 5;
+      margin: 2px 0;
+    ">
+      Prompt
+    </div>
+
+    <!-- Bottom half of arrow -->
+    <div style="width: 2px; height: 15px; background: #334155;"></div>
+    
+    <!-- Arrow Head -->
+    <div style="
+      width: 0; height: 0; 
+      border-left: 6px solid transparent; 
+      border-right: 6px solid transparent; 
+      border-top: 8px solid #334155;
+    "></div>
+  </div>
+
+  <!-- ② ORCHESTRATOR -->
+  <div style="display: flex; flex-direction: column; align-items: center;">
+    <div class="section-label">Routing & Planning</div>
+    <div class="node node-orch">
+      <div class="icon">🧠</div>
+      <div class="label">Orchestrator</div>
+      <div class="sublabel">Versteht die Anfrage · plant Schritte · wählt Agenten</div>
+    </div>
+  </div>
+
+  <!-- H-connector to 3 agents -->
+  <div style="position: relative; width: 100%; max-width: 620px; height: 100px; margin-top: 0;">
+    <svg width="100%" height="100" viewBox="0 0 620 100" preserveAspectRatio="none">
+      <line x1="310" y1="0" x2="310" y2="30" stroke="#334155" stroke-width="2"/>
+      <line x1="100" y1="30" x2="520" y2="30" stroke="#334155" stroke-width="2"/>
+      <line x1="100" y1="30" x2="100" y2="88" stroke="#334155" stroke-width="2"/>
+      <polygon points="94,82 100,92 106,82" fill="#334155"/>
+      <line x1="310" y1="30" x2="310" y2="88" stroke="#334155" stroke-width="2"/>
+      <polygon points="304,82 310,92 316,82" fill="#334155"/>
+      <line x1="520" y1="30" x2="520" y2="88" stroke="#334155" stroke-width="2"/>
+      <polygon points="514,82 520,92 526,82" fill="#334155"/>
+    </svg>
+  </div>
+
+  <!-- ③ THREE AGENTS -->
+  <div class="agents-row">
+
+    <!-- Default Agent -->
+    <div class="agent-col">
+      <div class="section-label">Konversation</div>
+      <div class="node node-agent agent-default">
+        <div class="icon">💬</div>
+        <div class="label">Default Agent</div>
+        <div class="sublabel">Allgemeine Anfragen<br>Basis-Logik</div>
+        <div style="margin-top: 0.5rem;">
+          <span class="badge badge-gray">LLM-Wissen</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SP Agent -->
+    <div class="agent-col">
+      <div class="section-label">Produktionsplanung</div>
+      <div class="node node-agent agent-sp">
+        <div class="icon">⚙️</div>
+        <div class="label">Smart Planning Agent</div>
+        <div class="sublabel">Snapshots · Validierung<br>Korrektur</div>
+        <div style="margin-top: 0.5rem;">
+          <span class="badge badge-blue">Smart Planning APIs</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Document Agent -->
+    <div class="agent-col">
+      <div class="section-label">Dokumentensuche</div>
+      <div class="node node-agent agent-doc">
+        <div class="icon">📄</div>
+        <div class="label">Document Agent</div>
+        <div class="sublabel">Handbücher · Richtlinien<br>Wissensbasis</div>
+        <div style="margin-top: 0.5rem;">
+          <span class="badge badge-purple">RAG / AI Search</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- H-connector to tools (only under SP and Doc agent) -->
+  <div style="position: relative; width: 100%; max-width: 620px; height: 50px; margin-top: 0;">
+    <svg width="100%" height="50" viewBox="0 0 620 50" preserveAspectRatio="none">
+      <line x1="310" y1="0" x2="310" y2="38" stroke="#334155" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <polygon points="305,32 310,42 315,32" fill="#334155"/>
+      <line x1="520" y1="0" x2="520" y2="38" stroke="#334155" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <polygon points="515,32 520,42 525,32" fill="#334155"/>
+    </svg>
+  </div>
+
+  <!-- ④ TOOLS ROW -->
+  <div style="display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 620px;">
+    <div class="section-label">Tools & Datenquellen</div>
+    <div class="tools-row">
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 0.4rem; flex: 1; min-width: 160px;">
+        <div class="node node-tool" style="width: 100%; text-align: center;">
+          <div class="icon">🔌</div>
+          <div class="label">Smart Planning APIs</div>
+          <div class="sublabel">Snapshot erstellen · validieren<br>korrigieren · hochladen</div>
+        </div>
+        <div class="node node-tool" style="width: 100%; text-align: center;">
+          <div class="icon">☁️</div>
+          <div class="label">Blob Storage</div>
+          <div class="sublabel">Snapshot-Daten<br>Azure Cloud</div>
+        </div>
+      </div>
+
+      <div style="color: #e2e8f0; font-size: 1.5rem; padding: 0 0.5rem;">|</div>
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 0.4rem; flex: 1; min-width: 160px;">
+        <div class="node node-tool" style="width: 100%; text-align: center;">
+          <div class="icon">🔍</div>
+          <div class="label">Azure AI Search</div>
+          <div class="sublabel">Vektorsuche<br>Embedding-basiert</div>
+        </div>
+        <div class="node node-tool" style="width: 100%; text-align: center;">
+          <div class="icon">📁</div>
+          <div class="label">Dokumentationen / PDFs</div>
+          <div class="sublabel">Handbücher<br>Richtlinien · Normen</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Arrow back up = result -->
+  <div style="position: relative; display: flex; flex-direction: column; align-items: center; margin: 1.5rem 0 0.5rem;">
+    <!-- Removed intermediate text -->
+  </div>
+
+  <!-- Arrow up back to result -->
+  <!-- Removed arrow pointing up -->
+
+  <!-- ⑤ RESULT -->
+  <div style="display: flex; flex-direction: column; align-items: center; margin-top: 4px; position: relative;">
+    
+    <!-- RETURN PATH START: Vertical Up from Result -->
+    <!-- The horizontal line with ANTWORT label -->
+    <div style="
+        display: flex; 
+        align-items: center; 
+        gap: 1rem; 
+        margin-bottom: 0.5rem; 
+        width: 100%; 
+        justify-content: center;
+        position: relative;
+    ">
+       <!-- Left Line -->
+       <div style="width: 80px; height: 2px; background: #cbd5e1;"></div>
+       
+       <!-- Label -->
+       <div style="
+          color: #334155; 
+          font-size: 0.75rem; 
+          font-weight: 700; 
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          display: flex; 
+          align-items: center; 
+          gap: 0.4rem;
+       ">
+          ANTWORT &uarr;
+       </div>
+
+       <!-- Right Line (matches left) -->
+       <div style="width: 80px; height: 2px; background: #cbd5e1;"></div>
+    </div>
+
+    <!-- Arrow pointing UP to the Answer Label from Result/Ergebnis -->
+    <div style="margin-bottom: 0.5rem; color: #334155;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+    </div>
+
+    <!-- The 'ERGEBNIS' text -->
+    <div class="section-label" style="margin-bottom: 0.5rem;">Ergebnis</div>
+
+    <div class="node node-result" id="result-node">
+      <div class="icon">✅</div>
+      <div class="label">Valider Snapshot + Arbeitsbericht</div>
+      <div class="sublabel" style="color: #16a34a;">Aufbereitet · verständlich · vollständig</div>
+    </div>
+  </div>
+
+  <!-- RETURN ARROW CONNECTION (Completing the loop) -->
+  <div class="return-path-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+      
+      <!-- 
+        We need a line connecting the RIGHT end of the 'ANTWORT' bar to the loop.
+        The 'ANTWORT' bar is centered above the result.
+        Result box is ~260px wide. 
+        The bar above has 80px lines + label ~120px + gaps. Total width ~300px.
+        So the right edge is ~150px from center.
+      -->
+
+      <!-- 1. Horizontal Extension to Right -->
+      <div style="
+          position: absolute; 
+          bottom: 45px; /* Aligned with Result box (approx height) */
+          left: 50%;
+          width: 300px; /* Shortened to maintain connection with vertical line */
+          height: 2px; 
+          background-color: #cbd5e1;
+          transform: translateX(160px); /* Start further right to clear the box */
+          z-index: -1;
+      "></div>
+
+      <!-- 2. Vertical line going UP on the right -->
+      <div style="
+          position: absolute; 
+          bottom: 45px; 
+          right: calc(50% - 460px); 
+          top: 35px; /* Point to User Node level */
+          width: 2px; 
+          background-color: #cbd5e1; 
+          border-radius: 0 10px 10px 0;
+      "></div>
+
+      <!-- Label "Antwort an User" on the vertical line -->
+      <div style="
+          position: absolute;
+          top: 50%;
+          right: calc(50% - 460px); /* Aligned with the vertical line (-460px) */
+          transform: translate(50%, -50%); /* Centered on the line */
+          font-size: 0.7rem;
+          font-weight: 600;
+          color: #94a3b8;
+          white-space: nowrap;
+          letter-spacing: 0.05em;
+          text-align: center;
+          line-height: 1.2;
+          background-color: #f8f9fc; /* Match background color to hide line behind text */
+          padding: 0 5px; /* Add some padding around the text */
+      ">
+        ANTWORT AN<br>NUTZER
+      </div>
+      
+      <!-- 3. Horizontal line from Right to Center Flow -->
+      <div style="
+          position: absolute; 
+          top: 35px; /* Aligned with arrow head */
+          right: calc(50% - 460px);
+          width: 290px; /* Reach shorter distance to the left (moves end to right) */
+          height: 2px; 
+          background-color: #cbd5e1;
+      "></div>
+
+      <!-- Arrow Head pointing Left (towards User Box) - SVG Style -->
+       <div style="
+          position: absolute; 
+          top: 24px; /* Adjusted used to match line height (approx center of 20px icon on 2px line at 35px) */
+          right: calc(50% - 180px); /* Slightly adjusted right to attach to line end */
+          color: #cbd5e1;
+          transform: rotate(-90deg);
+      ">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+      </div>
+  </div>
+
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-dot" style="background: #3b82f6;"></div>
+    Orchestrator entscheidet den Weg
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background: #64748b;"></div>
+    Default Agent — Reines LLM-Wissen
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background: #3b82f6;"></div>
+    SP Agent — Smart Planning APIs
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background: #8b5cf6;"></div>
+    Document Agent — RAG / AI Search
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="border: 1.5px dashed #94a3b8; background: transparent;"></div>
+    Tool-Zugriff
+  </div>
+</div>
+
+</body>
+</html>

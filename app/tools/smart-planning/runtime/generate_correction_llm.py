@@ -20,7 +20,7 @@ from runtime_storage import get_storage, get_iteration_folders_with_file, get_la
 
 # AP7.0: rulebook loader (monolith vs. error-type cards, switched via RULEBOOK_MODE)
 from core.rulebook_loader import load_rulebook
-from core.agent_config import RULEBOOK_MODE
+from core.agent_config import RULEBOOK_MODE, HUMAN_IN_THE_LOOP, APP_BASE_URL
 
 # AP7.2: episodic memory — retrieve human-decided past cases, derive memory_support
 from memory import retrieval as mem_retrieval
@@ -635,6 +635,32 @@ SEARCH RESULTS (Error Context):
 MEMORY — HUMAN-DECIDED PAST CASES (AP7.2):
 {memory_evidence}
 
+WORAUF DU EINEN WERT STUETZEN DARFST:
+- Nenne in der Begruendung NUR Vergleichsmerkmale, die du im Kontext TATSAECHLICH geprueft
+  hast. "aus demselben Department" darfst du nur schreiben, wenn du die departmentId der
+  genannten Artikel gesehen und verglichen hast.
+- `items_before` / `items_after` sind ARRAY-NACHBARN. Ihre Naehe ist keine fachliche
+  Aehnlichkeit — sie koennen zu einem anderen Department gehoeren. Sie taugen NICHT als
+  Beleg fuer einen Wert.
+- Massgeblich sind `similar_items` und die `*_same_department`-Statistiken. Steht dort eine
+  Verteilung, nimm den haeufigsten Wert und nenne die Haeufigkeit ("326 von 330").
+- Weicht dein Wert von der Mehrheit im Kollektiv ab, ist er begruendungspflichtig — und
+  deine Sicherheit ist dann NIEDRIG, nicht hoch.
+- Deine Selbsteinschaetzung misst die Uebereinstimmung mit den DATEN, nicht die Schluessig-
+  keit deiner eigenen Begruendung. Ein in sich stimmiger Text ueber das falsche Kollektiv
+  ist keine hohe Sicherheit.
+
+WIE DU MIT DEM GEDÄCHTNIS UMGEHST:
+- Ohne gegenteiligen Beleg übernimmst du bei [GLEICHES OBJEKT] den vom Menschen
+  angewendeten Wert. Das ist der Normalfall.
+- Willst du davon ABWEICHEN, trägst du den Grund in das Feld `memory_dissent_reason` ein.
+  Nur dann bleibt dein Wert stehen; bleibt das Feld leer, ersetzt der menschlich
+  entschiedene Wert deinen Vorschlag.
+- Ein Grund zählt nur, wenn er sich auf die DATEN stützt (z. B. „der Datensatz hat sich
+  geändert: Feld X steht jetzt auf Y"). „Mein Wert erscheint mir plausibler" ist KEIN Grund.
+- Eine begründete Abweichung senkt die Konfidenz und wird dem Prüfer ausdrücklich
+  angezeigt — sie ist ein Einspruch, keine Entscheidung.
+
 ---
 
 TASK:
@@ -764,6 +790,42 @@ HARD RULES:
     
     return correction_proposal, llm_call_data
 
+def open_proposal_blocking(snapshot_id):
+    """Ein bereits offener Vorschlag zu diesem Snapshot — oder None.
+
+    WARUM DIE SPERRE (15.08.2026). Ein Vorschlag ist eine FRAGE an den Menschen. Eine zweite
+    zu stellen, bevor die erste beantwortet ist, ergibt nur Sinn, wenn beide unabhaengig
+    waeren — sie sind es nicht: der zweite wird gegen einen Datenstand gerechnet, den die
+    erste Entscheidung veraendert.
+
+    Dazu kommt, dass ein zweiter Vorschlag in dieser Architektur gar nicht anwendbar ist:
+    `apply_correction.py` nimmt keine Vorschlags-ID entgegen, sondern greift immer die
+    hoechste Iteration. `check_iteration_is_latest` sperrt den aelteren deshalb beim
+    Anwenden — aber erst DANN, also nachdem der Mensch ihn schon gelesen und beurteilt hat.
+    Diese Pruefung zieht die Sperre an den Anfang, wo sie keine Aufmerksamkeit kostet.
+
+    NUR unter HUMAN_IN_THE_LOOP. Ohne den Schalter wendet die Pipeline sofort an und
+    iteriert selbst weiter; dort gibt es keine offene Frage, auf die zu warten waere. Der
+    Status bleibt in diesem Fall dauerhaft `pending_review` (auf `applied` setzt ihn allein
+    der Review-Pfad) — eine bedingungslose Sperre wuerde die Automatik also nach dem ersten
+    Durchgang stillegen.
+
+    Defensiv: ist die Datenbank nicht erreichbar, wird NICHT gesperrt. Eine kaputte
+    Verbindung darf die Korrektur nicht verhindern; im schlimmsten Fall entsteht ein
+    zweiter Vorschlag, und dagegen greift weiterhin der Waechter beim Anwenden.
+    """
+    if not HUMAN_IN_THE_LOOP:
+        return None
+    try:
+        from db import repository as repo
+        offen = [p for p in repo.list_open_proposals_as_dicts()
+                 if p["snapshot_id"] == snapshot_id]
+        return offen[0] if offen else None      # neueste zuerst
+    except Exception as exc:
+        print(f"WARNUNG: Offene Vorschlaege nicht pruefbar ({exc}) - fahre fort.")
+        return None
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(add_help=False)
@@ -777,6 +839,24 @@ def main():
     snapshot_id = load_current_snapshot_id(args.snapshot_id)
     print(f"Snapshot ID: {snapshot_id}\n")
     
+    # SPERRE — vor allem Teuren. Ein Lauf kostet rund 55.000 Token; die haben wir schon
+    # verbrannt, als der zweite Vorschlag entstand, der sich hinterher nicht anwenden liess.
+    wartet = open_proposal_blocking(snapshot_id)
+    if wartet:
+        print("=== ABGEBROCHEN: es wartet bereits ein Vorschlag auf eine Entscheidung ===")
+        print(f"Offener Vorschlag: {wartet['proposal_id']}")
+        print(f"  Fehlerart : {wartet.get('error_type')}")
+        print(f"  Zielpfad  : {wartet.get('target_path')}")
+        print(f"  Konfidenz : {round((wartet.get('confidence_score') or 0) * 100)} %")
+        print(f"  Entscheiden: {APP_BASE_URL}/review.html?proposal={wartet['proposal_id']}")
+        print()
+        print("Solange dieser Vorschlag offen ist, wird kein weiterer erzeugt: er waere "
+              "gegen einen Datenstand gerechnet, den deine Entscheidung veraendert - und "
+              "anwendbar ist ohnehin immer nur der neueste.")
+        print("Entscheide ihn (genehmigen, aendern oder ablehnen), dann laeuft die "
+              "Korrektur weiter.")
+        sys.exit(3)          # eigener Code: kein Fehler, sondern eine Wartesituation
+
     # Get latest iteration number (use existing, don't create new)
     iteration_number = get_latest_iteration_number_local(snapshot_id)
     print(f"Using existing iteration: {iteration_number}\n")
@@ -864,7 +944,36 @@ def main():
             correction_proposal.get("target_path"), rulebook_error_type, proposal_entity
         )
         override = mem_retrieval.same_entity_confirmed_value(similar_cases)
-        if override is not None and override.get("final_value") != correction_proposal.get("new_value"):
+        dissent = (correction_proposal.get("memory_dissent_reason") or "").strip()
+
+        if (override is not None
+                and override.get("final_value") != correction_proposal.get("new_value")
+                and dissent):
+            # BEGRUENDETE ABWEICHUNG (2026-08-13). Der Prompt raeumt dem Modell ausdruecklich
+            # ein, vom Gedaechtnis abzuweichen, "ausser du hast einen expliziten, belegten
+            # Grund dagegen" — vorher hat der Override diesen Ausweg trotzdem verworfen. Das
+            # Versprechen im Prompt und das Verhalten im Code gingen auseinander.
+            #
+            # Sicher ist das aus einem Grund, der nicht hier steht, sondern in
+            # compute_memory_support: weicht der Wert vom bestaetigten ab, ist er NICHT
+            # bestaetigt — memory_support faellt auf 0.5, die 0.9-Untergrenze greift nicht,
+            # und die Konfidenz sinkt von selbst. Eine Abweichung kann sich also nicht die
+            # Sicherheit der menschlichen Bestaetigung erschleichen.
+            #
+            # Geschrieben wird trotzdem nichts: HUMAN_IN_THE_LOOP laesst den Vorschlag im
+            # Review Board landen, wo die Abweichung ausdruecklich gekennzeichnet ist.
+            correction_proposal["value_source"] = "llm_dissent"
+            correction_proposal["reasoning"] = (
+                f"[ABWEICHUNG VOM GEDÄCHTNIS] Ein Mensch hat für dieses Objekt zuvor "
+                f"{override['final_value']!r} entschieden (Fall #{override['id']}, "
+                f"{override['decision']}). Dieser Vorschlag weicht bewusst ab — Begründung: "
+                f"{dissent} "
+                + (correction_proposal.get("reasoning") or "")
+            )
+            print(f"- MEMORY-DISSENS: behalte {correction_proposal.get('new_value')!r} "
+                  f"statt {override['final_value']!r} (Fall #{override['id']}) — Grund: {dissent[:80]}")
+
+        elif override is not None and override.get("final_value") != correction_proposal.get("new_value"):
             old_value = correction_proposal.get("new_value")
             correction_proposal["new_value"] = override["final_value"]
             correction_proposal["value_source"] = "memory"
@@ -875,6 +984,18 @@ def main():
                 f"verbindlicher als die Schätzung {old_value!r}. "
                 + (correction_proposal.get("reasoning") or "")
             )
+            # Die Selbsteinschaetzung MUSS mit: sie begruendet den Medianwert, den das Modell
+            # vorgeschlagen hat — nach dem Override steht daneben aber eine ANDERE Zahl. Ein
+            # Pruefer laese sonst eine Begruendung, die sich auf einen verworfenen Wert
+            # bezieht. Der Originaltext bleibt erhalten (er ist der Beleg dafuer, was das
+            # Modell gedacht hat); vorangestellt wird nur, worauf er sich bezieht.
+            if correction_proposal.get("confidence_rationale"):
+                correction_proposal["confidence_rationale"] = (
+                    f"[Bezieht sich auf den urspruenglichen KI-Vorschlag {old_value!r}, der "
+                    f"durch die fruehere menschliche Entscheidung "
+                    f"{override['final_value']!r} ersetzt wurde.] "
+                    + correction_proposal["confidence_rationale"]
+                )
             print(f"- MEMORY-OVERRIDE: {old_value!r} -> {override['final_value']!r} "
                   f"(Fall #{override['id']}, {override['decision']})")
     except Exception as _mem2_err:

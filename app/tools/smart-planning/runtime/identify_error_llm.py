@@ -294,6 +294,20 @@ Schluesselwoertern. Passt keine, gib eine leere Liste zurueck.
 
 def trigger_identify_tool(search_mode, search_value, snapshot_id: str = None):
     """Trigger the identify_snapshot.py tool with the given search mode and value"""
+
+    # Ohne heruntergeladene Snapshot-Daten hat die Suche nichts zu durchsuchen. Das hier
+    # abzufangen erspart einen Folgefehler zwei Schritte spaeter, der auf die falsche
+    # Ursache zeigt (gemessen am Snapshot 9faf89b1 am 15.08.2026: die Validierung lief
+    # gegen den SERVER und war erfolgreich, lokal lag aber keine snapshot-data.json, weil
+    # nie ein Download stattgefunden hatte).
+    if snapshot_id:
+        from runtime_storage import get_storage as _gs
+        if _gs().load_json(f"{snapshot_id}/snapshot-data.json") is None:
+            print(f"\nFEHLER: Fuer {snapshot_id} liegen keine Snapshot-Daten vor "
+                  f"(snapshot-data.json fehlt).")
+            print("Der Snapshot wurde offenbar nie heruntergeladen. Zuerst "
+                  "download_snapshot ausfuehren, dann erneut versuchen.")
+            return False
     
     # Normalize field names for empty_field mode
     if search_mode == "empty_field":
@@ -407,7 +421,20 @@ def main():
         search_value = llm_analysis.get('search_value')
         if search_value:
             if not demo_mode:
-                trigger_identify_tool(search_mode, search_value, snapshot_id)
+                # DER RUECKGABEWERT WIRD AUSGEWERTET (15.08.2026).
+                #
+                # Er wurde bis dahin verworfen: die Suche konnte scheitern, dieser Schritt
+                # meldete trotzdem Erfolg, und die Pipeline lief zwei Schritte weiter, bis
+                # `generate_correction_llm` ueber die fehlende `last_search_results.json`
+                # stolperte. Der Nutzer bekam dann den Hinweis, `identify_error_llm` sei
+                # "vorher nicht durchgefuehrt" worden — obwohl es gelaufen war und nur
+                # stillschweigend nichts erzeugt hatte. Ein Schritt, der sein Ergebnis nicht
+                # liefert, ist kein erfolgreicher Schritt.
+                if not trigger_identify_tool(search_mode, search_value, snapshot_id):
+                    print("\nFEHLER: Die Suche im Snapshot ist gescheitert - es wurden "
+                          "keine Suchergebnisse erzeugt.")
+                    print("Ohne sie kann kein Korrekturvorschlag entstehen.")
+                    sys.exit(1)
             else:
                 print(f"\nDEMO MODE: Would trigger identify tool")
                 print(f"   Mode: {search_mode}")

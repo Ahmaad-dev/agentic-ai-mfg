@@ -447,6 +447,32 @@ def get_proposal_as_dict(proposal_id: str) -> Optional[dict]:
         }
 
 
+def _summarize_revalidation(raw: Any) -> Optional[dict]:
+    """Das Wesentliche aus `Review.revalidation_result`, klein genug fuer einen Prompt.
+
+    Die Rohspalte enthaelt die komplette Validierungsantwort inklusive aller Meldungstexte.
+    Ungefiltert in den Chat-Kontext gekippt verdraengt sie dort alles andere; weggelassen
+    fehlt die einzige belastbare Aussage darueber, was die Entscheidung bewirkt hat. Also
+    die Zahlen und die noch offenen FEHLER — Warnungen bleiben draussen, sie blockieren
+    nichts und stehen ohnehin in der Validierungsansicht.
+    """
+    if not isinstance(raw, dict):
+        return None
+    validation = raw.get("validation") or {}
+    offen = [
+        (m.get("message") or "")
+        for m in (validation.get("error_details") or [])
+        if isinstance(m, dict)
+    ]
+    return {
+        "errors_before": raw.get("errors_before"),
+        "errors_after": raw.get("errors_after"),
+        "is_valid_after": validation.get("is_valid"),
+        "uploaded_to_server": raw.get("pipeline_success"),
+        "still_open_errors": offen,
+    }
+
+
 def get_decisions_for_snapshot(snapshot_id: str) -> list[dict]:
     """
     All human review decisions made on a snapshot, newest first.
@@ -458,6 +484,12 @@ def get_decisions_for_snapshot(snapshot_id: str) -> list[dict]:
 
     `final_value` is the value that was really applied (the human's on `modify`, the AI's on
     `approve`); `ai_value` is what the AI had proposed, kept for contrast.
+
+    `revalidation` carries the state AFTER applying — errors before, errors after and the
+    error messages that are still open. Without it the chat agent knows that a decision was
+    made but not what it achieved, and fills the gap with optimism: on 14.08.2026 it told
+    the user the snapshot was "vollstaendig fehlerfrei und einsatzbereit" while this very
+    row said `errors_before=3, errors_after=2`.
     """
     with session_scope() as db:
         rows = (
@@ -467,7 +499,7 @@ def get_decisions_for_snapshot(snapshot_id: str) -> list[dict]:
             .order_by(models.Review.decided_at.desc(), models.Review.id.desc())
             .all()
         )
-        return [
+        ergebnis = [
             {
                 "proposal_id": p.proposal_id,
                 "error_type": p.error_type,
@@ -478,9 +510,20 @@ def get_decisions_for_snapshot(snapshot_id: str) -> list[dict]:
                 "reviewer_comment": rv.comment,
                 "proposal_status": p.status,
                 "decided_at": rv.decided_at.isoformat() if rv.decided_at else None,
+                "revalidation": _summarize_revalidation(rv.revalidation_result),
             }
             for rv, p in rows
         ]
+        # Die Liste ist nach Datum absteigend sortiert — aber das sieht man ihr nicht an.
+        # Am 15.08.2026 hat der Chat-Agent deshalb die Nachvalidierung einer AELTEREN
+        # Entscheidung zitiert ("noch 1 Fehler offen"), obwohl die juengste bereits 0 Fehler
+        # meldete. Sortierung allein ist kein Hinweis; der aktuelle Stand wird jetzt
+        # ausdruecklich markiert.
+        for eintrag in ergebnis:
+            if (eintrag.get("revalidation") or {}).get("errors_after") is not None:
+                eintrag["revalidation"]["ist_aktueller_stand"] = True
+                break
+        return ergebnis
 
 
 # --------------------------------------------------------------------------- #
@@ -583,6 +626,9 @@ def list_memory_items_as_dicts() -> list[dict]:
                 "comment": r.comment,
                 "revalidation_ok": r.revalidation_ok,
                 "source_proposal_id": r.source_proposal_id,
+                # Wann diese Entscheidung gefallen ist. Ein Praezedenzfall ohne Datum laesst
+                # sich nicht einordnen — „vor zwei Tagen" wiegt anders als „vor acht Monaten".
+                "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows
         ]

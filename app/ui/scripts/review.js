@@ -114,9 +114,12 @@ function renderProposal(p) {
     const ap35 = idParts.length ? `<div class="rb-chips">${idParts.join('')}</div>` : '';
 
     return `
-        <article class="rb-card" role="listitem" tabindex="0" data-proposal-id="${escapeHtml(p.proposal_id)}" aria-label="Vorschlag ${escapeHtml(p.error_type || '')} öffnen">
+        <article class="rb-card${p.applicable === false ? ' rb-card-stale' : ''}" role="listitem" tabindex="0" data-proposal-id="${escapeHtml(p.proposal_id)}" aria-label="Vorschlag ${escapeHtml(p.error_type || '')} öffnen">
             <div class="rb-card-head">
                 <span class="rb-error-type">${escapeHtml(p.error_type || 'UNKNOWN')}</span>
+                ${p.applicable === false
+                    ? `<span class="rb-status rb-status-stale" title="Ein neuerer Vorschlag zu diesem Snapshot existiert">überholt</span>`
+                    : ''}
                 <span class="rb-status rb-status-${escapeHtml((p.status || '').replace(/[^a-z_]/gi, ''))}">${escapeHtml(p.status || '—')}</span>
             </div>
             <div class="rb-card-body">
@@ -487,6 +490,11 @@ function renderDetail(p) {
                 <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
                 Zurück zur Liste
             </button>
+            <button class="review-refresh" id="copyLinkBtn" type="button"
+                    title="Link zu genau dieser Prüfung kopieren">
+                <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+                Link kopieren
+            </button>
         </div>
 
         <div class="rb-detail-grid">
@@ -549,10 +557,30 @@ function renderDetail(p) {
     `;
 
     document.getElementById('backBtn').addEventListener('click', showList);
+
+    /* Bewusst die ABSOLUTE URL: eine relative liesse sich nicht weiterschicken, und genau
+       das ist der Zweck — jemanden um eine zweite Meinung zu genau dieser Prüfung bitten. */
+    const copyLink = document.getElementById('copyLinkBtn');
+    if (copyLink) {
+        copyLink.addEventListener('click', async () => {
+            const url = `${window.location.origin}${window.location.pathname}`
+                + `?proposal=${encodeURIComponent(p.proposal_id)}`;
+            try {
+                await navigator.clipboard.writeText(url);
+                if (window.AppShell && window.AppShell.toast) {
+                    window.AppShell.toast('Link kopiert', 'content_copy');
+                }
+            } catch (_) {
+                // Zwischenablage kann blockiert sein (kein HTTPS, fehlende Berechtigung).
+                // Dann wenigstens die URL zeigen, statt wortlos nichts zu tun.
+                window.prompt('Link zu dieser Prüfung:', url);
+            }
+        });
+    }
     wireDecisionPanel(p);
     loadCodeContext(p.proposal_id);   // asynchron nachladen, blockiert die Ansicht nicht
     loadMemoryCases(p.proposal_id);   // AP7.3 — ebenso asynchron
-    showDetail();
+    showDetail(p.proposal_id);
 }
 
 /**
@@ -565,6 +593,23 @@ function renderDetail(p) {
  *
  * Kein Fall im Gedächtnis -> die Sektion bleibt aus (kein leerer Kasten).
  */
+/**
+ * Datum eines Präzedenzfalls. Absolut UND relativ: das absolute Datum ist das, was in einem
+ * Bericht zitierbar ist, das relative sagt auf einen Blick, wie frisch der Fall ist.
+ */
+function memDate(iso) {
+    if (!iso) return 'ohne Datum';
+    const d = new Date(iso);
+    if (isNaN(d)) return 'ohne Datum';
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    const rel = days <= 0 ? 'heute'
+        : days === 1 ? 'gestern'
+        : days < 31 ? `vor ${days} Tagen`
+        : days < 365 ? `vor ${Math.round(days / 30)} Monaten`
+        : `vor ${(days / 365).toFixed(1)} Jahren`;
+    return `${d.toLocaleDateString('de-DE')} · ${rel}`;
+}
+
 async function loadMemoryCases(proposalId) {
     const section = document.getElementById('memorySection');
     const host = document.getElementById('memoryCases');
@@ -586,13 +631,43 @@ async function loadMemoryCases(proposalId) {
             mem.rejected ? `${mem.rejected}× verworfen` : '',
         ].filter(Boolean).join(' · ');
 
-        const cards = mem.cases.map(c => {
+        /* Nur die drei jüngsten Fälle zeigen. Die Kopfzeile nennt weiterhin die WAHRE
+           Gesamtzahl — sonst entstünde der Eindruck, es gäbe nur drei Präzedenzfälle, und
+           die Aussagekraft des Gedächtnisses wäre kleiner dargestellt als sie ist.
+           Sortiert nach Datum, weil eine frische Entscheidung schwerer wiegt als eine alte. */
+        const MAX_CASES = 3;
+        const sorted = [...mem.cases].sort(
+            (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+        const shown = sorted.slice(0, MAX_CASES);
+        const hidden = mem.cases.length - shown.length;
+
+        /* Grosse Werte nicht ungebremst ausrollen. Ein korrigiertes workItemConfigs-Array
+           sind 13 Objekte — als eine Zeile JSON gerendert war der Praezedenzfall eine
+           Textwand, in der die eigentliche Aussage (WAS wurde geaendert) unsichtbar blieb.
+           Kurzform sichtbar, vollstaendiger Wert einen Klick entfernt: weggelassen wird
+           nichts, nur nicht mehr alles gleichzeitig gezeigt. */
+        const memValue = (v) => {
+            const text = JSON.stringify(v);
+            if (text === undefined) return '<span class="rb-value rb-mono">—</span>';
+            if (text.length <= 120) return `<span class="rb-value rb-mono">${escapeHtml(text)}</span>`;
+            const kurz = Array.isArray(v)
+                ? `Liste mit ${v.length} Einträgen`
+                : (v && typeof v === 'object')
+                    ? `Objekt mit ${Object.keys(v).length} Feldern`
+                    : text.slice(0, 117) + '…';
+            return `<details class="rb-mem-val">
+                        <summary><span class="rb-value rb-mono">${escapeHtml(kurz)}</span></summary>
+                        <pre class="rb-code">${escapeHtml(JSON.stringify(v, null, 2))}</pre>
+                    </details>`;
+        };
+
+        const cards = shown.map(c => {
             const decisionCls = { approve: 'ok', modify: 'warn', reject: 'err' }[c.decision] || '';
             const applied = c.decision === 'reject'
                 ? ''
                 : `<div class="rb-mem-row">
                        <span class="rb-label">Angewendet</span>
-                       <span class="rb-value rb-mono">${escapeHtml(JSON.stringify(c.final_value))}</span>
+                       ${memValue(c.final_value)}
                    </div>`;
             const why = c.comment
                 ? `<p class="rb-muted rb-mem-why">„${escapeHtml(c.comment)}"</p>`
@@ -603,9 +678,10 @@ async function loadMemoryCases(proposalId) {
                         <span class="rb-chip rb-chip-error">${escapeHtml(c.error_type || '—')}</span>
                         <span class="rb-mem-decision ${decisionCls}">${escapeHtml(c.decision)}</span>
                     </div>
+                    <div class="rb-mem-date">${escapeHtml(memDate(c.created_at))}</div>
                     <div class="rb-mem-row">
                         <span class="rb-label">KI schlug vor</span>
-                        <span class="rb-value rb-mono">${escapeHtml(JSON.stringify(c.suggested_value))}</span>
+                        ${memValue(c.suggested_value)}
                     </div>
                     ${applied}
                     ${why}
@@ -616,7 +692,10 @@ async function loadMemoryCases(proposalId) {
             <p class="rb-muted rb-mem-summary">
                 ${escapeHtml(summary)} für <code>${escapeHtml(mem.pattern || '—')}</code>
             </p>
-            <div class="rb-mem-list">${cards}</div>`;
+            <div class="rb-mem-list">${cards}</div>
+            ${hidden > 0
+                ? `<p class="rb-muted rb-mem-more">${hidden} weitere(r) Fall/Fälle nicht angezeigt</p>`
+                : ''}`;
         section.hidden = false;
     } catch (err) {
         console.warn('Memory-Fälle nicht ladbar:', err);
@@ -686,9 +765,26 @@ function renderConfidenceBreakdown(p) {
         ? 'Wert ist in den Daten belegt'
         : 'Wert ist NICHT in den Daten belegt — bitte genau prüfen';
 
+    /* Hat das Gedächtnis den Wert des Modells ersetzt, begründet die Selbsteinschätzung
+       eine ANDERE Zahl als die vorgeschlagene — sie stammt noch aus dem ursprünglichen
+       Vorschlag. Der Generator schreibt das seit 13.08.2026 selbst in den Text; für bereits
+       gespeicherte Vorschläge muss es die Oberfläche nachholen, sonst liest ein Prüfer
+       weiterhin eine Begründung zum verworfenen Wert.
+       `[GEDÄCHTNIS]` ist dafür eine verlässliche Markierung und keine Vermutung: genau ein
+       Codepfad schreibt sie, nämlich der Override selbst. */
+    const memoryOverride = (p.reasoning || '').startsWith('[GEDÄCHTNIS]');
+    /* Der umgekehrte Fall: das Modell weicht BEGRÜNDET von einer früheren menschlichen
+       Entscheidung ab. Das ist kein Fehler, aber es ist die Stelle, an der ein Prüfer am
+       genauesten hinschauen muss — deshalb ein eigener, deutlich sichtbarer Kasten statt
+       einer Zeile im Fließtext. */
+    const memoryDissent = (p.reasoning || '').startsWith('[ABWEICHUNG VOM GEDÄCHTNIS]');
+    const rationaleLabel = memoryOverride
+        ? 'Selbsteinschätzung der KI <em>zum ursprünglichen Vorschlag</em> — der Wert wurde '
+          + 'danach durch eine frühere menschliche Entscheidung ersetzt:'
+        : 'Selbsteinschätzung der KI:';
     const rationale = p.confidence_rationale
-        ? `<p class="rb-muted rb-conf-rationale">Selbsteinschätzung der KI:
-             ${escapeHtml(p.confidence_rationale)}</p>`
+        ? `<p class="rb-muted rb-conf-rationale ${memoryOverride ? 'superseded' : ''}">
+             ${rationaleLabel} ${escapeHtml(p.confidence_rationale)}</p>`
         : '';
 
     // AP7.2 — der dritte Term. Er wird nur gezeigt, wenn er tatsächlich berechnet wurde
@@ -715,6 +811,18 @@ function renderConfidenceBreakdown(p) {
                 </div>`;
         })();
 
+    const dissentBlock = memoryDissent
+        ? `<div class="rb-grounded err rb-dissent">
+               <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+               <div>
+                   <strong>Widerspricht einer früheren menschlichen Entscheidung</strong>
+                   <p class="rb-muted">Die KI schlägt bewusst einen anderen Wert vor, als ein
+                   Mensch für dieses Objekt entschieden hat. Die Begründung steht oben im
+                   Abschnitt „Begründung“ — bitte zuerst prüfen, ob sie trägt.</p>
+               </div>
+           </div>`
+        : '';
+
     return `
         <div class="rb-detail-section rb-conf-card">
             <div class="rb-conf-head">
@@ -732,6 +840,7 @@ function renderConfidenceBreakdown(p) {
                 </div>
             </div>
             ${memoryBlock}
+            ${dissentBlock}
             ${rationale}
         </div>`;
 }
@@ -787,6 +896,48 @@ function renderDecisionPanel(p) {
                 </div>
                 ${details}
             </div>`;
+    }
+
+    /* Der Waechter beim Anwenden sperrt ueberholte Vorschlaege ohnehin (409). Bis
+       15.08.2026 erfuhr der Pruefer das aber erst NACH seiner Entscheidung — er hatte den
+       Diff gelesen, die Begruendung geprueft und geklickt. Jetzt steht es davor, und die
+       beiden anwendenden Knoepfe sind stillgelegt. „Ablehnen" bleibt bedienbar: ein
+       ueberholter Vorschlag muss vom Tisch koennen. */
+    if (p.applicable === false) {
+        return `
+        <div class="rb-detail-section rb-actions">
+            <h3>Entscheidung</h3>
+            <div class="rb-callout rb-callout-warn">
+                <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                <div>
+                    <strong>Dieser Vorschlag ist überholt und kann nicht mehr angewendet werden.</strong>
+                    <p class="rb-muted">
+                        Zu diesem Snapshot existiert ein neuerer Vorschlag. Das Anwenden greift
+                        immer den neuesten — eine Freigabe hier würde also etwas anderes anwenden,
+                        als du geprüft hast. Deshalb ist sie gesperrt.
+                        ${p.not_applicable_reason
+                            ? `<br><span class="rb-mono">${escapeHtml(p.not_applicable_reason)}</span>` : ''}
+                    </p>
+                    <p class="rb-muted">Entscheide stattdessen den neuesten Vorschlag — oder
+                    lehne diesen hier ab, damit er aus der Liste verschwindet.</p>
+                </div>
+            </div>
+
+            <label class="rb-label" for="rbComment">
+                Kommentar <span class="rb-muted">(Pflicht beim Ablehnen)</span>
+            </label>
+            <textarea id="rbComment" class="rb-comment" rows="3"
+                      placeholder="Begründung der Entscheidung…"></textarea>
+
+            <div class="rb-btn-row">
+                <button class="rb-btn rb-btn-reject" id="rejectBtn" type="button">
+                    <span class="material-symbols-outlined" aria-hidden="true">cancel</span>
+                    <span class="rb-btn-text">Ablehnen</span>
+                </button>
+            </div>
+
+            <div class="rb-decision-status" id="decisionStatus" role="status" hidden></div>
+        </div>`;
     }
 
     return `
@@ -873,9 +1024,15 @@ function renderModifyEditor(p) {
 function wireDecisionPanel(p) {
     const approveBtn = document.getElementById('approveBtn');
     const rejectBtn = document.getElementById('rejectBtn');
-    if (!approveBtn || !rejectBtn) return; // already-decided panel has no buttons
-    approveBtn.addEventListener('click', () => armDecision(p.proposal_id, 'approve'));
-    rejectBtn.addEventListener('click', () => armDecision(p.proposal_id, 'reject'));
+    /* JEDEN Knopf einzeln verdrahten, der da ist. Vorher stand hier
+       `if (!approveBtn || !rejectBtn) return`, was zwei Faelle in einen warf: die
+       bereits entschiedene Ansicht (gar keine Knoepfe) und — seit dem 15.08.2026 — die
+       ueberholte Ansicht, die NUR "Ablehnen" hat. Dort brach die Funktion vor dem
+       Verdrahten ab, und der einzige verbliebene Knopf tat nichts. Ein ueberholter
+       Vorschlag liess sich damit weder anwenden noch loswerden. */
+    if (approveBtn) approveBtn.addEventListener('click', () => armDecision(p.proposal_id, 'approve'));
+    if (rejectBtn) rejectBtn.addEventListener('click', () => armDecision(p.proposal_id, 'reject'));
+    if (!approveBtn) return;   // ohne Freigabe-Knopf gibt es auch keinen Aenderungs-Editor
 
     const modifyBtn = document.getElementById('modifyBtn');
     const editor = document.getElementById('modifyEditor');
@@ -1326,15 +1483,44 @@ async function submitDecision(proposalId, decision, finalValue) {
     }
 }
 
-function showDetail() {
+/**
+ * Die geöffnete Prüfung in der Adresszeile führen.
+ *
+ * Bisher stand dort immer nur `/review.html` — ein Link liess sich also nicht weitergeben,
+ * und Zurück im Browser sprang aus der Anwendung heraus. Als Kennung dient `proposal_id`
+ * (Primärschlüssel der Tabelle `proposals`, z. B. `…-4508608a67cf__iteration-4`). Die
+ * SNAPSHOT-Id genügt dafür nicht: zu einem Snapshot gehören mehrere Vorschläge.
+ *
+ * `replace` beim Öffnen über einen bereits passenden Link — sonst entstünde ein doppelter
+ * Verlaufseintrag und der erste Zurück-Klick täte nichts.
+ */
+function syncUrlToProposal(proposalId) {
+    const want = proposalId ? `?proposal=${encodeURIComponent(proposalId)}` : '';
+    const target = window.location.pathname + want;
+    if (window.location.pathname + window.location.search === target) return;
+    const current = new URLSearchParams(window.location.search).get('proposal');
+    const fn = (proposalId && !current) || (!proposalId && current) ? 'pushState' : 'replaceState';
+    history[fn]({ proposal: proposalId || null }, '', target);
+}
+
+/** Vor- und Zurück im Browser sollen zwischen Liste und Detail wechseln. */
+window.addEventListener('popstate', () => {
+    const id = new URLSearchParams(window.location.search).get('proposal');
+    if (id) openProposal(id);
+    else { detailView.hidden = true; listView.hidden = false; }
+});
+
+function showDetail(proposalId) {
     listView.hidden = true;
     detailView.hidden = false;
+    if (proposalId) syncUrlToProposal(proposalId);
     window.scrollTo(0, 0);
 }
 
 function showList() {
     detailView.hidden = true;
     listView.hidden = false;
+    syncUrlToProposal(null);
     // A decided proposal is no longer pending, so it must drop out of the list.
     if (listStale) {
         listStale = false;

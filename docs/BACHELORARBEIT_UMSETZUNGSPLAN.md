@@ -269,7 +269,7 @@ Exposé selbst als offene methodische Herausforderung benennt, in PT4 bereits ge
 Das Exposé sagt an mehreren Stellen: „Da keine automatisierte Ground-Truth-Validierung existiert,
 erfordert die Beurteilung Expertenwissen." Das stimmt für *beliebige* Produktionsfehler. Aber du hast
 in PT4 eine Methode gebaut, die genau dieses Problem umgeht: **Fehler gezielt in Snapshot-Kopien
-injizieren, den Originalwert als Ground Truth festhalten** (`demo/eval/build_test_catalog.py`). Damit
+injizieren, den Originalwert als Ground Truth festhalten** (`app/eval/build_test_catalog.py`). Damit
 ist für die injizierten Fälle objektiv messbar, ob eine Korrektur *richtig* ist — nicht nur „valide".
 
 Das ist ein **methodischer Beitrag deiner Arbeit** und beantwortet UF1 („wie überhaupt messbar
@@ -340,7 +340,7 @@ und was *bestehende Infrastruktur*.
 
 **Methodisch wertvoll und in die Arbeit übernehmbar (mit Begründung):**
 - Der **Testkatalog-Builder** mit Fehlerinjektion und dokumentierter Ground Truth
-  (`demo/eval/build_test_catalog.py`). Das ist dein Lösungsansatz für das Ground-Truth-Problem.
+  (`app/eval/build_test_catalog.py`). Das ist dein Lösungsansatz für das Ground-Truth-Problem.
 - Die **deterministische technische Prüfung** (belegbar vs. erfunden) als ein Baustein der
   Halluzinationsmessung auf technischer Ebene.
 - Der **`RULEBOOK_MODE`-Schalter** (monolith ↔ cards): brauchbar als *Teilaspekt* der Graph-Variante

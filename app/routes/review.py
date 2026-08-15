@@ -100,6 +100,30 @@ def _get_sp_agent():
 REVIEWER_REF = "demo_reviewer"
 
 
+def _annotate_applicability(proposal: dict) -> None:
+    """`applicable` + `not_applicable_reason` an einen Vorschlag haengen (in-place).
+
+    Dieselbe Pruefung, die `_apply_after_review` als Guard 3 fahrt — nur eben jetzt schon,
+    damit die Oberflaeche es zeigen kann, statt den Pruefer in einen 409 laufen zu lassen.
+    Nur fuer noch offene Vorschlaege sinnvoll; entschiedene tragen ihr Ergebnis ohnehin.
+
+    Defensiv: schlaegt die Pruefung fehl, gilt der Vorschlag als anwendbar. Ein Wackler in
+    der Anzeige darf keine Entscheidung verhindern — die echte Sperre sitzt weiterhin im
+    Anwenden-Pfad.
+    """
+    if proposal.get("status") != repo.PENDING_STATUS:
+        return
+    try:
+        ok, grund = check_iteration_is_latest(proposal["proposal_id"])
+    except Exception as exc:
+        logger.warning("[review] Anwendbarkeit nicht pruefbar fuer %s: %s",
+                       proposal.get("proposal_id"), exc)
+        return
+    proposal["applicable"] = bool(ok)
+    if not ok:
+        proposal["not_applicable_reason"] = grund
+
+
 @review_bp.get("/proposals")
 def list_proposals():
     """Return all open (pending_review) proposals, newest first.
@@ -108,6 +132,8 @@ def list_proposals():
                      confidence_score, status, created_at.
     """
     proposals = repo.list_open_proposals_as_dicts()
+    for p in proposals:
+        _annotate_applicability(p)
     return jsonify(proposals), 200
 
 
@@ -120,11 +146,65 @@ def get_proposal(proposal_id: str):
     proposal = repo.get_proposal_as_dict(proposal_id)
     if proposal is None:
         return jsonify({"error": "Proposal not found", "proposal_id": proposal_id}), 404
+    _annotate_applicability(proposal)
     return jsonify(proposal), 200
 
 
 #: Wie viele Zeilen vor/nach der Fehlerstelle gezeigt werden.
 _CONTEXT_LINES = 7
+
+
+#: Ein Zielpfad-Abschnitt: entweder ein Name (`articles`) oder ein Index (`[3]`).
+_PFAD_TOKEN = re.compile(r"([A-Za-z_]\w*)|\[(\d+)\]")
+
+
+def _parse_target_path(path: str):
+    """`articles[0].workItemConfigs[3].rampUpTime` -> ['articles', 0, 'workItemConfigs', 3, 'rampUpTime'].
+
+    Der Pfad wird VOLLSTAENDIG zerlegt und dabei geprueft, dass nichts uebrig bleibt: der
+    alte Ausdruck nutzte `re.match` und verwarf alles hinter dem dritten Abschnitt
+    stillschweigend. Genau daran lag es, dass ein Vorschlag auf ein einzelnes Feld die
+    Fehlerstelle des umgebenden Arrays anzeigte. Bleibt hier etwas Unverstandenes stehen,
+    ist das Ergebnis leer — lieber eine ehrliche Fehlermeldung als eine falsche Stelle.
+    """
+    schritte, pos = [], 0
+    for m in _PFAD_TOKEN.finditer(path or ""):
+        if m.start() > pos and (path[pos:m.start()] != "."):
+            return []                      # etwas dazwischen, das wir nicht verstehen
+        schritte.append(m.group(1) if m.group(1) is not None else int(m.group(2)))
+        pos = m.end()
+    return schritte if schritte and pos == len(path or "") else []
+
+
+def _walk_to_parent(data, schritte):
+    """Bis zum vorletzten Abschnitt laufen. Rueckgabe: (Elternobjekt, Blattschluessel, Fehlstelle)."""
+    knoten = data
+    for i, s in enumerate(schritte[:-1]):
+        if isinstance(s, int):
+            if not isinstance(knoten, list) or s >= len(knoten):
+                return None, None, "".join(f"[{x}]" if isinstance(x, int) else f".{x}"
+                                           for x in schritte[:i + 1]).lstrip(".")
+            knoten = knoten[s]
+        else:
+            if not isinstance(knoten, dict) or s not in knoten:
+                return None, None, "".join(f"[{x}]" if isinstance(x, int) else f".{x}"
+                                           for x in schritte[:i + 1]).lstrip(".")
+            knoten = knoten[s]
+
+    blatt = schritte[-1]
+    vorhanden = (isinstance(knoten, list) and isinstance(blatt, int) and blatt < len(knoten)) \
+        or (isinstance(knoten, dict) and blatt in knoten)
+    if not vorhanden:
+        return None, None, "".join(f"[{x}]" if isinstance(x, int) else f".{x}"
+                                   for x in schritte).lstrip(".")
+    return knoten, blatt, None
+
+
+def _set_at(data, schritte, wert) -> None:
+    """Den Wert am Ende des Pfades ersetzen (auf einer Kopie, fuer die Markierung)."""
+    eltern, blatt, fehlt = _walk_to_parent(data, schritte)
+    if fehlt is None:
+        eltern[blatt] = wert
 
 
 @review_bp.get("/proposals/<proposal_id>/context")
@@ -148,31 +228,29 @@ def get_proposal_context(proposal_id: str):
     snapshot_id = proposal["snapshot_id"]
     target_path = proposal.get("target_path") or ""
 
-    m = re.match(r"^(\w+)\[(\d+)\]\.(\w+)", target_path)
-    if not m:
+    schritte = _parse_target_path(target_path)
+    if not schritte:
         return jsonify({
             "error": "Kein auswertbarer target_path",
             "target_path": target_path,
         }), 422
-    array_name, index, field = m.group(1), int(m.group(2)), m.group(3)
 
     data = get_storage().load_json(f"{snapshot_id}/snapshot-data.json")
     if not isinstance(data, dict):
         return jsonify({"error": "snapshot-data.json nicht lesbar",
                         "snapshot_id": snapshot_id}), 404
 
-    arr = data.get(array_name)
-    if not isinstance(arr, list) or index >= len(arr) or not isinstance(arr[index], dict):
-        return jsonify({"error": f"Position {array_name}[{index}] existiert nicht"}), 404
-    if field not in arr[index]:
-        return jsonify({"error": f"Feld {field!r} fehlt in {array_name}[{index}]"}), 404
+    eltern, blatt, fehlt = _walk_to_parent(data, schritte)
+    if fehlt is not None:
+        return jsonify({"error": f"Pfad endet ins Leere bei {fehlt!r}",
+                        "target_path": target_path}), 404
 
     dump = lambda d: json.dumps(d, indent=2, ensure_ascii=False).splitlines()
     original_lines = dump(data)
 
     marker = "__PT4_TARGET_a7f3__"
     probe = copy.deepcopy(data)
-    probe[array_name][index][field] = marker
+    _set_at(probe, schritte, marker)
     probe_lines = dump(probe)
 
     hit = next((i for i, line in enumerate(probe_lines) if marker in line), None)

@@ -31,6 +31,14 @@ class CorrectionProposal(BaseModel):
         "pending_review",
         description="Review status of the proposal (default: pending_review)"
     )
+    memory_dissent_reason: Optional[str] = Field(
+        None,
+        description=(
+            "ONLY set this when you deliberately propose a value that DIFFERS from a "
+            "[GLEICHES OBJEKT] memory case. State the concrete, data-backed reason. Leaving it "
+            "empty means the human-decided value stands and replaces your proposal."
+        )
+    )
 
     @field_validator("confidence_score")
     @classmethod

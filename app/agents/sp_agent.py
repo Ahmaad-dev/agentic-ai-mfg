@@ -2,6 +2,7 @@
 SP_Agent - Smart Planning Agent
 """
 import json
+import os
 import logging
 import subprocess
 import sys as _sys
@@ -9,14 +10,22 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from .base_agent import BaseAgent
 from .sp_tools_config import SP_TOOLS, SP_PIPELINES
+from core.agent_config import HUMAN_IN_THE_LOOP
 
 # StorageManager über runtime_storage (unterstützt LOCAL + AZURE)
 _runtime_storage_dir = str(Path(__file__).parent.parent / "tools" / "smart-planning" / "runtime")
 if _runtime_storage_dir not in _sys.path:
     _sys.path.insert(0, _runtime_storage_dir)
-from runtime_storage import get_storage as _get_storage, get_iteration_folders_with_file as _get_iter_with_file
+from runtime_storage import (get_storage as _get_storage,
+                             get_iteration_folders_with_file as _get_iter_with_file,
+                             get_latest_iteration_number as _get_latest_iter)
 
 logger = logging.getLogger(__name__)
+
+#: Exit-Code, mit dem ein Werkzeug sagt: "kein Fehler, aber es wartet eine menschliche
+#: Entscheidung". Vergeben von generate_correction_llm.py, wenn zu diesem Snapshot bereits
+#: ein Vorschlag offen ist.
+WAITING_FOR_DECISION = 3
 
 
 class SPAgent(BaseAgent):
@@ -86,11 +95,25 @@ class SPAgent(BaseAgent):
         logger.info(f"[{self.name}] Führe Tool aus: {tool_name} ({' '.join(cmd)})")
         
         try:
+            # UTF-8 in BEIDE Richtungen erzwingen (15.08.2026).
+            #
+            # Ohne `PYTHONIOENCODING` erbt das Werkzeug die Konsolen-Codepage des Elternteils
+            # — auf diesem System cp1252. Ein einzelnes Zeichen ausserhalb davon in einem
+            # LLM-Text laesst dann das WERKZEUG abstuerzen, nicht etwa nur die Ausgabe
+            # verstuemmeln: gemessen an einem "→" in `relevant_cards_reasoning`, das
+            # `generate_correction_llm` beim blossen `print` mit UnicodeEncodeError beendete.
+            # Der Korrekturvorschlag entstand deshalb nie, obwohl der Fehler korrekt erkannt
+            # war. `errors="replace"` beim Lesen sorgt zusaetzlich dafuer, dass ein
+            # unerwartetes Byte hoechstens ein Fragezeichen erzeugt und nie eine Ausnahme.
+            umgebung = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
             result = subprocess.run(
                 cmd,
                 cwd=str(self.runtime_dir),
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=umgebung,
                 timeout=90  # 90 Sekunden Timeout (bei VPN-Fehler soll schnell ein Fehler kommen)
             )
             
@@ -101,6 +124,13 @@ class SPAgent(BaseAgent):
                 "returncode": result.returncode,
                 "tool": tool_name
             }
+
+            # Exit-Code 3 heisst NICHT "kaputt", sondern "es wartet etwas auf eine
+            # menschliche Entscheidung". Ohne diese Unterscheidung wiederholt die Pipeline
+            # dreimal dasselbe und meldet am Ende einen Fehlschlag — obwohl alles richtig
+            # gelaufen ist und der Nutzer nur handeln muss.
+            if result.returncode == WAITING_FOR_DECISION:
+                base_result["waiting_for_decision"] = True
             
             # Spezialfall: create_snapshot, download_snapshot → Parse Snapshot-Metadaten (Name, ID)
             if tool_name in ["create_snapshot", "download_snapshot"] and result.returncode == 0:
@@ -248,6 +278,26 @@ class SPAgent(BaseAgent):
     def _execute_pipeline(self, pipeline_name: str, snapshot_id: Optional[str] = None) -> Dict:
         """Führt eine komplette Pipeline mit Retry-Logik aus"""
         pipeline = SP_PIPELINES.get(pipeline_name)
+
+        # Die Sperre steckt in generate_correction_llm — dort ist sie richtig aufgehoben,
+        # weil sie auch beim direkten Werkzeugaufruf greifen muss. Sie wuerde aber erst
+        # NACH validate und identify zuschlagen, und identify kostet einen LLM-Aufruf.
+        # Deshalb hier dieselbe Frage noch einmal, bevor der erste Schritt laeuft.
+        if (pipeline and "generate_correction_llm" in (pipeline.get("steps") or [])
+                and snapshot_id and HUMAN_IN_THE_LOOP):
+            wartet = self._open_proposal_blocking(snapshot_id)
+            if wartet:
+                logger.info(f"[{self.name}] Pipeline '{pipeline_name}' haelt an: Vorschlag "
+                            f"{wartet['proposal_id']} wartet auf eine Entscheidung")
+                return {
+                    "success": True,
+                    "pipeline": pipeline_name,
+                    "completed_steps": [],
+                    "final_validation": None,
+                    "analysis_scope": None,
+                    "waiting_for_decision": True,
+                    "open_proposal": wartet,
+                }
         if not pipeline:
             return {"success": False, "error": f"Unbekannte Pipeline: {pipeline_name}"}
         
@@ -287,6 +337,29 @@ class SPAgent(BaseAgent):
                     })
                     break
                 
+                # Wartet etwas auf eine Entscheidung, ist Wiederholen sinnlos: der Zustand
+                # aendert sich nur durch einen Menschen, nicht durch einen zweiten Versuch.
+                if tool_result.get("waiting_for_decision"):
+                    logger.info(f"[{self.name}] Schritt '{step}' wartet auf eine menschliche "
+                                f"Entscheidung - Pipeline haelt an (kein Fehlschlag)")
+                    results.append({
+                        "step": step,
+                        "success": True,
+                        "attempts": attempt,
+                        "output": tool_result.get("stdout", ""),
+                        "waiting_for_decision": True,
+                        "error": None
+                    })
+                    return {
+                        "success": True,
+                        "pipeline": pipeline_name,
+                        "completed_steps": results,
+                        "final_validation": None,
+                        "analysis_scope": None,
+                        "waiting_for_decision": True,
+                        "waiting_message": tool_result.get("stdout", ""),
+                    }
+
                 # Fehler → Prüfe ob Retry sinnvoll
                 error_msg = tool_result.get("stderr", "") or tool_result.get("error", "")
                 logger.warning(f"[{self.name}] Schritt '{step}' fehlgeschlagen (Versuch {attempt}): {error_msg[:200]}")
@@ -367,13 +440,105 @@ class SPAgent(BaseAgent):
             except Exception as e:
                 logger.warning(f"[{self.name}] Could not read validation status: {e}")
         
+        # Reichweite der reinen Analyse. Ohne diese Angaben weiss das Modell, das den
+        # Text formuliert, NICHT, wie viel der Lauf abgedeckt hat — und hat im Lauf vom
+        # 14.08.2026 prompt behauptet, alle Fehler seien behoben und der Snapshot valide,
+        # obwohl ein Vorschlag fuer genau EINEN von drei Fehlern erzeugt und nichts
+        # geschrieben wurde.
+        analysis_scope = None
+        if pipeline_name == "analyze_only" and snapshot_id:
+            analysis_scope = self._describe_analysis_scope(snapshot_id)
+
         return {
             "success": True,
             "pipeline": pipeline_name,
             "completed_steps": results,
-            "final_validation": final_validation_status
+            "final_validation": final_validation_status,
+            "analysis_scope": analysis_scope
         }
     
+    def _open_proposal_blocking(self, snapshot_id: str) -> Optional[Dict]:
+        """Wartet zu diesem Snapshot schon ein Vorschlag auf eine Entscheidung?
+
+        Defensiv wie die Zwillingspruefung im Werkzeug: ist die Datenbank nicht erreichbar,
+        wird NICHT gesperrt. Die eigentliche Sperre sitzt ohnehin im Anwenden-Pfad.
+        """
+        try:
+            from db import repository as repo
+            offen = [p for p in repo.list_open_proposals_as_dicts()
+                     if p["snapshot_id"] == snapshot_id]
+            return offen[0] if offen else None
+        except Exception as exc:
+            logger.warning(f"[{self.name}] Offene Vorschlaege nicht pruefbar: {exc}")
+            return None
+
+    def _describe_analysis_scope(self, snapshot_id: str) -> Optional[Dict]:
+        """Was der Analyse-Lauf abgedeckt hat — und vor allem, was NICHT.
+
+        `analyze_only` behandelt pro Durchlauf genau EINEN Fehler: `identify_error_llm`
+        waehlt einen aus und priorisiert ihn, `generate_correction_llm` schlaegt dafuer
+        einen Wert vor. Geschrieben wird nichts. Wer nur "Pipeline erfolgreich" sieht, haelt
+        das fuer eine vollstaendige Korrektur — genau das ist passiert.
+
+        Quelle sind die Artefakte des Laufs selbst, nicht eine erneute Pruefung: die
+        `snapshot-validation.json` IM Iterationsordner ist der Stand, auf dem die Auswahl
+        beruhte. Die Datei eine Ebene darueber wird von spaeteren Laeufen ueberschrieben und
+        wuerde hier eine andere Zahl liefern als die, die der Lauf tatsaechlich gesehen hat.
+
+        Defensiv: fehlt ein Artefakt, wird `None` geliefert und der Kontext bleibt wie
+        bisher — lieber keine Angabe als eine falsche.
+        """
+        try:
+            storage = _get_storage()
+            n = _get_latest_iter(snapshot_id, require_file="llm_identify_response.json")
+            if n is None:
+                return None
+
+            ident = storage.load_json(
+                f"{snapshot_id}/iteration-{n}/llm_identify_response.json") or {}
+            selected = ((ident.get("llm_analysis") or {}).get("selected_error") or {}).get("message")
+
+            # Bevorzugt die Kopie IM Iterationsordner — sie ist der Stand, auf dem die
+            # Auswahl beruhte. Die legt aber nur `apply_correction` beim Sichern an; ein
+            # reiner Analyse-Lauf schreibt sie nie. Dann gilt die Datei eine Ebene darueber:
+            # `validate_snapshot` hat sie als ERSTEN Schritt dieses Laufs geschrieben, sie
+            # ist also genau der Stand, den der Lauf gesehen hat.
+            #
+            # Bis 15.08.2026 fehlte dieser Rueckfall, und das abschliessende `or []` machte
+            # daraus ein klammheimliches "0 Fehler gefunden" — eine erfundene Zahl an genau
+            # der Stelle, die Zahlen belastbar machen soll.
+            messages = (storage.load_json(f"{snapshot_id}/iteration-{n}/snapshot-validation.json")
+                        or storage.load_json(f"{snapshot_id}/snapshot-validation.json")
+                        or [])
+            errors = [m.get("message", "") for m in messages if m.get("level") == "ERROR"]
+            warnings = [m.get("message", "") for m in messages if m.get("level") == "WARNING"]
+
+            # Ein behandelter Fehler bei null gefundenen ist ein Widerspruch: dann ist die
+            # Validierungsdatei nicht auffindbar oder veraltet. Lieber GAR KEINE Angabe als
+            # eine falsche — der Vorbehalt entfaellt dann einfach.
+            if selected and not errors:
+                logger.warning(f"[{self.name}] Analyse-Reichweite nicht belastbar "
+                               f"(behandelter Fehler, aber keine Validierungsmeldungen) - weggelassen")
+                return None
+
+            scope = {
+                "errors_found": len(errors),
+                "warnings_found": len(warnings),
+                "handled_error": selected,
+                "errors_not_addressed": [m for m in errors if m != selected],
+                "snapshot_written": False,
+                "uploaded_to_server": False,
+                "awaiting_human_decision": True,
+            }
+            logger.info(
+                f"[{self.name}] Analyse-Reichweite: {scope['errors_found']} Fehler gefunden, "
+                f"1 behandelt, {len(scope['errors_not_addressed'])} unberuehrt, nichts geschrieben"
+            )
+            return scope
+        except Exception as exc:
+            logger.warning(f"[{self.name}] Analyse-Reichweite nicht ermittelbar: {exc}")
+            return None
+
     def _suggest_recovery(self, failed_step: str, tool_result: Dict) -> Dict:
         """
         Analysiert Fehler und gibt STRUKTURIERTE Recovery-Daten zurück (keine fertigen Texte!)
@@ -384,11 +549,22 @@ class SPAgent(BaseAgent):
         # Datei nicht gefunden → Vorheriger Schritt fehlt
         if "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
             if "last_search_results.json" in error_msg:
+                # Bis 15.08.2026 stand hier "missing_step: identify_error_llm" — eine fest
+                # verdrahtete VERMUTUNG. Sie war im gemessenen Fall falsch: innerhalb einer
+                # Pipeline laeuft identify_error_llm IMMER vor generate_correction_llm, und
+                # laut Log war es gelaufen. Es hatte nur nichts erzeugt, weil die
+                # Snapshot-Daten fehlten. Der Nutzer bekam daraufhin den Rat, einen Schritt
+                # nachzuholen, den das System selbst gerade ausgefuehrt hatte.
+                # Jetzt wird die Tatsache genannt, nicht eine Ursache behauptet.
                 return {
-                    "error_type": "missing_prerequisite",
-                    "missing_step": "identify_error_llm",
+                    "error_type": "search_results_missing",
                     "required_file": "last_search_results.json",
-                    "suggestion": "run_identify_error_first"
+                    "fact": ("Die Suche im Snapshot hat keine Ergebnisdatei erzeugt. "
+                             "In einer Pipeline laeuft die Fehler-Identifikation davor, "
+                             "sie hat also gelaufen, aber nichts geliefert."),
+                    "likely_cause": ("Die Snapshot-Daten liegen lokal nicht vor - meist, "
+                                     "weil der Snapshot nie heruntergeladen wurde."),
+                    "suggestion": "check_snapshot_downloaded",
                 }
             return {
                 "error_type": "missing_file",
