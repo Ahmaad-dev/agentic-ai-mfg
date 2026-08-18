@@ -7,9 +7,8 @@
 >
 > **Das aktuelle Vorhaben ist die Bachelorarbeit** (Graph-basierte Systemarchitektur vs.
 > monolithische Systemprompt-Struktur). Deren Referenzen sind:
-> * `docs/Graph-Architektur-Masterplan_fable.md` — verbindliche Bau-Referenz, Kap. 23 ist die
->   Master-Checkliste
-> * `docs/BACHELORARBEIT_UMSETZUNGSPLAN.md` — Methodik und Messvorschriften
+> * `docs/BA_MASTERPLAN.md` — die einzige verbindliche Referenz für Methodik, Bau und Messung,
+>   Kap. 23 ist die Master-Checkliste *(vereinigt seit 16.08.2026 die drei Vorgängerpläne)*
 > * `docs/03_Expose-extern/` — das eingereichte Exposé
 >
 > **Was aus PT4 in die Arbeit übergeht — und was nicht,** steht in `CLAUDE.md` unter
