@@ -122,8 +122,9 @@ Eigenplagiat und ausserdem nicht vergleichbar, weil die Bedingungen andere waren
    Ist-Zustand hat bereits sieben).
 3. **Kontrollbedingungen sind heilig.** Das Design hat **zwei Architekturen in drei
    Messbedingungen** (Masterplan Kap. 7.1): **A** Monolith-Pipeline + `RULEBOOK_MODE=monolith`
-   (Ausgangszustand) · **B** Monolith-Pipeline + `cards` (**realer Ist-Zustand**, Kontrollarm,
-   nur UF1, ohne Wiederholungen) · **C** Graph + `cards`. Hauptvergleich ist **A gegen C**, und
+   (Ausgangszustand) · **B** Monolith-Pipeline + `cards` (**realer Ist-Zustand**, Kontrollarm;
+   Bestandteil von **UF1 und UF2**; für UF2 ebenfalls **fünf Wiederholungen je Messfall**) ·
+   **C** Graph + `cards`. Hauptvergleich ist **A gegen C**, und
    die Intervention ist ausdrücklich ein **Gesamtpaket** — ein Effekt darf **nicht** dem
    `GraphState` allein zugeschrieben werden.
    Modell, Parameter, Kontextextraktion, Testfälle, Umgebung und **`MEMORY_MODE=off`** sind in
