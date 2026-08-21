@@ -600,11 +600,56 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
 - [x] **H1** **vorgezogen nach B0** (19.08.) — schon die Regressionsreferenz braucht dieselbe HitL-Behandlung. Urspruenglich: `open_proposal_blocking()` bricht mit Exit-Code 3 ab, solange
       ein Vorschlag offen ist — der Wiederholungs-Wrapper läuft sonst ab Durchgang 2 ins Leere.
       Lösung für **beide** Varianten identisch und dokumentiert
-- [ ] **H2** Wiederholungs-Wrapper für UF2: derselbe Fall 3–5×, Vergleich der **fachlichen**
-      Korrekturwerte, nicht der Formulierung
-- [ ] **H3** Grenzfälle ergänzen — Fälle, bei denen „keine Korrektur erzwingen, sondern
-      Unsicherheit ausweisen" die **richtige** Antwort ist
-- [ ] **H4** Randomisierter A/B-Runner: mischt (Fall × Variante), protokolliert nach Kap. 17
+- [x] ██ **H2 ABGESCHLOSSEN — 21.08. (BA-055)** ██ Wiederholungen für UF2, **im Runner
+      implementiert und vor G5 fixiert**.
+      * **N = 5**, verbindlich festgelegt. Masterplan (Kap. 13.2, 15.3) und AP-H nannten
+        durchgängig nur die Spanne „3–5×" bzw. „N Läufe" — **es gab keine verbindliche Zahl**;
+        die Festlegung war eine offene methodische Entscheidung und wurde ausdrücklich
+        getroffen, nicht abgeleitet.
+      * **Nur A und C** werden wiederholt. **B läuft einmal** — Kontrollarm, nur UF1
+        (Kap. 7.1). Umfang: **A 85 + B 17 + C 85 = 187 Läufe**.
+      * ⚠ **Wiederholungen sind KEINE zusätzlichen Fälle.** Die Fallzahl bleibt **17**,
+        ergänzt um **Within-Case-Stabilität** je Fall. Der Rohdatensatz macht das explizit:
+        identische `fall`-ID, laufende `wiederholung`, plus ein Warnhinweis im Kopf.
+      * Wiederholungsnummer in `lauf_metadaten` — **kein neues Schemafeld**, die 29 bleiben.
+- [x] ██ **H3 GESCHLOSSEN — 21.08. (BA-055) — als Limitation, nicht durch neue Fälle** ██
+      Der ursprüngliche Auftrag lautete: Grenzfälle ergänzen. **Er wird nicht ausgeführt**, und
+      zwar begründet — G3 hat die Frage bereits beantwortet (BA-049/BA-050):
+
+  > **Zwei Aussagen, die nicht gleichgesetzt werden:**
+  > * **(a)** Der `stop_uncertain` / `manual_intervention_required`-**Pfad** ist **real belegt**
+  >   (P10 D5, BA-045), regressionsgesichert über R2 und den K8-Entscheidungsvertrag.
+  > * **(b)** Ein **gezielt konstruierter, fachlich mehrdeutiger Ground-Truth-Grenzfall** liess
+  >   sich in **drei** Entwürfen **nicht zuverlässig herstellen** — P09 (min/max vertauscht
+  >   erzeugt gar keinen Validierungsfehler), Kollektiv-Idee (es gibt nur zwei Kollektive mit
+  >   91 und 331 Artikeln), P11 (die Lücke in der ID-Sequenz macht die fehlende ID eindeutig).
+  >
+  > **Kein vierter Versuch.** Drei Entwürfe haben denselben Fehler in drei Varianten
+  > wiederholt: jeweils wurde *ein Teil* der Information geprüft, die dem Modell vorliegt.
+  > Mehr Fleiss hilft dagegen nicht.
+  >
+  > **Der gehashte 17-Fälle-Katalog wird nicht verändert** — er ist in G5a fixiert
+  > (14 + 13 Dateien einzeln gehasht). Neue Messfälle würden ihn brechen.
+
+      **Geht als Limitation nach K5 und K8**, dokumentiert in
+      `docs/BA_G4_PILOTPHASE_ABSCHLUSS.md` Abschnitt 3.2.
+- [x] ██ **H4 ABGESCHLOSSEN — 21.08. (BA-055)** ██ Randomisierung **im finalen Runner**,
+      vor G5 fixiert. `messplan()` mischt die Tripel **(Fall × Bedingung × Wiederholung)**.
+      * **Seed `20260821`, vor der Hauptmessung dokumentiert.** Der Wert ist beliebig und darf
+        es sein — entscheidend ist, dass er **vorher** feststeht. Einen Seed nach dem Sehen der
+        Ergebnisse zu wählen wäre Nachjustieren einer Messvorschrift (harte Regel 5).
+      * **Seed UND die tatsächlich erzeugte Reihenfolge** stehen im Rohdatensatz
+        (`randomisierung.seed`, `randomisierung.reihenfolge`). Der Seed allein genügt nicht —
+        er belegt Reproduzierbarkeit nur, solange der Planungscode unverändert bleibt.
+      * **Randomisiert wird ausschliesslich die Reihenfolge.** Nicht die Zuordnung von
+        Schaltern zu Bedingungen, nicht die Fälle, nichts an der A/B/C-Semantik. Jeder Lauf
+        bleibt ein eigener Prozess mit frischem Snapshot, `MEMORY_MODE=off`.
+      * **Wozu:** ohne Mischung liefe erst alles A, dann alles B, dann alles C — jede zeitliche
+        Drift (Serverlast, Netzlatenz, Modellverhalten) fiele systematisch mit der Bedingung
+        zusammen und wäre von einem Architektureffekt nicht zu trennen.
+      * Geprüft in `app/eval/test_messplan.py` (**25/25**) mit **synthetischen und
+        Pilot-IDs** — kein Messfall geladen. `--trockenlauf` erzeugt den Plan, ohne etwas
+        auszuführen.
 - [x] ██ **H4a ABGESCHLOSSEN — 21.08. (BA-051, BA-052)** ██ **Eigener BA-Runner für die
       volle Pipeline** *(verbindlich, aus Befund F4, BA-025)* — `app/eval/run_ba_abc_suite.py`
       * **Alle vier Schalter explizit**, je Bedingung ein **eigener Prozess**; der

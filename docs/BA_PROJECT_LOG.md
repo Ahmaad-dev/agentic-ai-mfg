@@ -5758,3 +5758,135 @@ Ordnername bleibt UTC-basiert, wie alle Rohdatenstempel des Projekts (`…T21551
     Laufzeitpunkt*, aber irreführend, weil der gemessene Code nie darin lag. **Historische
     Einträge bleiben unverändert**; ab hier ist `61a3f51` der Messstand.
 - **Offen / nächstes:** **Abnahme und G5 setzen.** AP-H nicht begonnen.
+
+---
+
+### [BA-055] 2026-08-21 — H2/H3/H4 vor dem Freeze geschlossen: 5 Wiederholungen, Randomisierung, Grenzfall als Limitation
+- **Status:** done — **AP-H ist bis auf H5 (die Messung selbst) vollständig vorbereitet.**
+  **G5 weiterhin NICHT gesetzt.**
+- **Kapitelbezug:** K5 *(Forschungsdesign, Messvorschrift)*, K6 *(Robustheit/UF2)*, K8 *(Limitationen)*
+- **Literatur:** —
+- **Changed files:** `app/eval/run_ba_abc_suite.py`, `app/eval/test_messplan.py` *(neu)*,
+  `docs/BA_ARBEITSPAKETE.md`, `docs/BA_PROJECT_LOG.md`.
+  **Kein Produktcode, kein Prompt, keine Regelkarte. Kein LLM-Lauf, kein Messfall.**
+
+## Warum das vor G5 gehört
+
+H2 und H4 sind **selbst messrelevant**: Wiederholungszahl und Reihenfolge sind Teil der
+Messvorschrift, nicht der Auswertung. Nach dem Freeze festgelegt wären sie Nachjustieren —
+und nach dem Sehen der Ergebnisse festgelegt wären sie wertlos (harte Regel 5). Deshalb hier,
+vor dem Einfrieren.
+
+## H2 — Wiederholungen: N = 5, verbindlich
+
+**Die Zahl war nicht festgelegt.** Geprüft, bevor irgendetwas implementiert wurde:
+
+| Fundstelle | Wortlaut | verbindlich? |
+|---|---|---|
+| Masterplan Kap. 13.2 | *„denselben Fall **3–5×**"* | nein — Spanne |
+| Masterplan Kap. 15.3 | *„Wiederholungstest, identische Eingabe, **N Läufe**"* | nein — N offen |
+| Masterplan Kap. 15.3, Warnkasten | *„**5 Wiederholungen** von 17 Fällen ergeben **nicht** n=85"* | nein — Rechenbeispiel in einer Warnung |
+| AP-H H2 | *„derselbe Fall **3–5×**"* | nein — Spanne |
+
+> **Das war die eine methodische Entscheidung, die ich nicht selbst treffen durfte** — sie
+> wurde ausdrücklich eingeholt und lautet: **N = 5**. Sie steht jetzt als Konstante
+> `WIEDERHOLUNGEN = 5` im Runner, mit Datum und Begründung im Code.
+
+**Nur A und C werden wiederholt. B läuft einmal** — Kontrollarm, nur UF1 (Kap. 7.1, AP-H5).
+Das ist Teil des Designs, keine Sparmassnahme: B beantwortet die Frage nach dem Kartensystem,
+nicht die nach der Konsistenz.
+
+| Arm | Läufe |
+|---|---|
+| **A** monolith + monolith | 17 × 5 = **85** |
+| **B** monolith + cards *(Kontrollarm)* | 17 × 1 = **17** |
+| **C** graph + cards | 17 × 5 = **85** |
+| | **187** |
+
+> ⚠ **Wiederholungen sind KEINE zusätzlichen Fälle.** 5 × 17 ergibt **nicht** n = 85. Es
+> bleiben **17 Fälle**, ergänzt um eine **Within-Case-Stabilität** je Fall. Der Rohdatensatz
+> macht das explizit: identische `fall`-ID, laufende `wiederholung`, und der Kopf trägt den
+> Warnhinweis mit. Wer die Wiederholungen als Fallzahl mitzählt, überschätzt die Aussagekraft
+> um das Fünffache — ein Fehler, den ein Gutachter mit Statistikhintergrund sofort sieht.
+
+**Das 29-Feld-Schema bleibt unverändert.** Die Wiederholungsnummer steht in `lauf_metadaten`,
+einem bestehenden Feld — der Inhalt wird präziser, das Schema nicht breiter. Auch abgebrochene
+Läufe tragen Wiederholung und Position, sonst wäre die Reihenfolge hinterher nicht
+rekonstruierbar.
+
+## H4 — Randomisierung: Seed 20260821, vorher dokumentiert
+
+`messplan()` erzeugt die Reihenfolge der Tripel **(Fall × Bedingung × Wiederholung)** und
+mischt sie mit einem eigenen `random.Random(seed)` — nicht mit dem globalen Modul, damit
+nichts anderes im Prozess den Zustand beeinflusst.
+
+**Was randomisiert wird:** ausschliesslich die **Reihenfolge**.
+**Was nicht:** die Zuordnung von Schaltern zu Bedingungen, die Fälle, irgendetwas an der
+A/B/C-Semantik. Jeder Lauf bleibt ein **eigener Prozess** mit frischem Snapshot,
+`MEMORY_MODE=off`, `HUMAN_IN_THE_LOOP=false`.
+
+**Wozu überhaupt:** ohne Mischung liefe erst alles A, dann alles B, dann alles C. Jede Drift
+über die Zeit — Serverlast, Netzlatenz, Modellverhalten — fiele dann systematisch mit der
+Bedingung zusammen und wäre von einem Architektureffekt **nicht zu trennen** (Kap. 17).
+
+**Seed `20260821`** — das Datum der Festlegung, ohne weitere Bedeutung. Der Wert ist beliebig
+und darf es sein; entscheidend ist allein, dass er **vor** der Messung feststeht.
+
+> **Seed und Reihenfolge gehen beide in die Rohdaten** (`randomisierung.seed`,
+> `randomisierung.reihenfolge`). Der Seed allein genügt **nicht**: er belegt
+> Reproduzierbarkeit nur, solange der Planungscode unverändert bleibt. Die ausgeschriebene
+> Reihenfolge belegt, was **wirklich** gelaufen ist.
+
+Neu ausserdem `--trockenlauf`: erzeugt den Plan und gibt ihn aus, **ohne irgendetwas
+auszuführen**. So lässt sich die Messreihenfolge vorab ansehen, ohne einen einzigen Lauf zu
+starten.
+
+## H3 — geschlossen als Limitation, nicht durch neue Fälle
+
+Der ursprüngliche Auftrag lautete „Grenzfälle ergänzen". **Er wird nicht ausgeführt** — G3 hat
+die Frage bereits beantwortet, und der gehashte 17-Fälle-Katalog wird nicht angefasst.
+
+**Zwei Aussagen, die nicht gleichgesetzt werden:**
+
+* **(a)** Der `stop_uncertain` / `manual_intervention_required`-**Pfad** ist **real belegt**
+  (P10 D5, BA-045) und über R2 sowie den K8-Entscheidungsvertrag regressionsgesichert.
+* **(b)** Ein **gezielt konstruierter, fachlich mehrdeutiger Ground-Truth-Grenzfall** liess
+  sich in **drei** Entwürfen nicht zuverlässig herstellen.
+
+Neue Messfälle würden ausserdem den in G5a fixierten Katalog brechen (14 + 13 Dateien einzeln
+gehasht). **Geht als Limitation nach K5 und K8.**
+
+## Geprüft — ohne einen einzigen Messfall
+
+`app/eval/test_messplan.py`, **25/25**, ausschliesslich mit **synthetischen** IDs (`S01…S17`)
+und echten **Pilot**-IDs. Der Messkatalog wird nicht geladen.
+
+Zwei Eigenschaften tragen den Plan, und **beide** werden geprüft:
+
+* **reproduzierbar** — gleicher Seed + gleiche Eingabe → identische Reihenfolge
+* **wirksam** — anderer Seed → andere Reihenfolge
+
+> Die zweite ist die leicht zu vergessende: eine „Randomisierung", die immer dasselbe liefert,
+> ist keine — und das fiele nicht auf, solange nur die erste geprüft wird.
+
+Zusätzlich: alle drei Bedingungen kommen bereits in der **ersten Planhälfte** vor, und es gibt
+häufige Bedingungswechsel statt Blöcke. Ohne diese Prüfung könnte eine formal „gemischte"
+Reihenfolge trotzdem blockweise sein.
+
+**Finaler Runner-Preflight: 35/35** — die 26 Kriterien aus BA-053 plus neun zu H2/H4.
+**Regressionsstand: 224 Assertions über 8 Dateien**, alle grün.
+
+- **Verifikation:** Wiederholungszahl vor der Implementierung an vier Fundstellen geprüft;
+  Plan per Trockenlauf mit Pilot-IDs erzeugt; Preflight statisch am Runner plus Planvergleich;
+  Gesamtlauf aller Tests nach der Änderung.
+- **Was NICHT funktioniert hat:**
+  * **Ich hätte die Wiederholungszahl beinahe aus dem Warnkasten in Kap. 15.3 abgeleitet.**
+    Dort steht *„5 Wiederholungen von 17 Fällen"* — aber als **Rechenbeispiel in einer Warnung
+    gegen n=85**, nicht als Festlegung. Eine Zahl aus einem Gegenbeispiel zu übernehmen und
+    als verbindlich auszugeben, wäre eine erfundene Messvorschrift gewesen.
+  * **Die Testausgabe ist bei langen Listen unlesbar** — `Pruefung.drucken()` schreibt
+    187-elementige Reihenfolgen vollständig aus. Kosmetisch, und ich habe es **bewusst nicht
+    geändert**: der Harness wird von acht Testdateien geteilt, und kurz vor dem Freeze ist das
+    Risiko einer Sammeländerung höher als der Nutzen. Vermerkt für nach der Messung.
+- **Offen / nächstes:** **H5, die eigentliche Messung** — 187 Läufe, randomisiert, nach G5.
+  **G5 ist nicht gesetzt und AP-H nicht begonnen.**

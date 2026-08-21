@@ -42,6 +42,7 @@ Aufruf:
     python eval/run_ba_abc_suite.py --katalog mess                      (erst in AP-H!)
 """
 import argparse
+import random
 import contextlib
 import io
 import json
@@ -66,6 +67,46 @@ BEDINGUNGEN = {
     "B": {"SP_ARCHITECTURE_MODE": "monolith", "RULEBOOK_MODE": "cards"},
     "C": {"SP_ARCHITECTURE_MODE": "graph", "RULEBOOK_MODE": "cards"},
 }
+
+# =========================================================================
+# H2 - WIEDERHOLUNGEN (UF2, Konsistenz)
+# =========================================================================
+#: Wiederholungen je Fall. **Verbindlich festgelegt am 21.08.2026, VOR der Hauptmessung**
+#: (BA-055). Masterplan und Arbeitspakete nannten durchgaengig nur die Spanne "3-5x", also
+#: keine verbindliche Zahl - die Festlegung war eine offene methodische Entscheidung und
+#: wurde ausdruecklich getroffen, nicht abgeleitet.
+#:
+#: ⚠ **Wiederholungen sind KEINE zusaetzlichen Faelle** (Masterplan Kap. 15.3). 5 x 17 ergibt
+#: NICHT n=85. Es bleiben **17 Faelle**, ergaenzt um eine **Within-Case-Stabilitaet** je Fall.
+#: Wer die Wiederholungen als Fallzahl mitzaehlt, ueberschaetzt die Aussagekraft um das
+#: Fuenffache. Der Runner erhebt sie deshalb bewusst als Wiederholung eines Falls, nicht als
+#: eigenen Fall - erkennbar an identischer `fall`-ID und laufender `wiederholung`.
+WIEDERHOLUNGEN = 5
+
+#: Nur **A und C** werden wiederholt. **B ist Kontrollarm und laeuft einmal** - er dient nur
+#: UF1 (Masterplan Kap. 7.1, AP-H5). Das ist keine Sparmassnahme, sondern Teil des Designs:
+#: B beantwortet die Frage nach dem Kartensystem, nicht die nach der Konsistenz.
+WIEDERHOLUNGSARME = ("A", "C")
+
+# =========================================================================
+# H4 - RANDOMISIERUNG
+# =========================================================================
+#: Fester Seed, **vor der Hauptmessung dokumentiert** (BA-055). Der Wert selbst ist beliebig
+#: und darf es sein - entscheidend ist allein, dass er **vorher** feststeht und im Rohdatensatz
+#: mitgeschrieben wird. Einen Seed nach dem Sehen der Ergebnisse zu waehlen oder zu wechseln
+#: waere dasselbe wie das Nachjustieren einer Messvorschrift (harte Regel 5).
+#:
+#: Gewaehlt: das Datum der Festlegung. Keine Bedeutung ausser Nachvollziehbarkeit.
+RANDOM_SEED = 20260821
+
+#: WAS randomisiert wird: die REIHENFOLGE der Tripel (Fall x Bedingung x Wiederholung).
+#: WAS NICHT: die Zuordnung von Schaltern zu Bedingungen, die Faelle selbst oder irgendetwas
+#: an der A/B/C-Semantik. Jeder Lauf bleibt ein eigener Prozess mit eigenem frischen Snapshot.
+#:
+#: WOZU: Ohne Mischung liefe erst alles von A, dann alles von B, dann alles von C. Jede
+#: Drift ueber die Zeit - Serverlast, Modellverhalten, Netzlatenz - fiele dann systematisch
+#: mit der Bedingung zusammen und waere von einem Architektureffekt nicht zu trennen
+#: (Masterplan Kap. 17).
 
 #: Das gemeinsame **29-Feld-Messschema**. ALLE drei Bedingungen liefern genau diese
 #: Schluessel - sonst waeren die Arme nicht vergleichbar. Reihenfolge fest.
@@ -106,7 +147,7 @@ def _tag(msg):
     return msg[a + 1:e] if e != -1 else None
 
 
-def kind(fall: str, bedingung: str, katalog: str) -> dict:
+def kind(fall: str, bedingung: str, katalog: str, wiederholung: str = "1") -> dict:
     """Ein Lauf, ein Prozess, ein frischer Snapshot."""
     for p in (str(APP), str(SP), str(SP / "runtime"), str(APP / "eval")):
         sys.path.insert(0, p)
@@ -138,12 +179,22 @@ def kind(fall: str, bedingung: str, katalog: str) -> dict:
                               "HUMAN_IN_THE_LOOP": HUMAN_IN_THE_LOOP},
         "lauf_metadaten": meta,
     })
+    # H2: Die Wiederholungsnummer wandert in `lauf_metadaten` - ein bestehendes Feld des
+    # 29-Feld-Schemas. **Kein neues Schemafeld**: das Schema bleibt unveraendert, sein Inhalt
+    # wird praeziser. Masterplan Kap. 17 verlangt die Wiederholungsnummer je Lauf.
+    zeile["lauf_metadaten"]["wiederholung"] = int(wiederholung)
+    zeile["lauf_metadaten"]["wiederholungen_gesamt"] = (
+        WIEDERHOLUNGEN if bedingung in WIEDERHOLUNGSARME else 1)
 
     buf = Stumm()
     try:
         with contextlib.redirect_stdout(buf):
             api = cs.SmartPlanningAPI(); api.authenticate()
-            info = api.create_snapshot(name=f"BA-{bedingung}-{fall}", run_crawler=False)
+            # Die Wiederholungsnummer gehoert in den Snapshot-Namen: sonst tragen fuenf
+            # Snapshots desselben Falls denselben Namen und sind auf dem Server nicht
+            # auseinanderzuhalten.
+            info = api.create_snapshot(name=f"BA-{bedingung}-{fall}-W{wiederholung}",
+                                       run_crawler=False)
             sid = info["id"]
             zeile["snapshot_id"] = sid
             st = get_storage()
@@ -258,12 +309,55 @@ def kind(fall: str, bedingung: str, katalog: str) -> dict:
     return zeile
 
 
+def messplan(codes, arme, wiederholungen=WIEDERHOLUNGEN, seed=RANDOM_SEED):
+    """
+    Erzeugt die randomisierte Reihenfolge der Tripel (Fall, Bedingung, Wiederholung).
+
+    **Reproduzierbar:** gleicher Seed + gleiche Eingabe -> gleiche Reihenfolge. Ein eigener
+    `random.Random(seed)` statt des globalen Moduls, damit nichts anderes im Prozess den
+    Zustand beeinflusst.
+
+    B laeuft einmal (Kontrollarm), A und C je `wiederholungen` mal.
+
+    Returns (plan, kopf) - `kopf` sind die Messmetadaten, die in den Rohdatensatz gehoeren.
+    """
+    plan = []
+    for fall in codes:
+        for b in arme:
+            n = wiederholungen if b in WIEDERHOLUNGSARME else 1
+            for w in range(1, n + 1):
+                plan.append({"fall": fall, "bedingung": b, "wiederholung": w})
+
+    random.Random(seed).shuffle(plan)
+    for i, e in enumerate(plan, start=1):
+        e["position"] = i
+
+    kopf = {
+        "seed": seed,
+        "wiederholungen": wiederholungen,
+        "wiederholungsarme": list(WIEDERHOLUNGSARME),
+        "laeufe_gesamt": len(plan),
+        "laeufe_je_bedingung": {b: sum(1 for e in plan if e["bedingung"] == b) for b in arme},
+        "hinweis": ("Wiederholungen sind KEINE zusaetzlichen Faelle - die Fallzahl bleibt die "
+                    "Zahl der Faelle, ergaenzt um Within-Case-Stabilitaet (Masterplan 15.3)."),
+        "reihenfolge": [f"{e['fall']}/{e['bedingung']}/W{e['wiederholung']}" for e in plan],
+    }
+    return plan, kopf
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--katalog", default="pilot", choices=list(KATALOGE))
     ap.add_argument("--only", default=None)
     ap.add_argument("--bedingungen", default="A,B,C")
-    ap.add_argument("--kind", nargs=3, default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--wiederholungen", type=int, default=WIEDERHOLUNGEN,
+                    help=f"Wiederholungen je Fall fuer {'/'.join(WIEDERHOLUNGSARME)} "
+                         f"(Default {WIEDERHOLUNGEN}, verbindlich seit BA-055)")
+    ap.add_argument("--seed", type=int, default=RANDOM_SEED,
+                    help=f"Random-Seed der Reihenfolge (Default {RANDOM_SEED})")
+    ap.add_argument("--trockenlauf", action="store_true",
+                    help="nur den Messplan erzeugen und ausgeben - fuehrt NICHTS aus")
+    ap.add_argument("--kind", nargs=4, default=None, help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
 
     if args.kind:
@@ -277,30 +371,49 @@ def main(argv=None):
         codes = [c for c in codes if c in w]
     arme = [b.strip() for b in args.bedingungen.split(",")]
 
+    plan, kopf = messplan(codes, arme, args.wiederholungen, args.seed)
+
+    print(f"  Messplan: {kopf['laeufe_gesamt']} Laeufe, Seed {kopf['seed']}, "
+          f"{kopf['wiederholungen']}x fuer {'/'.join(WIEDERHOLUNGSARME)}")
+    print(f"  je Bedingung: {kopf['laeufe_je_bedingung']}")
+    if args.trockenlauf:
+        print("\n  TROCKENLAUF - es wird NICHTS ausgefuehrt.\n")
+        for e in plan:
+            print(f"    {e['position']:>4}. {e['fall']}/{e['bedingung']}/W{e['wiederholung']}")
+        return 0
+
     ARCHIV.mkdir(parents=True, exist_ok=True)
     zeilen = []
-    for fall in codes:
-        for b in arme:
-            env = {**os.environ, **BEDINGUNGEN[b], "MEMORY_MODE": "off",
-                   "HUMAN_IN_THE_LOOP": "false",
-                   "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
-            p = subprocess.run([sys.executable, __file__, "--kind", fall, b, args.katalog],
-                               env=env, capture_output=True, text=True, timeout=2400)
-            z = next((l for l in p.stdout.splitlines() if l.startswith("###JSON###")), None)
-            if not z:
-                zeilen.append({k: None for k in MESSSCHEMA} | {
-                    "fall": fall, "bedingung": b, "abgebrochen": True,
-                    "abbruchgrund": f"Prozess exit {p.returncode}: {(p.stderr or '')[-300:]}",
-                    "ergebnis": "abgebrochen"})
-                print(f"  {fall}/{b}: ABGEBROCHEN (exit {p.returncode})")
-                continue
-            e = json.loads(z[len("###JSON###"):])
-            zeilen.append(e)
-            s = e["schalter_effektiv"] or {}
-            print(f"  {fall}/{b}: {s.get('SP_ARCHITECTURE_MODE')}+{s.get('RULEBOOK_MODE')} "
-                  f"mem={s.get('MEMORY_MODE')} | vorher={e['fehler_vorher']} "
-                  f"nachher={e['fehler_nachher']} reval={e['revalidation_ok']} "
-                  f"-> {e['ergebnis']} | {e['action']} {str(e['new_value'])[:14]}")
+    for eintrag in plan:
+        fall, b, w = eintrag["fall"], eintrag["bedingung"], eintrag["wiederholung"]
+        env = {**os.environ, **BEDINGUNGEN[b], "MEMORY_MODE": "off",
+               "HUMAN_IN_THE_LOOP": "false",
+               "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+        p = subprocess.run([sys.executable, __file__, "--kind", fall, b, args.katalog, str(w)],
+                           env=env, capture_output=True, text=True, timeout=2400)
+        z = next((l for l in p.stdout.splitlines() if l.startswith("###JSON###")), None)
+        if not z:
+            zeilen.append({k: None for k in MESSSCHEMA} | {
+                "fall": fall, "bedingung": b, "abgebrochen": True,
+                "abbruchgrund": f"Prozess exit {p.returncode}: {(p.stderr or '')[-300:]}",
+                "ergebnis": "abgebrochen",
+                # Auch ein abgebrochener Lauf muss seine Position und Wiederholung tragen -
+                # sonst laesst sich die Reihenfolge hinterher nicht rekonstruieren.
+                "lauf_metadaten": {"wiederholung": w, "position": eintrag["position"],
+                                   "wiederholungen_gesamt": kopf["wiederholungen"]
+                                   if b in WIEDERHOLUNGSARME else 1}})
+            print(f"  [{eintrag['position']}/{len(plan)}] {fall}/{b}/W{w}: "
+                  f"ABGEBROCHEN (exit {p.returncode})")
+            continue
+        e = json.loads(z[len("###JSON###"):])
+        e["lauf_metadaten"]["position"] = eintrag["position"]
+        zeilen.append(e)
+        sch = e["schalter_effektiv"] or {}
+        print(f"  [{eintrag['position']}/{len(plan)}] {fall}/{b}/W{w}: "
+              f"{sch.get('SP_ARCHITECTURE_MODE')}+{sch.get('RULEBOOK_MODE')} "
+              f"mem={sch.get('MEMORY_MODE')} | vorher={e['fehler_vorher']} "
+              f"nachher={e['fehler_nachher']} reval={e['revalidation_ok']} "
+              f"-> {e['ergebnis']} | {e['action']} {str(e['new_value'])[:14]}")
 
     stempel = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     ziel = ARCHIV / f"abc-{args.katalog}-{stempel}.json"
@@ -309,6 +422,11 @@ def main(argv=None):
         "hinweis": ("PILOT - kein Messergebnis" if args.katalog == "pilot"
                     else "HAUPTMESSUNG"),
         "messschema": list(MESSSCHEMA),
+        # H4: Seed UND die tatsaechlich erzeugte Reihenfolge gehoeren in die Rohdaten.
+        # Der Seed allein genuegt nicht - er belegt Reproduzierbarkeit nur, solange der
+        # Planungscode unveraendert bleibt. Die ausgeschriebene Reihenfolge belegt, was
+        # WIRKLICH gelaufen ist.
+        "randomisierung": kopf,
         "zeilen": zeilen,
     }, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     print(f"\n  {len(zeilen)} Laeufe, davon abgebrochen: "
