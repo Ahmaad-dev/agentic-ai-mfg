@@ -6536,3 +6536,112 @@ erzeugt eine **Nachmessung** und muss sie als solche kennzeichnen (harte Regel 5
     Punkt, an dem eine unbemerkte Änderung die ganze Messung entwertet.
 - **Offen / nächstes:** **H5 — die Hauptmessung.** 255 Läufe, randomisiert, nach diesem
   Einfrieren. Danach AP-I und AP-X. **H5 ist nicht gestartet.**
+
+---
+
+### [BA-062] 2026-08-21 — Laufende Sicherung der Messzeilen · ██ G5 neu gesetzt ██
+- **Status:** done — **AP-G abgeschlossen. READY_FOR_H5.**
+- **Kapitelbezug:** K5 *(Reproduzierbarkeit, Rohdatenpflicht)*, K6, K7
+- **Changed files:** `app/eval/run_ba_abc_suite.py` *(nur Schreibzeitpunkt)*,
+  `app/eval/test_persistenz.py` *(neu)*, Dokumentation.
+  **Keine Änderung an A/B/C, Messplan, Reihenfolge, Seed, 29-Feld-Schema, Kategorie-4-,
+  Korrektheits- oder Pfadlogik, Ground Truth, Prompts, Regeln, Produktcode. Kein Messlauf.**
+
+## Der Befund vor dem Start
+
+Der Runner schrieb den Rohdatensatz **erst nach der letzten Zeile**
+(`ziel.write_text(...)` hinter der Schleife). Bis dahin lagen die 29-Feld-Zeilen nur im
+Arbeitsspeicher. Ein Abbruch bei Lauf 250 von 255 — VPN, Serverneustart, Timeout — hätte den
+**kompletten Aggregatdatensatz** gekostet; bei 3–5 Stunden Laufzeit kein theoretisches Risiko.
+
+Die Snapshot-Artefakte je Lauf (`data/snapshots/<sid>/…`) wären erhalten geblieben, aber die
+aggregierten Messzeilen mit `schalter_effektiv`, Kategorie-4-Werten, `provenienz` und
+Reihenfolgeposition hätten aus 250 Snapshots rekonstruiert werden müssen.
+
+**Nicht eigenmächtig repariert.** Das ist kein Defekt, sondern eine fehlende Eigenschaft — und
+der Runner stand unter Freeze. Vorgelegt, entschieden, dann umgesetzt.
+
+## Die Änderung — ausschliesslich der Schreibzeitpunkt
+
+`_schreibe_aggregat(ziel, katalog, kopf, zeilen)` wird **nach jedem Lauf** gerufen, auch nach
+einem abgebrochenen.
+
+**Atomar, nicht anhängend:** Die Zieldatei ist **ein** JSON-Dokument. Mitten hineinzuschreiben
+erzeugte bei einem Abbruch eine korrupte Datei — also genau den Schaden, den die Sicherung
+verhindern soll. Stattdessen: vollständigen Stand in eine `.json.tmp` schreiben, dann
+`os.replace()`. Auf demselben Datenträger atomar; es existiert zu keinem Zeitpunkt eine halb
+geschriebene Zieldatei. Fällt der Prozess während des Schreibens aus, bleibt die **vorige
+vollständige** Fassung stehen.
+
+Zusätzlich wird der Dateiname **vor** der Schleife festgelegt und ein leerer Anfangsstand
+geschrieben — sonst gäbe es bis zum ersten Lauf keine Datei.
+
+**Der Inhalt ist identisch zur bisherigen Fassung:** gleiche Schlüssel, gleiches Schema,
+gleiche Reihenfolge. Es ändert sich, **wann** geschrieben wird, nicht **was**.
+
+> **Ausdrücklich nicht enthalten:** keine automatische Wiederholung fehlgeschlagener Läufe,
+> keine Resume-Entscheidungslogik, keine nachträgliche Änderung bereits persistierter Zeilen.
+> `zeilen` wächst nur am Ende.
+
+## Geprüft — deterministisch, ohne LLM und ohne Server
+
+`app/eval/test_persistenz.py`, **22/22**, mit synthetischen Messzeilen:
+
+| Prüfung | Ergebnis |
+|---|---|
+| Datei existiert **vor** dem ersten Lauf, Schema von Anfang an vollständig | ✔ |
+| nach Lauf 1: genau **eine** Zeile, Position 1, Fall/Bedingung wie im Plan (`I05/A`) | ✔ |
+| nach Lauf 40: genau 40 Zeilen, Positionen **lückenlos 1…40 in Reihenfolge** | ✔ |
+| **Stand ist exakt das Präfix des eingefrorenen Plans** — nicht irgendeine Teilmenge | ✔ |
+| keine doppelte Position | ✔ |
+| **Abbruch:** Datei byte-identisch unverändert, N Zeilen intakt, valides JSON | ✔ |
+| **keine automatische Fortsetzung** — 40 von 255, der Rest bleibt ungeschrieben | ✔ |
+| Zeile 1 seit ihrem Lauf inhaltlich unverändert | ✔ |
+| jede Zeile trägt **29** Felder, keine `.tmp`-Reste | ✔ |
+| Seed und vollständige 255er-Reihenfolge in **jedem** Zwischenstand | ✔ |
+
+**Gesamtstand: 302 Assertions über 11 Dateien, alle grün.**
+
+## Invarianten nach der Änderung
+
+| | |
+|---|---|
+| Messplan identisch mit dem archivierten | **True** |
+| Plan-SHA | `4ed26d0c1baf247c5643e8360d42703e` |
+| Seed | `20260821` |
+| `MESSSCHEMA` | **29** Felder |
+| Einzige geänderte messrelevante Datei | `app/eval/run_ba_abc_suite.py` |
+
+## ██ G5 neu gesetzt — verbindlich ██
+
+```
+2026-08-21  13:24:29 +02:00        (= 2026-08-21T11:24:29Z)
+```
+
+**Der G5 von 13:13:41 (BA-061) ist überholt** — die Persistenz-Nachrüstung berührt den Runner.
+**Unter ihm wurden keine H5-Messdaten erhoben**, also **keine Nachmessung**. BA-061 bleibt
+unverändert stehen; damit ist es der **zweite** Freeze, den ein Vorbereitungsschritt vor der
+ersten Datenerhebung überholt hat — der erste war BA-057 durch den Trockenlauf (BA-058).
+
+**Eingefroren, unverändert gegenüber BA-061:** 17 Fälle (10 isoliert + 7 kombiniert) ·
+29 Ground-Truth-Korrekturen · A/B/C je **N=5** · **255 Läufe** · Seed `20260821` ·
+29-Feld-Schema · gemeinsame Kategorie-4-Auswertung · Pfadsemantik aus `pfadaufloesung.py` ·
+`MEMORY_MODE=off` · `gpt-4.1` / `2025-01-01-preview` / `T=0.3` · Regelkarten `4d380884…` ·
+Regelwerk A `a3c14bd1…` · GT `635a1e06…` / `24f45798…`. **`n` bleibt 17.**
+
+**Neu allein:** der Schreibzeitpunkt des Rohdatensatzes.
+
+- **Verifikation:** Trockenlauf nach der Änderung (255, Seed unverändert); Plan gegen das
+  Archiv verglichen; `MESSSCHEMA` per Konstante gezählt; Gesamttestlauf; `git status` vor dem
+  Commit.
+- **Was NICHT funktioniert hat:**
+  * **Ich hätte H5 beinahe gestartet, ohne den Schreibzeitpunkt zu prüfen.** Die Vorgabe
+    „Rohdaten laufend sichern" stand im Auftrag; dass der Runner sie nicht erfüllt, fiel erst
+    beim gezielten Nachsehen auf. Bei 255 Läufen wäre der Fehler teuer und **erst am Ende**
+    sichtbar geworden.
+  * **Zweiter Freeze, der vor der ersten Datenerhebung überholt wird.** Beide Male fand es ein
+    Vorbereitungsschritt *nach* dem Setzen — Trockenlauf und Startvorbereitung. Das ist kein
+    Zufall: **ein Freeze prüft sich erst, wenn man das Eingefrorene benutzen will.** Für die
+    Arbeit ist das ein Befund über die Methode, kein Betriebsunfall.
+- **Offen / nächstes:** **H5 — die Hauptmessung.** 255 Läufe, randomisiert, laufend gesichert.
+  **Nicht gestartet.**

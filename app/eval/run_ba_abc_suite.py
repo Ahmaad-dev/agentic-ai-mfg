@@ -396,6 +396,39 @@ def messplan(codes, arme, wiederholungen=WIEDERHOLUNGEN, seed=RANDOM_SEED):
     return plan, kopf
 
 
+def _schreibe_aggregat(ziel, katalog: str, kopf: dict, zeilen: list) -> None:
+    """
+    Schreibt den vollstaendigen Zwischenstand ATOMISCH (BA-062).
+
+    Warum nicht anhaengen: die Zieldatei ist EIN JSON-Dokument. Mitten hineinzuschreiben
+    erzeugte bei einem Abbruch eine korrupte Datei - also genau den Schaden, den die
+    laufende Sicherung verhindern soll.
+
+    Verfahren: vollstaendigen Stand in eine Nebendatei schreiben, dann `os.replace()`. Das
+    ist auf demselben Datentraeger atomar - es existiert zu keinem Zeitpunkt eine halb
+    geschriebene Zieldatei. Faellt der Prozess waehrend des Schreibens aus, bleibt die
+    VORIGE vollstaendige Fassung stehen.
+
+    **Inhaltlich identisch zur bisherigen Fassung.** Es aendert sich ausschliesslich der
+    ZEITPUNKT des Schreibens, nicht das Geschriebene: gleiche Schluessel, gleiches Schema,
+    gleiche Reihenfolge. Bereits persistierte Zeilen werden nie veraendert - `zeilen` waechst
+    nur am Ende.
+    """
+    tmp = ziel.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps({
+        "zweck": f"AP-H4a BA-Runner, Katalog={katalog}",
+        "hinweis": ("PILOT - kein Messergebnis" if katalog == "pilot" else "HAUPTMESSUNG"),
+        "messschema": list(MESSSCHEMA),
+        # H4: Seed UND die tatsaechlich erzeugte Reihenfolge gehoeren in die Rohdaten.
+        # Der Seed allein genuegt nicht - er belegt Reproduzierbarkeit nur, solange der
+        # Planungscode unveraendert bleibt. Die ausgeschriebene Reihenfolge belegt, was
+        # WIRKLICH gelaufen ist.
+        "randomisierung": kopf,
+        "zeilen": zeilen,
+    }, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    os.replace(tmp, ziel)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--katalog", default="pilot", choices=list(KATALOGE))
@@ -433,7 +466,15 @@ def main(argv=None):
         return 0
 
     ARCHIV.mkdir(parents=True, exist_ok=True)
+    # BA-062: Zieldatei VOR der Schleife festlegen - sie wird nach JEDEM Lauf neu geschrieben.
+    # Vorher entstand der Name erst am Ende, und ein Abbruch bei Lauf 250 kostete den
+    # kompletten Aggregatdatensatz.
+    stempel = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ziel = ARCHIV / f"abc-{args.katalog}-{stempel}.json"
     zeilen = []
+    _schreibe_aggregat(ziel, args.katalog, kopf, zeilen)   # leerer Stand, damit die Datei existiert
+    print(f"  Rohdaten (laufend): {ziel}")
+
     for eintrag in plan:
         fall, b, w = eintrag["fall"], eintrag["bedingung"], eintrag["wiederholung"]
         env = {**os.environ, **BEDINGUNGEN[b], "MEMORY_MODE": "off",
@@ -452,12 +493,15 @@ def main(argv=None):
                 "lauf_metadaten": {"wiederholung": w, "position": eintrag["position"],
                                    "wiederholungen_gesamt": kopf["wiederholungen"]
                                    if b in WIEDERHOLUNGSARME else 1}})
+            _schreibe_aggregat(ziel, args.katalog, kopf, zeilen)
             print(f"  [{eintrag['position']}/{len(plan)}] {fall}/{b}/W{w}: "
                   f"ABGEBROCHEN (exit {p.returncode})")
             continue
         e = json.loads(z[len("###JSON###"):])
         e["lauf_metadaten"]["position"] = eintrag["position"]
         zeilen.append(e)
+        # BA-062: sofort sichern. Kein Resume, keine Wiederholung - nur festhalten.
+        _schreibe_aggregat(ziel, args.katalog, kopf, zeilen)
         sch = e["schalter_effektiv"] or {}
         print(f"  [{eintrag['position']}/{len(plan)}] {fall}/{b}/W{w}: "
               f"{sch.get('SP_ARCHITECTURE_MODE')}+{sch.get('RULEBOOK_MODE')} "
@@ -465,20 +509,7 @@ def main(argv=None):
               f"nachher={e['fehler_nachher']} reval={e['revalidation_ok']} "
               f"-> {e['ergebnis']} | {e['action']} {str(e['new_value'])[:14]}")
 
-    stempel = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    ziel = ARCHIV / f"abc-{args.katalog}-{stempel}.json"
-    ziel.write_text(json.dumps({
-        "zweck": f"AP-H4a BA-Runner, Katalog={args.katalog}",
-        "hinweis": ("PILOT - kein Messergebnis" if args.katalog == "pilot"
-                    else "HAUPTMESSUNG"),
-        "messschema": list(MESSSCHEMA),
-        # H4: Seed UND die tatsaechlich erzeugte Reihenfolge gehoeren in die Rohdaten.
-        # Der Seed allein genuegt nicht - er belegt Reproduzierbarkeit nur, solange der
-        # Planungscode unveraendert bleibt. Die ausgeschriebene Reihenfolge belegt, was
-        # WIRKLICH gelaufen ist.
-        "randomisierung": kopf,
-        "zeilen": zeilen,
-    }, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    _schreibe_aggregat(ziel, args.katalog, kopf, zeilen)
     print(f"\n  {len(zeilen)} Laeufe, davon abgebrochen: "
           f"{sum(1 for z in zeilen if z.get('abgebrochen'))}")
     print(f"  Rohdaten: {ziel}")

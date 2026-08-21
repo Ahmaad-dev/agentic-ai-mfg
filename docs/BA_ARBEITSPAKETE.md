@@ -577,7 +577,16 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
   > weil diese Artefakte **nicht** unter Versionskontrolle stehen (`data/` ist ignoriert) und
   > Git sie deshalb nicht abdeckt. Alles Übrige deckt der Commit ab.
 
-- [x] ██ **G5 — VERBINDLICH EINGEFROREN am 21.08.2026, 13:13:41 +02:00** ██
+- [x] ██ **G5 — VERBINDLICH EINGEFROREN am 21.08.2026, 13:24:41 +02:00** ██ *(BA-062)*
+
+  > **Der Freeze von 13:13:41 (BA-061) ist überholt** — die laufende Sicherung der Messzeilen
+  > berührt den Runner. **Unter ihm wurden keine H5-Messdaten erhoben**, also keine
+  > Nachmessung. BA-061 bleibt unverändert. Geändert wurde **ausschliesslich der
+  > Schreibzeitpunkt** des Rohdatensatzes: atomar nach jedem Lauf statt einmal am Ende.
+  > Messplan, Reihenfolge, Seed, Schema, Kategorien, Pfadlogik und Ground Truth sind identisch
+  > (Plan-SHA `4ed26d0c1baf247c5643e836…`).
+
+- [x] ~~██ **G5 — VERBINDLICH EINGEFROREN am 21.08.2026, 13:13:41 +02:00** ██~~ *(überholt, siehe oben)*
       *(= 2026-08-21T11:13:41Z, freigegeben durch den Nutzer, dokumentiert in **BA-061**)*
 
   > **Ab hier keine messrelevanten Änderungen mehr** an Produktcode, Graph, Runner,
