@@ -40,20 +40,24 @@ def pruefen() -> Pruefung:
 
     # --- Festlegungen, die vor der Messung feststehen muessen ---
     p.gleich("WIEDERHOLUNGEN verbindlich auf 5", 5, R.WIEDERHOLUNGEN)
-    p.gleich("Wiederholungsarme sind A und C (B ist Kontrollarm)",
-             ("A", "C"), R.WIEDERHOLUNGSARME)
+    p.gleich("Wiederholungsarme sind A, B und C (BA-056)",
+             ("A", "B", "C"), R.WIEDERHOLUNGSARME)
     p.wahr("RANDOM_SEED ist eine feste Zahl", isinstance(R.RANDOM_SEED, int), R.RANDOM_SEED)
 
-    # --- Umfang: B einmal, A und C je 5 ---
+    # --- Umfang: alle drei Arme je 5 (BA-056) ---
     plan, kopf = R.messplan(SYNTH, ["A", "B", "C"])
-    p.gleich("Gesamtzahl Laeufe (17 Faelle)", 17 * (5 + 1 + 5), len(plan))
-    p.gleich("Laeufe je Bedingung", {"A": 85, "B": 17, "C": 85}, kopf["laeufe_je_bedingung"])
+    p.gleich("Gesamtzahl Laeufe (17 Faelle x 3 Bedingungen x 5)", 17 * 3 * 5, len(plan))
+    p.gleich("Laeufe je Bedingung", {"A": 85, "B": 85, "C": 85}, kopf["laeufe_je_bedingung"])
     p.gleich("A: jeder Fall genau 5x",
              {5}, {sum(1 for e in plan if e["fall"] == f and e["bedingung"] == "A")
                    for f in SYNTH})
-    p.gleich("B: jeder Fall genau 1x (Kontrollarm)",
-             {1}, {sum(1 for e in plan if e["fall"] == f and e["bedingung"] == "B")
+    # BA-056: B wird jetzt EBENFALLS wiederholt. Ohne das laesst sich ein
+    # Stabilitaetsunterschied A -> C nicht zerlegen (Kartenform vs. Orchestrierung).
+    p.gleich("B: jeder Fall genau 5x (seit BA-056, vorher 1x)",
+             {5}, {sum(1 for e in plan if e["fall"] == f and e["bedingung"] == "B")
                    for f in SYNTH})
+    p.gleich("alle drei Arme gleich oft - kein Arm bevorzugt",
+             1, len({sum(1 for e in plan if e["bedingung"] == b) for b in ("A", "B", "C")}))
     p.gleich("Wiederholungsnummern lueckenlos 1..5",
              {1, 2, 3, 4, 5}, {e["wiederholung"] for e in plan if e["bedingung"] == "C"})
 
@@ -61,7 +65,12 @@ def pruefen() -> Pruefung:
     a, _ = R.messplan(SYNTH, ["A", "B", "C"], seed=R.RANDOM_SEED)
     b, _ = R.messplan(SYNTH, ["A", "B", "C"], seed=R.RANDOM_SEED)
     schluessel = lambda pl: [(e["fall"], e["bedingung"], e["wiederholung"]) for e in pl]
-    p.gleich("gleicher Seed -> identische Reihenfolge", schluessel(a), schluessel(b))
+    # Nur die Laenge und ein Auszug in die Ausgabe - eine 255-elementige Liste im
+    # Testprotokoll macht den Bericht unlesbar (vermerkt in BA-055).
+    p.gleich("gleicher Seed -> identische Reihenfolge",
+             (len(a), schluessel(a)[:5]), (len(b), schluessel(b)[:5]))
+    p.wahr("gleicher Seed -> identisch auf ALLEN Positionen",
+           schluessel(a) == schluessel(b), f"{len(a)} Positionen geprueft")
 
     # --- Wirksamkeit: ein anderer Seed MUSS eine andere Reihenfolge geben ---
     c, _ = R.messplan(SYNTH, ["A", "B", "C"], seed=R.RANDOM_SEED + 1)
@@ -82,22 +91,23 @@ def pruefen() -> Pruefung:
            f"{wechsel} Wechsel bei {len(a)} Laeufen")
 
     # --- Positionen ---
-    p.gleich("Positionen lueckenlos 1..n",
-             list(range(1, len(a) + 1)), [e["position"] for e in a])
+    p.wahr("Positionen lueckenlos 1..n",
+           [e["position"] for e in a] == list(range(1, len(a) + 1)), f"1..{len(a)}")
 
     # --- Kopf: was in die Rohdaten geht ---
     for feld in ("seed", "wiederholungen", "wiederholungsarme", "laeufe_gesamt",
                  "laeufe_je_bedingung", "reihenfolge"):
         p.wahr(f"Messmetadaten enthalten {feld!r}", feld in kopf, sorted(kopf)[:7])
-    p.gleich("Reihenfolge im Kopf deckt sich mit dem Plan",
-             [f"{e['fall']}/{e['bedingung']}/W{e['wiederholung']}" for e in a],
-             R.messplan(SYNTH, ["A", "B", "C"])[1]["reihenfolge"])
+    p.gleich("Reihenfolge im Kopf deckt sich mit dem Plan (Laenge und Inhalt)",
+             (len(a), [f"{e['fall']}/{e['bedingung']}/W{e['wiederholung']}" for e in a][:5]),
+             (len(R.messplan(SYNTH, ["A", "B", "C"])[1]["reihenfolge"]),
+              R.messplan(SYNTH, ["A", "B", "C"])[1]["reihenfolge"][:5]))
     p.wahr("Kopf warnt davor, Wiederholungen als Faelle zu zaehlen",
            "KEINE zusaetzlichen Faelle" in kopf["hinweis"], kopf["hinweis"][:60])
 
     # --- Mit echten Pilot-IDs (keine Messfaelle) ---
     pp, pk = R.messplan(PILOT, ["A", "B", "C"])
-    p.gleich("Pilot: 3 Faelle -> 33 Laeufe", 33, pk["laeufe_gesamt"])
+    p.gleich("Pilot: 3 Faelle -> 45 Laeufe", 45, pk["laeufe_gesamt"])
     p.gleich("Pilot: Faelle unveraendert", set(PILOT), {e["fall"] for e in pp})
 
     # --- Das Schema darf sich NICHT geaendert haben ---

@@ -83,10 +83,26 @@ BEDINGUNGEN = {
 #: eigenen Fall - erkennbar an identischer `fall`-ID und laufender `wiederholung`.
 WIEDERHOLUNGEN = 5
 
-#: Nur **A und C** werden wiederholt. **B ist Kontrollarm und laeuft einmal** - er dient nur
-#: UF1 (Masterplan Kap. 7.1, AP-H5). Das ist keine Sparmassnahme, sondern Teil des Designs:
-#: B beantwortet die Frage nach dem Kartensystem, nicht die nach der Konsistenz.
-WIEDERHOLUNGSARME = ("A", "C")
+#: **ALLE DREI Arme** werden wiederholt - geaendert am 21.08.2026 (BA-056), vor G5.
+#:
+#: Vorher: nur A und C; B lief einmal, weil Masterplan Kap. 7.1 und AP-H5 ihn als Kontrollarm
+#: "nur UF1, ohne Wiederholungen" fuehrten. **Das war zu eng.** Mit einem einmal laufenden B
+#: laesst sich fuer UF2 nur der GESAMTeffekt A -> C vergleichen. Der Vergleich B -> C fehlt -
+#: und genau der trennt die beiden Bestandteile der Intervention:
+#:
+#:     A -> B   Effekt der Regelkarten-Modularisierung  (gleiche Pipeline, andere Regelform)
+#:     B -> C   Effekt der Graph-Orchestrierung         (gleiche Regelform, andere Pipeline)
+#:     A -> C   Gesamtpaket                             (Hauptvergleich, Kap. 7.1)
+#:
+#: Ohne Wiederholungen in B waere ein Stabilitaetsunterschied zwischen A und C nicht
+#: zuordenbar: er koennte aus der Kartenform ODER aus der Orchestrierung stammen. Da die
+#: Intervention ausdruecklich ein **Gesamtpaket** ist (CLAUDE.md, harte Regel 3), ist die
+#: Zerlegung fuer die Interpretation notwendig - sie schwaecht den Hauptvergleich nicht,
+#: sondern macht ihn deutbar.
+#:
+#: Kosten: 255 statt 187 Laeufe. An der A/B/C-SEMANTIK aendert sich nichts - B behaelt
+#: `monolith` + `cards` und bleibt der reale Ist-Zustand.
+WIEDERHOLUNGSARME = ("A", "B", "C")
 
 # =========================================================================
 # H4 - RANDOMISIERUNG
@@ -317,7 +333,7 @@ def messplan(codes, arme, wiederholungen=WIEDERHOLUNGEN, seed=RANDOM_SEED):
     `random.Random(seed)` statt des globalen Moduls, damit nichts anderes im Prozess den
     Zustand beeinflusst.
 
-    B laeuft einmal (Kontrollarm), A und C je `wiederholungen` mal.
+    Seit BA-056 werden **alle drei** Arme `wiederholungen` mal gefahren (vorher B nur einmal).
 
     Returns (plan, kopf) - `kopf` sind die Messmetadaten, die in den Rohdatensatz gehoeren.
     """

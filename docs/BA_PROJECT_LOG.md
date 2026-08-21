@@ -5890,3 +5890,101 @@ Reihenfolge trotzdem blockweise sein.
     Risiko einer Sammeländerung höher als der Nutzen. Vermerkt für nach der Messung.
 - **Offen / nächstes:** **H5, die eigentliche Messung** — 187 Läufe, randomisiert, nach G5.
   **G5 ist nicht gesetzt und AP-H nicht begonnen.**
+
+---
+
+### [BA-056] 2026-08-21 — B wird ebenfalls wiederholt: 255 Läufe, Attribution auch für UF2
+- **Status:** done — H2 angepasst. **G5 weiterhin NICHT gesetzt, H5 nicht gestartet.**
+- **Kapitelbezug:** K5 *(Forschungsdesign, Dreiarm-Attribution)*, K6 *(UF2/Robustheit)*, K8
+- **Literatur:** —
+- **Changed files:** `app/eval/run_ba_abc_suite.py`, `app/eval/test_messplan.py`,
+  `docs/BA_MASTERPLAN.md` *(Kap. 7.1)*, `docs/BA_ARBEITSPAKETE.md` *(H2, H5)*,
+  `docs/BA_G5_PREFLIGHT.md`, `docs/BA_PROJECT_LOG.md`.
+  **Kein Produktcode, kein Prompt, keine Regelkarte. Keine Änderung an der A/B/C-Semantik.**
+
+## Die Änderung
+
+`WIEDERHOLUNGSARME` von `("A", "C")` auf `("A", "B", "C")`. Umfang **187 → 255 Läufe**.
+
+| Arm | vorher | jetzt |
+|---|---|---|
+| **A** monolith + monolith | 85 | **85** |
+| **B** monolith + cards | **17** | **85** |
+| **C** graph + cards | 85 | **85** |
+| | 187 | **255** |
+
+## Warum das nicht bloss „mehr Läufe" ist
+
+Der Masterplan begründet den Kontrollarm B in Kap. 7.1 selbst mit **Attribution**:
+
+> *„Bei A gegen C allein wäre nicht entscheidbar, woher ein Effekt kommt. Mit B ist er
+> zerlegbar."*
+
+**Genau das galt bisher nur für UF1.** Zwei Absätze weiter stand: *„für UF2 wäre es zu teuer.
+**Ohne Wiederholungsläufe.**"* Damit hätte sich für die Robustheit nur der Gesamteffekt
+A → C betrachten lassen:
+
+```
+A → B    Effekt der Regelkarten-Modularisierung   (gleiche Pipeline, andere Regelform)
+B → C    Effekt der Graph-Orchestrierung          (gleiche Regelform, andere Pipeline)
+A → C    Gesamtpaket                              (Hauptvergleich, unverändert)
+```
+
+Ein Stabilitätsunterschied zwischen A und C wäre **nicht zuordenbar** gewesen — er könnte aus
+der Kartenform stammen oder aus der Orchestrierung. Da die Intervention ausdrücklich ein
+**Gesamtpaket** ist (harte Regel 3), ist die Zerlegung für die Interpretation notwendig.
+
+> **Der Hauptvergleich bleibt A gegen C.** Die Zerlegung schwächt ihn nicht, sie macht ihn
+> deutbar. Und sie schliesst einen **Selbstwiderspruch im Masterplan**: dort wurde B mit
+> Attribution begründet und gleichzeitig von der einzigen Forschungsfrage ausgenommen, bei der
+> Wiederholungen überhaupt etwas beitragen.
+
+## Was sich ausdrücklich NICHT ändert
+
+* **Die A/B/C-Semantik.** B bleibt `monolith` + `cards` — der reale, produktiv ausgerollte
+  Ist-Zustand. Kein Schalter, keine Zuordnung, keine Pipeline wurde angefasst.
+* **Die Randomisierung.** Seed `20260821` unverändert; `messplan()` mischt weiterhin die Tripel
+  (Fall × Bedingung × Wiederholung). Die **Reihenfolge ändert sich** natürlich, weil die
+  Grundmenge grösser ist — der Seed bleibt derselbe und die Reihenfolge weiterhin
+  reproduzierbar.
+* **Das 29-Feld-Messschema.**
+* **Kategorien, Prompts, Regelkarten, Produktlogik.**
+* **Die Fallzahl.** Die Wiederholungen bleiben **Within-Case**-Wiederholungen:
+  **n = 17**, nicht n = 255. 255 Läufe ergeben nicht 255 unabhängige Fälle — im
+  Rohdatensatzkopf steht der Warnhinweis unverändert mit.
+
+## Geprüft
+
+`app/eval/test_messplan.py`, **27/27** (vorher 25 — zwei Prüfungen kamen dazu):
+
+* `B: jeder Fall genau 5x (seit BA-056, vorher 1x)`
+* `alle drei Arme gleich oft — kein Arm bevorzugt`
+* Gesamtzahl **255**, je Bedingung `{A: 85, B: 85, C: 85}`
+* Reproduzierbarkeit und Wirksamkeit der Mischung unverändert grün
+
+Weiterhin **ausschliesslich synthetische** IDs (`S01…S17`) und Pilot-IDs; kein Messfall
+geladen. Trockenlauf mit drei Pilotfällen: 45 Läufe, `{A: 15, B: 15, C: 15}`.
+
+**Runner-Preflight 35/35** · **Regressionen 226 Assertions über 8 Dateien**, alle grün.
+
+## Nachgezogene Dokumente
+
+| Dokument | Stelle |
+|---|---|
+| `BA_MASTERPLAN.md` | Kap. 7.1 — der Satz *„für UF2 wäre es zu teuer. Ohne Wiederholungsläufe."* ist ersetzt, **mit sichtbarem Änderungskasten** statt stiller Korrektur |
+| `BA_ARBEITSPAKETE.md` | H2 (Umfang), H5 (*„Wiederholungen nur für A und C"* → alle drei) |
+| `BA_G5_PREFLIGHT.md` | Kriterium H2, Schritt 3 nach der Abnahme |
+
+- **Verifikation:** Trockenlauf mit Pilot-IDs; `test_messplan.py` 27/27; Preflight 35/35;
+  Gesamtlauf aller acht Testdateien. Alles in der Wurzel-`.venv`.
+- **Was NICHT funktioniert hat:**
+  * **`CLAUDE.md` trägt denselben überholten Satz und wurde NICHT von mir geändert.** Zeile 126
+    beschreibt B als *„Kontrollarm, nur UF1, ohne Wiederholungen"*. Das ist ab jetzt falsch.
+    Ich habe es bewusst liegen gelassen: `CLAUDE.md` sind die Projektinstruktionen, und die
+    ändere ich nicht unaufgefordert. **Vor G5 anzupassen** — sonst friert der Einfrierzeitpunkt
+    einen Widerspruch zwischen Instruktion und Messvorschrift ein.
+  * **Beinahe hätte ich nur den Code geändert.** Der Masterplan ist die verbindliche Referenz;
+    eine Codeänderung, die ihm widerspricht, macht ihn wertlos, ohne dass es auffällt. Die
+    Prüfung auf betroffene Stellen (`ohne Wiederholungen`, `nur UF1`) fand **vier** Fundstellen
+    in drei Dateien — drei habe ich nachgezogen, die vierte ist oben gemeldet.
+- **Offen / nächstes:** `CLAUDE.md` Zeile 126, dann **G5**. **H5 nicht gestartet.**

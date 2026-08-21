@@ -606,8 +606,10 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
         durchgängig nur die Spanne „3–5×" bzw. „N Läufe" — **es gab keine verbindliche Zahl**;
         die Festlegung war eine offene methodische Entscheidung und wurde ausdrücklich
         getroffen, nicht abgeleitet.
-      * **Nur A und C** werden wiederholt. **B läuft einmal** — Kontrollarm, nur UF1
-        (Kap. 7.1). Umfang: **A 85 + B 17 + C 85 = 187 Läufe**.
+      * **Alle drei Arme** werden wiederholt — **geändert am 21.08. (BA-056)**, vorher nur
+        A und C. Grund: mit einem einmal laufenden B liesse sich für UF2 nur der Gesamteffekt
+        **A → C** betrachten; **B → C** fehlte, und damit die Trennung von Kartenform und
+        Orchestrierung. Umfang: **A 85 + B 85 + C 85 = 255 Läufe**.
       * ⚠ **Wiederholungen sind KEINE zusätzlichen Fälle.** Die Fallzahl bleibt **17**,
         ergänzt um **Within-Case-Stabilität** je Fall. Der Rohdatensatz macht das explizit:
         identische `fall`-ID, laufende `wiederholung`, plus ein Warnhinweis im Kopf.
@@ -697,8 +699,10 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
   >   Umgebungen wäre schlimmer als gar keiner.
 - [ ] **H5** **Die eigentliche Messung.** Alle 17 Fälle × **drei Bedingungen** (Masterplan Kap. 7.1):
       **A** Monolith-Pipeline + `RULEBOOK_MODE=monolith` · **B** Monolith-Pipeline + `cards`
-      (Kontrollarm, **ohne** Wiederholungen, nur UF1) · **C** Graph + `cards`.
-      Wiederholungen (UF2) nur für **A und C**. Grenzfälle für A und C.
+      (Kontrollarm, realer Ist-Zustand) · **C** Graph + `cards`.
+      **Wiederholungen (UF2) für alle drei Arme, je 5** — geändert 21.08. (BA-056), damit
+      **B → C** die Orchestrierung von der Kartenform trennt. **255 Läufe**, n bleibt **17**.
+      Grenzfälle: als Limitation geschlossen (H3, BA-055).
       **Alle drei nach demselben Einfrieren G5**, randomisierte Reihenfolge
 - **DoD:** Rohdaten vollständig nach Kap. 17 — je Lauf Zeitstempel, Variante, Fall-ID, Modell,
   Parameter, alle Modus-Schalter, Prompt (oder Hash), Antwort, Trace, Rohdatenpfad.

@@ -10,7 +10,7 @@
 > `f0e5f41` legt nur die **Dokumentation** dazu (BA-054, Preflight). Am gemessenen Code
 > ändert der zweite Commit nichts; `lock.json` führt den jeweils aktuellen HEAD.
 
-Erstellt 21.08.2026, Grundlage BA-035 bis BA-055.
+Erstellt 21.08.2026, Grundlage BA-035 bis BA-056.
 
 > **Was dieses Dokument ist und was nicht.** Es prüft, ob alle Voraussetzungen für G5 erfüllt
 > *wären* — es setzt den Einfrierzeitpunkt **nicht**. Der Freeze ist eine Abnahmeentscheidung
@@ -37,7 +37,7 @@ Erstellt 21.08.2026, Grundlage BA-035 bis BA-055.
 | **Regelbasis Bedingung A eingefroren** | ✅ | `llm-validation-fix-rules.md` **in Git** *und* SHA `a3c14bd1…` (36.165 Byte) — deckungsgleich mit BA-016 B3.1 | — |
 | **Keine Messfälle verbraucht** | ✅ | alle Läufe auf `ba-pilot-snapshots`; kein `I01…I10` in den Rohdaten; G2 Exit 0 | — |
 | **Keine offenen Produkt-/Prompt-/Regeländerungen** | ✅ | 0 Promptänderungen, 0 Regelkartenänderungen (BA-050, an BA-Markern belegt); AP-G ohne offene Punkte ausser G5a/G5 | — |
-| **H2 Wiederholungen fixiert** | ✅ | **N=5** verbindlich (BA-055), nur A und C; **187 Läufe**; Wiederholungsnr. in `lauf_metadaten`, Schema unverändert | — |
+| **H2 Wiederholungen fixiert** | ✅ | **N=5** verbindlich (BA-055) für **alle drei Arme** (BA-056); **255 Läufe** (85+85+85); Wiederholungsnr. in `lauf_metadaten`, Schema unverändert | — |
 | **H3 Grenzfälle entschieden** | ✅ | als **Limitation** geschlossen (BA-055): Pfad belegt, gezielter Fall nicht konstruierbar; 17-Fälle-Katalog unangetastet | — |
 | **H4 Randomisierung fixiert** | ✅ | Seed **20260821** vorher dokumentiert; Seed + erzeugte Reihenfolge in den Rohdaten; `test_messplan.py` **25/25** | — |
 | **Runner-Preflight** | ✅ | **35/35** (26 aus BA-053 + 9 zu H2/H4) | — |
@@ -66,8 +66,8 @@ nicht umbenannt.
 1. ~~Entscheidung zum Working Tree~~ — **erledigt (BA-054)**: Messstand als Commit fixiert,
    Tree sauber.
 2. **G5 setzen** — Einfrierzeitpunkt mit Datum und den Hashes aus `lock.json` protokollieren.
-3. Ab dann: **H5, die eigentliche Messung** — 187 Läufe (A 85 + B 17 + C 85), randomisiert
-   mit Seed `20260821`. H2, H3, H4 und H4a sind vorbereitet und geschlossen.
+3. Ab dann: **H5, die eigentliche Messung** — **255 Läufe** (A 85 + B 85 + C 85),
+   randomisiert mit Seed `20260821`. H2, H3, H4 und H4a sind vorbereitet und geschlossen.
    Jede Änderung ab G5 ist eine Nachmessung.
 
 **AP-H wurde nicht begonnen.** Kein Messfall ausgeführt, keiner angesehen, keine Vorabmessung,

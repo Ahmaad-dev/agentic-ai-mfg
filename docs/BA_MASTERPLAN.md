@@ -800,9 +800,29 @@ trägt, sagt erst die Zerlegung über B.
    Regel 2 ist damit nicht nur behauptet, sondern belegt.
 3. **Der Selbstwiderspruch ist weg** (siehe Kasten).
 
-**Was B leistet und was nicht:** B trägt **nur zu UF1** bei. Für UF3 ist es uninteressant (es hat
-dieselbe Nachvollziehbarkeit wie A), für UF2 wäre es zu teuer. **Ohne Wiederholungsläufe.**
-Als Einschränkung in den Text.
+**Was B leistet und was nicht:** Für **UF3** ist B uninteressant — es hat dieselbe
+Nachvollziehbarkeit wie A. Für **UF1** und **UF2** trägt es bei.
+
+> **⚠ GEÄNDERT am 21.08.2026 (BA-056), vor dem Einfrieren.** Hier stand: *„für UF2 wäre es zu
+> teuer. **Ohne Wiederholungsläufe.**"* Das war zu eng gedacht und stand im Widerspruch zur
+> **eigenen Begründung von B** — Punkt 1 oben nennt ausdrücklich die **Attribution**: *„Bei A
+> gegen C allein wäre nicht entscheidbar, woher ein Effekt kommt. Mit B ist er zerlegbar."*
+>
+> Genau das galt bisher nur für UF1. Mit einem einmal laufenden B lässt sich für **UF2** nur
+> der Gesamteffekt A → C betrachten; ob ein Stabilitätsunterschied aus der
+> **Regelkarten-Modularisierung** oder aus der **Graph-Orchestrierung** stammt, bliebe offen:
+>
+>     A → B    Effekt der Kartenform          (gleiche Pipeline, andere Regelform)
+>     B → C    Effekt der Orchestrierung      (gleiche Regelform, andere Pipeline)
+>     A → C    Gesamtpaket                    (Hauptvergleich, unverändert)
+>
+> **B wird deshalb ebenfalls fünfmal wiederholt.** Umfang: 17 × 3 × 5 = **255 Läufe**.
+> An der **A/B/C-Semantik ändert sich nichts** — B bleibt `monolith` + `cards`, der reale
+> Ist-Zustand. Der Hauptvergleich bleibt **A gegen C**; die Zerlegung schwächt ihn nicht,
+> sondern macht ihn deutbar.
+>
+> **Unverändert gilt:** Die Wiederholungen sind **Within-Case**-Wiederholungen. Die Zahl
+> unabhängiger Fälle bleibt **n = 17** — 255 Läufe ergeben nicht n = 255.
 
 **Zum Kartensystem und Eigenplagiat:** Das Kartensystem wurde im Praxisprojekt entwickelt
 (AP7.0). Die Arbeit **führt es mit**, sie beansprucht seine Entwicklung nicht. Formulierung für
