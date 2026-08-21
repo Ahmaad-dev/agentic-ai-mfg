@@ -743,6 +743,11 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
 
 *(Masterplan Kap. 15, 18, 19)*
 
+  > **Vorarbeit erledigt (BA-059):** Der Zielpfad-Vergleich steht **vor** der Messung fest —
+  > `app/eval/pfadaufloesung.py` löst semantische und indexbasierte Notation auf denselben
+  > kanonischen Pfad auf; Mehrdeutigkeit ergibt `nicht_bestimmbar`. Die Ground-Truth-Dateien
+  > wurden **nicht** umgeschrieben.
+
 - [ ] **I1** Halluzinationen kategorisieren — vier Kategorien, je Fall, aus L08 abgeleitet
 - [ ] **I2** Tabellen je Dimension: Monolith vs. Graph, aufgeschlüsselt Standard/Komplex
 - [ ] **I3** Validitäts-Checkliste (Kap. 19) durchgehen — **alle** Punkte, auch die

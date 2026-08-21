@@ -6229,3 +6229,107 @@ die vollständige 255er-Reihenfolge. **Gesamtstand: 257 Assertions über 9 Datei
     Umschreibung von Ground-Truth-Pfaden wäre eine Normalisierung ohne unabhängigen Beleg. Im
     Katalog unter `herkunft.pfadnotation` festgehalten — **AP-I muss beide Formen behandeln.**
 - **Offen / nächstes:** **neuen G5 setzen** (nach Abnahme), dann **H5**. Kein Messlauf gestartet.
+
+---
+
+### [BA-059] 2026-08-21 — Pfadnotationen: Auflösung statt Normalisierung · Vergleichsregel vor der Messung fixiert
+- **Status:** done — letzte Vorbereitungsbaustelle geschlossen. **Neuer G5 steht aus.**
+- **Kapitelbezug:** K5 *(Messvorschrift)*, K6 *(Korrektheitsbewertung, Kategorie 1)*, K8
+- **Literatur:** —
+- **Changed files:** `app/eval/pfadaufloesung.py` *(neu)*, `app/eval/test_pfadaufloesung.py` *(neu)*.
+  **Keine Ground-Truth-Datei geändert, kein Pfad umgeschrieben, keine Produktlogik,
+  kein Prompt, keine Regel. Kein LLM-Lauf, kein Messlauf.**
+
+## Die Festlegung
+
+> **Zwei Zielpfade gelten fachlich als identisch, wenn sie im zugehörigen Snapshot
+> deterministisch auf dasselbe JSON-Element beziehungsweise dasselbe Feld auflösen.**
+
+Sie steht **vor** der Hauptmessung fest und gilt für A, B und C gleichermassen.
+
+## Existiert so etwas schon? — geprüft, nicht angenommen
+
+Beide vorhandenen Parser wurden gegen **alle 29** Ground-Truth-Pfade laufen gelassen:
+
+| Parser | löst auf | scheitert an |
+|---|---|---|
+| `apply_correction.parse_target_path()` *(Produktcode)* | **18 / 29** | semantischen Selektoren **und** dreistufigen Indexpfaden |
+| `routes.review._parse_target_path()` | **20 / 29** | allen semantischen Selektoren |
+
+**Keiner versteht `[articleId=100005]`, `[HE01]` oder `[workItems contains VOAR01]`.** Ein
+naiver Stringvergleich hätte eine **richtige** Korrektur als falsch gezählt.
+
+Nebenbefund: der isolierte Katalog benutzt **vier** Notationen, nicht zwei — Index,
+`Feld=Wert`, blosses Label, und ein `contains`-Prädikat.
+
+## Was gebaut wurde — und was ausdrücklich nicht
+
+`app/eval/pfadaufloesung.py`: löst beide Notationen gegen den Snapshot in einen **kanonischen
+Indexpfad** auf und vergleicht diese.
+
+* **Auswertung, keine Produktlogik.** Liegt unter `app/eval/`, wird von keiner Pipeline
+  importiert. `apply_correction.parse_target_path()` bleibt unangetastet.
+* **Die Ground-Truth-Dateien wurden NICHT umgeschrieben.** Eine nachträgliche Normalisierung
+  von Messmaterial wäre eine Änderung ohne unabhängigen Beleg.
+* **Es rät nie.** 0 Treffer oder >1 Treffer → `nicht_bestimmbar`, mit benanntem Grund.
+
+## Die unangenehme Feinheit: gegen welchen Snapshot?
+
+Zwei GT-Pfade lösen im **Fehler**-Snapshot auf **null** Elemente auf — weil ihr Selektor genau
+den Wert nennt, den die Injektion zerstört hat:
+
+| Fall | Pfad | before → after |
+|---|---|---|
+| **I07** | `articles[articleId=100005].workItemConfigs[RF01].workItemKey` | `"RF01"` → `"RF01_REMOVED"` |
+| **I09** | `equipment[workItems contains VOAR01].workItems[0]` | `"VOAR01"` → `"WORK_ITEM_NOT_AVAILABLE"` |
+
+Kein Katalogfehler — die Pfade beschreiben die Stelle, **bevor** sie manipuliert wurde.
+
+**Regel, deterministisch und protokolliert:** zuerst gegen den **Fehler-Snapshot** auflösen —
+das ist der Zustand, den das System sieht und auf den sich ein Modellvorschlag bezieht.
+Gelingt das nicht eindeutig, gegen die **saubere Referenz**. Die verwendete Basis steht im
+Ergebnis (`basis`). Gelingt es in **keiner** Basis: `nicht_bestimmbar`.
+
+> **Warum das den Vergleich nicht verschiebt:** Die Injektionen ändern **nur Werte, keine
+> Struktur** — in BA-058 per Deep-Diff über alle zehn Dateien belegt, keine Listenlänge weicht
+> ab. Ein kanonischer Indexpfad ist deshalb in beiden Snapshots derselbe.
+
+## Geprüft — beide Richtungen
+
+`app/eval/test_pfadaufloesung.py`, **23/23**:
+
+**Positiv** — alle **29** GT-Pfade lösen eindeutig auf; **27** über den Fehler-Snapshot,
+**genau I07 und I09** über die Referenz. Semantisch und indexbasiert werden als gleich erkannt:
+
+```
+articles[articleId=100005].workItemConfigs[HE01].rampUpTime
+articles[0].workItemConfigs[3].rampUpTime
+     ->  beide: articles[0].workItemConfigs[3].rampUpTime   ->  gleich
+```
+
+**Negativ** — nichts davon geht still als Treffer durch: Selektor trifft nichts · Index
+ausserhalb · Feld existiert nicht · Pfad syntaktisch kaputt · unbekannter Selektortyp ·
+**Selektor trifft zwei Elemente**. Alle sechs → `nicht_bestimmbar` mit benanntem Grund, und
+ein Vergleich mit mehrdeutiger Seite ergibt ebenfalls `nicht_bestimmbar`.
+
+Ausserdem die Gegenproben: verschiedene Stellen werden als **verschieden** erkannt
+(`articles[0]` vs. `articles[1]`, `relDensityMin` vs. `relDensityMax`), und ein eindeutiges
+Label wird aufgelöst. **Ohne die Negativrichtung wäre der Test wertlos** — ein Vergleicher,
+der alles gleich findet, besteht jeden Positivtest.
+
+**Gesamtstand: 280 Assertions über 10 Dateien, alle grün.**
+
+- **Verifikation:** beide vorhandenen Parser gegen alle 29 Pfade; Auflösung aller 29 gegen den
+  jeweils eigenen Snapshot; I07/I09-Hypothese durch Gegenprobe gegen die saubere Referenz
+  bestätigt; Negativkontrollen mit künstlichen Strukturen.
+- **Was NICHT funktioniert hat:**
+  * **Mein erster Entwurf löste nur gegen den Fehler-Snapshot auf** und meldete I07 und I09 als
+    unauflösbar. Ich hätte das als Katalogfehler abhaken können — tatsächlich lag es daran,
+    dass der Selektor den zerstörten Wert nennt. **Erst die Gegenprobe gegen den sauberen
+    Snapshot hat es geklärt.** Ein „unauflösbar" ohne zweite Basis wäre eine falsche
+    Fehlermeldung gewesen.
+  * **Ich hatte zwei Notationen erwartet und vier vorgefunden.** `[workItems contains VOAR01]`
+    stand in keiner Dokumentation; es fiel nur auf, weil der Test gegen **alle** 29 Pfade lief
+    statt gegen eine Auswahl.
+- **Offen / nächstes:** **neuen G5 setzen** (nach Abnahme), dann **H5**. Keine weiteren
+  Vorbereitungsbaustellen.

@@ -45,13 +45,14 @@ Erstellt 21.08.2026, Grundlage BA-035 bis BA-056.
 | **Ground Truth der MESSfälle gehasht** | ✅ | **BA-054**: 14 + 13 Messfall-Dateien **einzeln** + Gesamthashes (`0b0a9aff…`, `5a237594…`); zuvor nur zwei Index-Dateien, davon eine ohne GT-Felder | — |
 | **Regelbasis Bedingung A eingefroren** | ✅ | `llm-validation-fix-rules.md` **in Git** *und* SHA `a3c14bd1…` (36.165 Byte) — deckungsgleich mit BA-016 B3.1 | — |
 | **Messkatalog vollständig: n=17** | ✅ | **BA-058**: 10 isolierte + 7 kombinierte (`K04`–`K10`); Ground Truth per **Deep-Diff** gegen `ok-snapshot.json` belegt; `test_messkatalog_h5.py` **31/31** | — |
+| **Pfadvergleich vor der Messung fixiert** | ✅ | **BA-059**: `app/eval/pfadaufloesung.py` — semantische und indexbasierte Notation lösen auf denselben kanonischen Pfad auf; Mehrdeutigkeit → `nicht_bestimmbar`; alle **29** GT-Pfade eindeutig; `test_pfadaufloesung.py` **23/23** | — |
 | **Keine Messfälle verbraucht** | ✅ | alle Läufe auf `ba-pilot-snapshots`; kein `I01…I10` in den Rohdaten; G2 Exit 0 | — |
 | **Keine offenen Produkt-/Prompt-/Regeländerungen** | ✅ | 0 Promptänderungen, 0 Regelkartenänderungen (BA-050, an BA-Markern belegt); AP-G ohne offene Punkte ausser G5a/G5 | — |
 | **H2 Wiederholungen fixiert** | ✅ | **N=5** verbindlich (BA-055) für **alle drei Arme** (BA-056); **255 Läufe** (85+85+85); Wiederholungsnr. in `lauf_metadaten`, Schema unverändert | — |
 | **H3 Grenzfälle entschieden** | ✅ | als **Limitation** geschlossen (BA-055): Pfad belegt, gezielter Fall nicht konstruierbar; 17-Fälle-Katalog unangetastet | — |
 | **H4 Randomisierung fixiert** | ✅ | Seed **20260821** vorher dokumentiert; Seed + erzeugte Reihenfolge in den Rohdaten; `test_messplan.py` **25/25** | — |
 | **Runner-Preflight** | ✅ | **35/35** (26 aus BA-053 + 9 zu H2/H4) | — |
-| **Regressionen grün** | ✅ | **224 Assertions** über **8** Dateien, alle PASS — 21.08.2026 | — |
+| **Regressionen grün** | ✅ | **280 Assertions** über **10** Dateien, alle PASS — 21.08.2026 | — |
 | **Working Tree sauber** | ✅ | **0 Einträge** nach Commit `61a3f51` (53 Dateien: 46 Messstand, 7 Dokumentation, 0 fachfremd, 0 unklar) | — |
 
 **Blocker: keine.**
