@@ -6421,3 +6421,118 @@ erst nebeneinander.
     Ergebnis im Repository steht; sie zu versionieren erzeugte eine zweite, veraltende
     Beschreibung desselben Zustands. Was sie taten, steht im jeweiligen Protokolleintrag.
 - **Offen / nächstes:** **neuen G5 setzen** (nach Abnahme), dann **H5**.
+
+---
+
+### [BA-061] 2026-08-21 — ██ G5 (verbindlich): EINGEFROREN ██ — Messstand für die Hauptmessung
+- **Status:** done — **AP-G endgültig abgeschlossen.** Nächstes und einziges Offenes: **H5**
+- **Kapitelbezug:** K5 *(Forschungsdesign, Kontrollbedingungen, Reproduzierbarkeit)*, K6, K7
+- **Literatur:** —
+- **Changed files:** `docs/BA_ARBEITSPAKETE.md`, `docs/BA_G5_PREFLIGHT.md`,
+  `docs/BA_PROJECT_LOG.md`. **Kein Produktcode, kein Prompt, keine Regel, kein Messlauf.**
+
+## Einfrierzeitpunkt
+
+```
+2026-08-21  13:13:41 +02:00        (= 2026-08-21T11:13:41Z)
+```
+
+**Freigegeben durch den Nutzer.** Dies ist der **verbindliche** G5.
+
+## Der vorherige G5 ist überholt — und warum das keine Nachmessung ist
+
+Am **21.08.2026 um 12:39:27 +02:00** wurde ein erster G5 gesetzt (**BA-057**). Der
+anschliessende **H5-Trockenlauf** — der erste Schritt nach dem Freeze — ergab **150 statt 255
+Läufen**: `KATALOGE["mess"]` lud nur den isolierten Katalog mit 10 Fällen (**BA-058**).
+
+> **Unter dem alten G5 wurde kein einziger H5-Messlauf durchgeführt.** Es existieren keine
+> Hauptmessdaten, die von der Korrektur betroffen wären. Damit ist dies **keine Nachmessung**,
+> sondern eine Korrektur **vor Beginn der Datenerhebung**.
+
+**BA-057 bleibt unverändert stehen.** Der damalige Einfrierzeitpunkt, die Hashes und der Stand
+sind korrekt protokolliert und werden nicht rückwirkend verändert — sie sind als *überholt vor
+der ersten Datenerhebung* gekennzeichnet. Nichts gelöscht, nichts verschleiert.
+
+> **Der Trockenlauf hat sich damit bezahlt gemacht.** Ohne ihn wäre die Hauptmessung mit
+> **41 % zu wenig Fällen** gelaufen — und ausgerechnet ohne die Mehrfehlerfälle, bei denen der
+> Masterplan den Effekt **primär** erwartet.
+
+## Der eingefrorene Stand
+
+| | |
+|---|---|
+| **Messrelevanter Codestand** | **`15f2a44`** auf Branch `ba-messstand-g5` |
+| **HEAD beim Einfrieren** | `a1e018e` — Working Tree **sauber** |
+| **Differenz `15f2a44` → HEAD** | **ausschliesslich Hinzufügungen**: drei *lesende* Prüfwerkzeuge (`verify_ground_truth.py`, `preflight_messrunner.py`, `g5a_messstand_festhalten.py`) und zwei Dokumente. **Keine messrelevante Datei geändert** — per `git diff --name-only` über `app/eval/run_ba_abc_suite.py`, `kategorie4.py`, `kategorien.py`, `pfadaufloesung.py`, `app/core/`, `app/agents/`, `app/tools/`, `app/skills/`, `data/` belegt: leer. |
+
+**Messvorschrift:**
+
+| | |
+|---|---|
+| **Fälle** | **17** — 10 isolierte (`I01`–`I10`) + 7 kombinierte (`K04`–`K10`) |
+| **Ground Truth** | **29** erwartete Korrekturen; `snapshot-error-01…03` ausgeschlossen (redundant zu I01–I03) |
+| **Bedingungen** | **A** `monolith`+`monolith` · **B** `monolith`+`cards` · **C** `graph`+`cards` |
+| **Wiederholungen** | **N = 5 in allen drei Armen** |
+| **Umfang** | **255 Läufe** — A 85 · B 85 · C 85 |
+| **Reihenfolge** | randomisiert, **Seed `20260821`**; Seed und erzeugte Reihenfolge gehen in die Rohdaten |
+| **Messschema** | **29 Felder**, in allen Zeilen identisch |
+| **Kategorie 4** | für A, B und C aus **derselben Funktion** (`kategorie4.py`); `GraphState` bei C nur Cross-Check |
+| **Pfadvergleich** | `pfadaufloesung.py` — zwei Zielpfade sind identisch, wenn sie **deterministisch auf dasselbe JSON-Element auflösen**; Mehrdeutigkeit → `nicht_bestimmbar` |
+| **Schalter** | `MEMORY_MODE=off`, `HUMAN_IN_THE_LOOP=false`, je Bedingung ein **eigener Prozess** |
+| **Modell** | `gpt-4.1` · API `2025-01-01-preview` · `temperature=0.3` |
+| **Umgebung** | Wurzel-`.venv`, 77 Pakete, `ba_env_ok=True` |
+
+**Hashes** *(vollständig in `data/archive/ba-umgebung-eingefroren-20260821/lock.json`)*:
+
+| Artefakt | SHA-256 |
+|---|---|
+| Regelkarten (14 Stück, gesamt) | `4d3808849946e2b8dc9453d8…` |
+| Monolith-Regelwerk (A), 36.165 Byte | `a3c14bd1b66cc1e391839a01…` |
+| Ground Truth isoliert | `635a1e0679f35e75fed2a4bb…` |
+| Ground Truth kombiniert | `24f457988225d599a16bf906…` |
+| Messfall-Dateien isoliert (14) | `0b0a9aff6100406fadf29607…` |
+| Messfall-Dateien kombiniert (14) | `b9313710cfe980fcbd9c5a35…` |
+| Referenz-Snapshot | `b429ba2606068bb670180681…` |
+
+> **`n` bleibt 17.** Die 255 Läufe sind **Within-Case**-Wiederholungen. 255 ergibt nicht
+> n = 255, und 5 × 17 nicht n = 85. Jede Aussage über Halluzinationsraten hat die Fallzahl 17.
+
+## Was ab jetzt gesperrt ist
+
+**Keine messrelevanten Änderungen mehr an:** Produktcode · Graph · Runner ·
+Evaluierungslogik · Pfadauflösung · Kategorien · Prompts · Regeln · Ground Truth ·
+Messkatalog · Modellparametern · Umgebung.
+
+**Weiterhin erlaubt:** Dokumentation und spätere **reine AP-I-Auswertungsschritte** — solange
+sie die **eingefrorene Bewertungssemantik nicht nachträglich verändern**. Die Grenze ist
+scharf: eine Auswertung *anwenden* ist erlaubt, ihre *Definition* ändern nicht. Wer eine
+Kategorie, eine Pfadregel oder ein Ground-Truth-Feld anders auslegt als hier festgelegt,
+erzeugt eine **Nachmessung** und muss sie als solche kennzeichnen (harte Regel 5).
+
+## Grundlage des Freeze
+
+* **G3** abgeschlossen (BA-049) — 7 von 10 Pilotzielen real belegt, 3 begründet nicht
+* **G4** abgeschlossen (BA-050) — `BA_G4_PILOTPHASE_ABSCHLUSS.md`, keine Inkonsistenz
+* **H4a** abgeschlossen (BA-051/052) — Runner-Preflight **35/35**
+* **H2/H3/H4** abgeschlossen (BA-055/056) — vor dem Freeze, weil selbst messrelevant
+* **Messkatalog** vervollständigt (BA-058) — Ground Truth per Deep-Diff unabhängig belegt
+* **Pfadvergleich** festgelegt (BA-059) — `test_pfadaufloesung.py` 23/23
+* **G5a** aktualisiert (BA-053/054/060) — sechs Punkte, Lock auf dem aktuellen Stand
+* **Regressionen** — **280 Assertions** über 10 Dateien, alle grün
+* **0 Promptänderungen · 0 Regelkartenänderungen · kein Messfall verbraucht**
+
+- **Verifikation:** Einfrierzeitpunkt aus der Systemzeit (lokal und UTC); die Differenz
+  `15f2a44` → HEAD per `git diff --name-status` **und** gezielt über alle messrelevanten Pfade;
+  Hashes aus dem Lock-Artefakt; Working Tree vor dem Freeze-Commit leer.
+- **Was NICHT funktioniert hat:**
+  * **Mein erster Abgleich der beiden Commits war unbrauchbar.** Ich verglich SHA-256 von
+    `git show` (LF) gegen den Working Tree (CRLF) und erhielt fünf falsche „ABWEICHUNG" —
+    darunter `kategorie4.py` und `sp_agent.py`. Ein Zeilenenden-Artefakt. **Dritter
+    Textvergleichs-Fehlalarm dieser Sitzung** (nach `generate_audit_report` im Docstring und
+    `trace_keys.py` in der Geheimnisprüfung). Die belastbare Antwort liefert `git diff`, das
+    Zeilenenden kennt — nicht ein selbstgebauter Hashvergleich.
+  * **Beinahe hätte ich auf `a1e018e` eingefroren, ohne die Differenz zu benennen.** Sie ist
+    harmlos, aber „harmlos" muss belegt sein und nicht angenommen: der Freeze ist der eine
+    Punkt, an dem eine unbemerkte Änderung die ganze Messung entwertet.
+- **Offen / nächstes:** **H5 — die Hauptmessung.** 255 Läufe, randomisiert, nach diesem
+  Einfrieren. Danach AP-I und AP-X. **H5 ist nicht gestartet.**

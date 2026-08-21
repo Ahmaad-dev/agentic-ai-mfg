@@ -577,7 +577,30 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
   > weil diese Artefakte **nicht** unter Versionskontrolle stehen (`data/` ist ignoriert) und
   > Git sie deshalb nicht abdeckt. Alles Übrige deckt der Commit ab.
 
-- [ ] 🟡 **G5 — der Freeze von 12:39:27 ist ÜBERHOLT (BA-058), neuer G5 steht aus**
+- [x] ██ **G5 — VERBINDLICH EINGEFROREN am 21.08.2026, 13:13:41 +02:00** ██
+      *(= 2026-08-21T11:13:41Z, freigegeben durch den Nutzer, dokumentiert in **BA-061**)*
+
+  > **Ab hier keine messrelevanten Änderungen mehr** an Produktcode, Graph, Runner,
+  > Evaluierungslogik, Pfadauflösung, Kategorien, Prompts, Regeln, Ground Truth, Messkatalog,
+  > Modellparametern oder Umgebung. **Erlaubt** bleiben Dokumentation und reine
+  > AP-I-Auswertungsschritte — solange sie die eingefrorene Bewertungssemantik **nicht
+  > nachträglich verändern**. Eine Auswertung *anwenden* ist erlaubt, ihre *Definition* ändern
+  > nicht; das wäre eine **Nachmessung** (harte Regel 5).
+
+      **Stand:** messrelevanter Code `15f2a44` · HEAD `a1e018e` · Working Tree sauber ·
+      Branch `ba-messstand-g5`. Die Differenz besteht **ausschliesslich** aus drei lesenden
+      Prüfwerkzeugen und zwei Dokumenten — per `git diff` über alle messrelevanten Pfade belegt.
+
+      **Messvorschrift:** 17 Fälle (10 isoliert + 7 kombiniert) · 29 Ground-Truth-Korrekturen ·
+      A/B/C je **N=5** · **255 Läufe** · Seed `20260821` · 29-Feld-Schema · gemeinsame
+      Kategorie-4-Auswertung · Pfadsemantik aus `pfadaufloesung.py` · `MEMORY_MODE=off` ·
+      `gpt-4.1` / `2025-01-01-preview` / `T=0.3`. **n bleibt 17.**
+
+      **Der vorherige G5 (12:39:27, BA-057) ist überholt** — der Trockenlauf fand vor der
+      ersten Datenerhebung, dass nur 10 statt 17 Fälle geladen wurden. **Unter ihm wurden
+      keine H5-Hauptmessdaten erhoben**, also keine Nachmessung. BA-057 bleibt unverändert.
+
+- [x] ~~██ **G5 — EINGEFROREN am 21.08.2026, 12:39:27 +02:00** ██~~ *(überholt, siehe oben)*
 
   > **Kein Messwert betroffen, also KEINE Nachmessung.** Unter dem alten Freeze wurde **kein
   > einziger H5-Lauf** durchgeführt. Der Trockenlauf fand vor der ersten Datenerhebung, dass
