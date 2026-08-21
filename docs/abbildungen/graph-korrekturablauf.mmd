@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	input_analysis(input_analysis)
+	classification(classification)
+	context_search(context_search)
+	rule_matching(rule_matching)
+	correction(correction)
+	technical_check(technical_check)
+	apply_revalidate(apply_revalidate)
+	evaluation(evaluation)
+	answer(answer)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> input_analysis;
+	apply_revalidate --> evaluation;
+	classification --> context_search;
+	context_search --> rule_matching;
+	correction --> technical_check;
+	evaluation -.-> answer;
+	evaluation -.-> classification;
+	input_analysis --> classification;
+	rule_matching --> correction;
+	technical_check -.-> apply_revalidate;
+	technical_check -.-> evaluation;
+	answer --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

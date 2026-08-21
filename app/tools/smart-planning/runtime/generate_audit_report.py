@@ -318,8 +318,74 @@ def save_audit_report(snapshot_id, report_content, token_usage):
     return f"{snapshot_id}/audit-report.md"
 
 
+def run_audit_report(snapshot_id) -> dict:
+    """
+    KNOTEN 9 — Antwortformulierung (BA / AP-D5, 2026-08-19).
+
+    Die EINZIGE Implementierung. `main()` ist seit dem 20.08.2026 nur noch die CLI-Huelle
+    darum herum (Befund F3 aus BA-025) — vorher hatten beide dieselbe Aufgabe getrennt
+    nachgebaut, und A/B (CLI) haetten von C (Knoten) abdriften koennen, ohne dass es jemand
+    merkt (BA_MASTERPLAN Kap. 12.2, CLAUDE.md Bauregel B).
+
+    Die Fortschrittsausgaben stehen bewusst HIER und nicht in main(): nur so sieht der
+    CLI-Pfad exakt dieselben stdout-Zeilen wie vorher, und beide Pfade verhalten sich gleich.
+
+    Returns: {"report_file": str|None, "chars": int|None, "token_usage": dict|None,
+              "error": str|None}
+
+    Beendet den Prozess NIE. **Korrigiert am 20.08.2026:** vorher fing dieser Wrapper nur
+    `except Exception` — aber `load_metadata()` (`:54`) und `load_snapshot_id()` (`:37`)
+    rufen `sys.exit(1)`, und `SystemExit` erbt von `BaseException`, nicht von `Exception`.
+    Der Docstring behauptete also etwas, das der Code nicht einhielt: ein fehlendes
+    metadata.txt haette den ganzen Graphlauf beendet. Jetzt wird `SystemExit` mitgefangen.
+
+    Dieser Knoten ist der einzige, dessen Ausfall den Vergleich NICHT beruehrt: Der Report
+    ist Ausgabe, kein Messgegenstand (BA_MASTERPLAN Kap. 9).
+    """
+    try:
+        print("Loading metadata...")
+        metadata_content = load_metadata(snapshot_id)
+        print(f"✓ Metadata loaded ({len(metadata_content)} characters)")
+
+        upload_results = load_upload_results(snapshot_id)
+        if upload_results:
+            print(f"✓ Upload results loaded")
+        else:
+            print("  (No upload-result.json found - skipping)")
+        print()
+
+        report_content, token_usage = generate_audit_report_with_llm(
+            metadata_content, upload_results, snapshot_id
+        )
+        print()
+        print(f"✓ Report generated")
+        print(f"  Token usage:")
+        print(f"    - Prompt: {token_usage['prompt_tokens']}")
+        print(f"    - Completion: {token_usage['completion_tokens']}")
+        print(f"    - Total: {token_usage['total_tokens']}")
+        print()
+
+        report_file = save_audit_report(snapshot_id, report_content, token_usage)
+        return {"report_file": str(report_file), "chars": len(report_content),
+                "token_usage": token_usage, "error": None}
+
+    except SystemExit as exc:
+        # Kommt aus load_metadata()/load_snapshot_id(). Fuer die CLI war das der gewollte
+        # Abbruch; fuer den Graphen ist es ein Zustand, kein Prozessende.
+        return {"report_file": None, "chars": None, "token_usage": None,
+                "beendet_mit": exc.code,
+                "error": f"Abbruch aus dem Runtime-Skript (exit {exc.code})"}
+    except Exception as exc:
+        return {"report_file": None, "chars": None, "token_usage": None,
+                "error": f"{type(exc).__name__}: {exc}"}
+
+
 def main():
-    """Main function"""
+    """
+    CLI-Huelle. Enthaelt seit dem 20.08.2026 KEINE Reportlogik mehr (Befund F3, BA-025) —
+    sie steht vollstaendig in run_audit_report(). Hier bleiben Argumente, der
+    current_snapshot.txt-Fallback, die Banner und der Exit-Code.
+    """
     import argparse
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
@@ -330,44 +396,24 @@ def main():
     print("AUDIT REPORT GENERATOR")
     print("=" * 70)
     print()
-    
-    # Load snapshot ID (Argument hat Priorität)
+
+    # Reine CLI-Zustaendigkeit: welcher Snapshot ist gemeint?
     snapshot_id = load_snapshot_id(args.snapshot_id)
     print(f"Snapshot ID: {snapshot_id}")
     print()
-    
-    # Load metadata
-    print("Loading metadata...")
-    metadata_content = load_metadata(snapshot_id)
-    print(f"✓ Metadata loaded ({len(metadata_content)} characters)")
-    
-    # Load upload results (optional)
-    upload_results = load_upload_results(snapshot_id)
-    if upload_results:
-        print(f"✓ Upload results loaded")
-    else:
-        print("  (No upload-result.json found - skipping)")
-    print()
-    
-    # Generate report with LLM
-    report_content, token_usage = generate_audit_report_with_llm(metadata_content, upload_results, snapshot_id)
-    print()
-    print(f"✓ Report generated")
-    print(f"  Token usage:")
-    print(f"    - Prompt: {token_usage['prompt_tokens']}")
-    print(f"    - Completion: {token_usage['completion_tokens']}")
-    print(f"    - Total: {token_usage['total_tokens']}")
-    print()
-    
-    # Save report
-    report_file = save_audit_report(snapshot_id, report_content, token_usage)
-    print()
-    
+
+    ergebnis = run_audit_report(snapshot_id)
+
+    if ergebnis["error"]:
+        # Die Meldung selbst hat das Runtime-Skript bereits ausgegeben (z. B.
+        # "Error: metadata.txt not found ..."), genau wie vor F3. Der Exit-Code bleibt 1.
+        sys.exit(1)
+
     print("=" * 70)
     print("✓ AUDIT REPORT GENERATION COMPLETE")
     print("=" * 70)
     print()
-    print(f"Report: {report_file}")
+    print(f"Report: {ergebnis['report_file']}")
     print()
 
 

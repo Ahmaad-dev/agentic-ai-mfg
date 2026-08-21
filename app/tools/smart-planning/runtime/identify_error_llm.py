@@ -143,7 +143,13 @@ def save_llm_response(snapshot_id, llm_response, first_error, llm_call_data):
     # Return a local-compatible Path for the iteration dir (needed by caller)
     from pathlib import Path
     iteration_dir = storage._get_local_path(f"{snapshot_id}/iteration-{iteration_number}") if storage.mode == "LOCAL" else Path(snapshot_id) / f"iteration-{iteration_number}"
-    return iteration_dir, iteration_number
+    # BA / Identify-Handoff (20.08.2026): `output_data` wird mit zurueckgegeben, damit
+    # Knoten 2 GENAU das Objekt in den State legen kann, das hier auf Platte ging.
+    # Knoten 5 bekommt es dann uebergeben, statt die Datei ueber
+    # `get_latest_iteration_number()` erneut zu suchen - dabei koennte er den Stand einer
+    # FRUEHEREN Iteration erwischen (dieselbe Fehlerklasse wie der veraltete Suchkontext,
+    # BA-024). Der CLI-Pfad ignoriert den dritten Wert und laedt weiterhin von Platte.
+    return iteration_dir, iteration_number, output_data
 
 
 def analyze_validation_with_llm(validation_data):
@@ -361,6 +367,91 @@ def trigger_identify_tool(search_mode, search_value, snapshot_id: str = None):
         return False
 
 
+def identify_sha256(obj) -> str:
+    """
+    Kanonischer Hash der Identifikationsantwort. BA / Identify-Handoff, 20.08.2026.
+
+    Bewusst EINE Definition - dieselbe Begruendung wie bei
+    `identify_snapshot.context_sha256()`: Knoten 2 bildet damit `identify_response_sha256`,
+    Knoten 5 damit `identify_input_sha256`. Zwei eigene Serialisierungen wuerden
+    Serialisierungen statt Inhalte vergleichen und die Zusicherung wertlos machen.
+    """
+    import hashlib as _h, json as _j
+    return _h.sha256(_j.dumps(obj, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def run_classification(snapshot_id, validation_data=None) -> dict:
+    """
+    KNOTEN 2 — Fehlerklassifikation (BA / AP-D6, 2026-08-19).
+
+    Kernlogik aus main() OHNE den Suchschritt. Laedt die Validierungsdaten, laesst das LLM
+    einen Fehler auswaehlen und speichert die Antwort im Iterationsordner — genau wie bisher.
+
+    WAS DIESER KNOTEN BEWUSST NICHT TUT
+    -----------------------------------
+    Er ruft `trigger_identify_tool()` NICHT auf. Die Suche ist **Knoten 3** (BA_MASTERPLAN
+    Kap. 9.0). Bisher fuehrte `identify_error_llm.main()` sie mit aus; im Graphen waeren das
+    zwei Knoten in einem, und `extracted_context` haette keinen eigenen Beobachtungspunkt.
+    Der CLI-Pfad behaelt den Suchaufruf in main() — dort aendert sich nichts.
+
+    DER PROMPT BLEIBT UNVERAENDERT
+    ------------------------------
+    `analyze_validation_with_llm()` wird unveraendert aufgerufen. Der Prompt ist in den
+    Bedingungen A, B und C identisch und damit Kontrollbedingung (Kap. 7.1.1). Er enthaelt
+    weiterhin `relevant_cards` — Knoten 2 SCHLAEGT Karten vor, aufgeloest und protokolliert
+    werden sie ausschliesslich in **Knoten 4** (Kap. 9.0). Es gibt also genau eine
+    Aufloesungsstelle, obwohl zwei Knoten am Thema beteiligt sind.
+
+    Returns:
+        {"classified_error": dict|None, "iteration_number": int|None,
+         "llm_call": dict|None, "error": str|None}
+        `classified_error` traegt: tag, priority, reasoning, raw_message, search_mode,
+        search_value, should_investigate, relevant_cards.
+
+    Beendet den Prozess NIE (vgl. AP-D1).
+    """
+    try:
+        if validation_data is None:
+            validation_data = load_validation_data(snapshot_id)
+            if validation_data is None:
+                return {"classified_error": None, "iteration_number": None, "llm_call": None,
+                        "error": "Keine Validierungsdaten gefunden."}
+
+        ergebnis = analyze_validation_with_llm(validation_data)
+        if ergebnis is None:
+            return {"classified_error": None, "iteration_number": None, "llm_call": None,
+                    "error": "analyze_validation_with_llm lieferte kein Ergebnis."}
+
+        llm_analysis, first_error, llm_call_data = ergebnis
+        _, iteration_number, identify_response = save_llm_response(
+            snapshot_id, llm_analysis, first_error, llm_call_data)
+
+        klassifikation = {
+            "tag": llm_analysis.get("tag_error_type"),
+            "error_type": llm_analysis.get("error_type"),
+            "priority_index": llm_analysis.get("selected_error_index"),
+            "reasoning": llm_analysis.get("prioritization_reasoning"),
+            "raw_message": (first_error or {}).get("message"),
+            # Fuer Knoten 3 — er fuehrt die Suche aus, nicht dieser Knoten:
+            "search_mode": llm_analysis.get("search_mode"),
+            "search_value": llm_analysis.get("search_value"),
+            "should_investigate": llm_analysis.get("should_investigate", False),
+            # Fuer Knoten 4 — VORSCHLAG, keine Aufloesung:
+            "relevant_cards": llm_analysis.get("relevant_cards") or [],
+            "relevant_cards_reasoning": llm_analysis.get("relevant_cards_reasoning"),
+        }
+        return {"classified_error": klassifikation, "iteration_number": iteration_number,
+                "llm_call": llm_call_data,
+                # Das VOLLE Objekt, wie es in llm_identify_response.json steht - Knoten 5
+                # bekommt genau dieses, nicht eine zweite Lesung von Platte.
+                "identify_response": identify_response,
+                "identify_response_sha256": identify_sha256(identify_response),
+                "error": None}
+    except Exception as exc:
+        return {"classified_error": None, "iteration_number": None, "llm_call": None,
+                "error": f"{type(exc).__name__}: {exc}"}
+
+
 def main():
     """Main function"""
     import argparse
@@ -395,25 +486,29 @@ def main():
         else:
             print(f"Using Snapshot ID from argument: {snapshot_id}\n")
     
-    # Step 2: Load validation data
-    if not demo_mode:
-        validation_data = load_validation_data(snapshot_id)
-        if validation_data is None:
+    # Steps 2-4 (AP-D6): Validierungsdaten laden, LLM-Analyse, Antwort speichern —
+    # jetzt in run_classification(), damit der Graph-Knoten 2 DIESELBE Logik benutzt.
+    # Der Demo-Modus laeuft weiter ueber den direkten Weg, weil er keine Dateien anfasst.
+    if demo_mode:
+        print(f"Validation data loaded: {len(validation_data)} message(s)\n")
+        result = analyze_validation_with_llm(validation_data)
+        if result is None:
             return
-    
-    print(f"Validation data loaded: {len(validation_data)} message(s)\n")
-    
-    # Step 3: Analyze with LLM
-    result = analyze_validation_with_llm(validation_data)
-    if result is None:
-        return
-    
-    llm_analysis, first_error, llm_call_data = result
-    
-    # Step 4: Save LLM response to iteration folder
-    if not demo_mode:
-        iteration_dir, iteration_number = save_llm_response(snapshot_id, llm_analysis, first_error, llm_call_data)
-        print(f"Created iteration folder: iteration-{iteration_number}")
+        llm_analysis, first_error, llm_call_data = result
+    else:
+        ergebnis = run_classification(snapshot_id)
+        if ergebnis["error"] or ergebnis["classified_error"] is None:
+            if ergebnis["error"]:
+                print(f"ERROR {ergebnis['error']}")
+            return
+        k = ergebnis["classified_error"]
+        # Fuer die weiteren Schritte im selben Format wie bisher
+        llm_analysis = {
+            "search_mode": k["search_mode"], "search_value": k["search_value"],
+            "should_investigate": k["should_investigate"], "error_type": k["error_type"],
+            "tag_error_type": k["tag"], "relevant_cards": k["relevant_cards"],
+        }
+        print(f"Created iteration folder: iteration-{ergebnis['iteration_number']}")
     
     # Step 5: Trigger identify tool if LLM recommends it
     if llm_analysis.get('should_investigate', False):

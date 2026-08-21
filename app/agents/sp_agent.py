@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from .base_agent import BaseAgent
 from .sp_tools_config import SP_TOOLS, SP_PIPELINES
-from core.agent_config import HUMAN_IN_THE_LOOP
+from core.agent_config import (HUMAN_IN_THE_LOOP, SP_ARCHITECTURE_MODE,
+                               GRAPH_ENABLED_PIPELINES)
 
 # StorageManager über runtime_storage (unterstützt LOCAL + AZURE)
 _runtime_storage_dir = str(Path(__file__).parent.parent / "tools" / "smart-planning" / "runtime")
@@ -310,9 +311,58 @@ class SPAgent(BaseAgent):
         results = []
         max_retries = 2  # Jeder Schritt wird max 2x wiederholt
         
-        for step in pipeline["steps"]:
+        # Welche Schrittnummer ist die RE-Validierung? (der zweite validate_snapshot-Eintrag,
+        # nach apply/update). Nur davor muss die Validierung neu ausgeloest werden.
+        _schritte = pipeline["steps"]
+        _revalidate_index = None
+        if _schritte.count("validate_snapshot") > 1:
+            _revalidate_index = len(_schritte) - 1 - _schritte[::-1].index("validate_snapshot")
+        elif "update_snapshot" in _schritte and "validate_snapshot" in _schritte:
+            _i_upd = _schritte.index("update_snapshot")
+            _i_val = _schritte.index("validate_snapshot")
+            _revalidate_index = _i_val if _i_val > _i_upd else None
+
+        # Ergebnis des ausgeloesten Re-Validierungsjobs. Ohne diese Vorbelegung lief der
+        # spaetere Zugriff in einen NameError, den der umgebende `except Exception` schluckte -
+        # `final_validation` wurde dadurch STILL zu None (gefunden 20.08.2026 im zweiten
+        # F1-Lauf, BA-032). Genau deshalb muss nach einer Textersetzung geprueft werden, ob
+        # sie auch angekommen ist, nicht nur ob die Datei noch kompiliert.
+        _revalidation = None
+        for _step_index, step in enumerate(_schritte):
             logger.info(f"[{self.name}] Pipeline-Schritt: {step}")
-            
+
+            # ================== AP3.3d, nachgezogen am 19.08.2026 (BA / AP-D3) ==================
+            # `update_snapshot` (PUT) LOESCHT die Validierungsmeldungen auf dem Server, und der
+            # Server rechnet NICHT von selbst neu. `validate_snapshot` macht nur das GET.
+            # Ohne den Trigger las die Re-Validierung deshalb eine leere Liste und meldete
+            # `errors=0` — ein FALSCHES GRUEN. Das ist in `routes/server_validation.py` seit
+            # AP3.3d dokumentiert und im Review-Pfad behoben, war aber in DIESER Pipeline nie
+            # verdrahtet: die Iterationsschleife brach dadurch nach dem ersten Durchlauf ab.
+            #
+            # Warum hier und nicht nur im Graphen: Die Bedingungen A, B und C muessen dieselbe
+            # fachliche Re-Validierungssemantik haben (BA_MASTERPLAN Kap. 7.1.1). Waere der
+            # Trigger nur im Graph-Knoten, unterschieden sich die Varianten in etwas, das gar
+            # nicht Gegenstand des Vergleichs ist.
+            if _revalidate_index is not None and _step_index == _revalidate_index and snapshot_id:
+                try:
+                    from routes.server_validation import trigger_server_validation
+                    _trig = trigger_server_validation(snapshot_id)
+                    _revalidation = _trig
+                    logger.info(f"[{self.name}] Re-Validierung ausgeloest: ok={_trig.get('ok')} "
+                                f"job={str(_trig.get('job_id'))[:8]} status={_trig.get('status')} "
+                                f"gewartet={_trig.get('waited_s')}s")
+                    if not _trig.get("ok"):
+                        # Kein falsches Gruen: lieber gar keine Zahl als eine veraltete.
+                        logger.warning(f"[{self.name}] Validierungsjob nicht erfolgreich "
+                                       f"({_trig.get('status')}) — final_validation bleibt unbelegt")
+                        results.append({"step": "trigger_revalidation", "success": False,
+                                        "trigger": _trig})
+                except Exception as _tex:
+                    _revalidation = {"ok": False, "error": str(_tex)}
+                    logger.warning(f"[{self.name}] Trigger der Re-Validierung fehlgeschlagen: {_tex}")
+                    results.append({"step": "trigger_revalidation", "success": False,
+                                    "error": str(_tex)})
+
             # Versuche Schritt mit Retries
             attempt = 0
             tool_result = None
@@ -428,14 +478,41 @@ class SPAgent(BaseAgent):
                     error_count = sum(1 for msg in validation_data if msg.get('level') == 'ERROR')
                     warning_count = sum(1 for msg in validation_data if msg.get('level') == 'WARNING')
                 
-                final_validation_status = {
-                    "errors": error_count,
-                    "warnings": warning_count,
-                    "is_valid": error_count == 0,  # Valide = keine Errors (Upload-Status separat)
-                    "server_validated": is_validated
-                }
+                # AUTORITATIVE TECHNISCHE VALIDITAET (geklaert 20.08.2026, BA-030).
+                # Drei Dinge, die vorher vermischt waren:
+                #
+                #  (a) `isSuccessfullyValidated` stammt aus der PUT-ANTWORT DES UPLOADS
+                #      (`update_snapshot`), also aus dem Zeitpunkt VOR der ausgeloesten
+                #      Re-Validierung. Es beschreibt den gespeicherten Snapshot-Zustand,
+                #      NICHT das Ergebnis der Pruefung. Deshalb heisst es jetzt
+                #      `upload_flag_at_put` und ist ausdruecklich KEINE Validitaetsmetrik.
+                #  (b) Autoritativ ist allein die Fehlerzahl aus
+                #      GET /snapshots/{id}/validation-messages, geholt NACH einem
+                #      abgeschlossenen Validierungsjob (POST .../validate, gepollt bis
+                #      Terminalzustand).
+                #  (c) Ohne abgeschlossenen Job sind die Zahlen VERALTET. Das Log sagte das
+                #      bereits ("final_validation bleibt unbelegt") - der Code tat es nicht.
+                #      Jetzt tut er es: `final_validation` bleibt `None`.
+                _reval_ok = (_revalidation or {}).get("ok") if _revalidation is not None else None
+                if _revalidation is not None and not _reval_ok:
+                    final_validation_status = None
+                    logger.warning(f"[{self.name}] Re-Validierung nicht abgeschlossen "
+                                   f"({(_revalidation or {}).get('status')}) - final_validation "
+                                   f"bleibt unbelegt statt eine veraltete Zahl zu melden")
+                else:
+                    final_validation_status = {
+                        "errors": error_count,
+                        "warnings": warning_count,
+                        "is_valid": error_count == 0,
+                        "revalidation_ok": _reval_ok,
+                        "upload_flag_at_put": is_validated,
+                    }
                 
-                logger.info(f"[{self.name}] Final Validation: is_valid={final_validation_status['is_valid']}, errors={error_count}, warnings={warning_count}")
+                if final_validation_status:
+                    logger.info(f"[{self.name}] Final Validation: "
+                                f"is_valid={final_validation_status['is_valid']}, "
+                                f"errors={error_count}, warnings={warning_count}, "
+                                f"revalidation_ok={final_validation_status['revalidation_ok']}")
                 
             except Exception as e:
                 logger.warning(f"[{self.name}] Could not read validation status: {e}")
@@ -641,6 +718,16 @@ class SPAgent(BaseAgent):
             - final_validation: Dict mit is_valid, errors, warnings (falls vorhanden)
             - total_iterations: Anzahl durchgeführter Iterationen
         """
+        # ================== DER EINZIGE VERZWEIGUNGSPUNKT (BA / AP-C, 2026-08-19) ==================
+        # Koexistenz statt Ersetzen (Regel 1): Ohne gesetztes SP_ARCHITECTURE_MODE aendert sich
+        # NICHTS — der Default ist "monolith", und dann faellt dieser Block komplett durch.
+        # Der Graph-Pfad liefert dieselbe Rueckgabestruktur, damit Orchestrator, Web-UI und
+        # Eval-Skripte von der Umstellung nichts merken (BA_MASTERPLAN Kap. 6.3).
+        if SP_ARCHITECTURE_MODE == "graph" and pipeline_name in GRAPH_ENABLED_PIPELINES:
+            logger.info(f"[{self.name}] Architektur: GRAPH — Pipeline '{pipeline_name}'")
+            return self._execute_pipeline_graph(pipeline_name, snapshot_id)
+        # -------- ab hier: bestehender Code, UNVERAENDERT --------
+
         MAX_CORRECTION_ITERATIONS = 5
         is_correction_pipeline = pipeline_name in ["full_correction", "correction_from_validation"]
 
@@ -677,4 +764,111 @@ class SPAgent(BaseAgent):
 
         last_result["total_iterations"] = iteration
         return last_result
+
+    def _execute_pipeline_graph(self, pipeline_name: str, snapshot_id: Optional[str] = None) -> Dict:
+        """
+        Graph-Pfad der Korrektur-Pipeline (BA / AP-E, verdrahtet 20.08.2026).
+
+        **Enthaelt keine Fachlogik.** Er startet den in `graph/correction_graph.py`
+        verdrahteten Graphen und uebersetzt dessen Endzustand in **genau die
+        Rueckgabestruktur, die `_execute_pipeline()` liefert** (`success`, `pipeline`,
+        `completed_steps`, `final_validation`, `total_iterations`). Nur so merken
+        Orchestrator, Web-UI und Eval-Skripte nichts von der Umstellung
+        (BA_MASTERPLAN Kap. 6.3) - `orchestration_agent.py:1206` liest z. B.
+        `final_validation.get("is_valid")` und `.get("errors")`.
+
+        WICHTIG - die Iteration gehoert dem Graphen.
+        `execute_pipeline()` kehrt bei `SP_ARCHITECTURE_MODE=graph` sofort hierher zurueck und
+        durchlaeuft seine eigene `while True`-Schleife NICHT. Die fachliche Wiederholung macht
+        die Rueckkante 8->2 im Graphen, begrenzt durch `max_iterations` und Knoten 8
+        (`stop_max_iter`). Liefe beides, waere die Iterationszahl zwischen den Bedingungen
+        nicht mehr vergleichbar.
+
+        `errors_before` wird hier NICHT geraten: Knoten 1 ermittelt es selbst aus
+        `snapshot-validation.json` und ueberschreibt den Startwert.
+        """
+        import sys as _sys
+        from pathlib import Path as _Path
+        _sp = _Path(__file__).resolve().parents[1] / "tools" / "smart-planning"
+        for _p in (str(_sp), str(_sp / "runtime")):
+            if _p not in _sys.path:
+                _sys.path.insert(0, _p)
+        from graph.correction_graph import run_correction_graph
+
+        if not snapshot_id:
+            return {
+                "success": False, "pipeline": pipeline_name, "completed_steps": [],
+                "final_validation": None, "total_iterations": 0,
+                "error": "Graph-Pfad ohne snapshot_id aufgerufen.",
+            }
+
+        logger.info(f"[{self.name}] Graph-Pfad: Pipeline '{pipeline_name}' fuer {snapshot_id}")
+        try:
+            zustand = run_correction_graph(snapshot_id, errors_before=0)
+        except Exception as exc:
+            logger.error(f"[{self.name}] Graphlauf abgebrochen: {type(exc).__name__}: {exc}")
+            return {
+                "success": False, "pipeline": pipeline_name, "completed_steps": [],
+                "final_validation": None, "total_iterations": 0,
+                "error": f"Graphlauf abgebrochen: {type(exc).__name__}: {exc}",
+            }
+
+        entscheidung = (zustand.get("decision") or {}).get("action")
+        fehler_danach = zustand.get("errors_after")
+
+        # `errors_after = None` ist NICHT `0` (Kap. 7.1.2). Ohne belastbare Re-Validierung
+        # bleibt `final_validation` deshalb unbelegt, statt ein falsches Gruen zu melden -
+        # genau wie der Monolith es an seiner Stelle handhabt (`sp_agent.py:297`).
+        if fehler_danach is None:
+            abschluss = None
+        else:
+            nach = zustand.get("final_validation")
+            warnungen = (sum(1 for m in nach if isinstance(m, dict) and m.get("level") == "WARNING")
+                         if isinstance(nach, list) else None)
+            # `server_validated` MUSS hier dasselbe messen wie im Monolithen
+            # (`sp_agent.py:460ff`): das Serverurteil aus `upload-result.json`, NICHT die
+            # Frage, ob ein Upload stattgefunden hat.
+            #
+            # Korrigiert 20.08.2026, gefunden im vertikalen Durchstich AP-F1: A meldete
+            # `server_validated=False`, C `True` - bei identischem Korrekturvorschlag. Der
+            # Unterschied kam allein aus MEINER Uebersetzung und haette spaeter wie ein
+            # Architektureffekt ausgesehen (CLAUDE.md, Bauregel B).
+            # Dieselben Felder und dieselbe Semantik wie im Monolithen (BA-030) - sonst
+            # unterschieden sich A/B und C in etwas, das nicht Gegenstand des Vergleichs ist.
+            # `upload_flag_at_put` ist der Stand aus der PUT-Antwort des Uploads, also VOR der
+            # Re-Validierung; autoritativ ist `errors` aus den Meldungen NACH dem
+            # abgeschlossenen Validierungsjob.
+            put_flag = None
+            try:
+                _up = _get_storage().load_json(f"{snapshot_id}/upload-result.json") or {}
+                put_flag = (_up.get("server_response") or {}).get("isSuccessfullyValidated", False)
+            except Exception:
+                put_flag = False
+            abschluss = {
+                "errors": fehler_danach,
+                "warnings": warnungen,
+                "is_valid": fehler_danach == 0,
+                "revalidation_ok": ((zustand.get("applied") or {}).get("revalidation") or {}).get("ok"),
+                "upload_flag_at_put": put_flag,
+            }
+
+        ergebnis = {
+            "success": entscheidung == "stop_valid",
+            "pipeline": pipeline_name,
+            # Die Trace-Knotennamen sind die durchlaufenen Schritte - dieselbe Rolle wie
+            # `results` im Monolithen, nur wird sie hier vom Code gefuehrt statt vom Ablauf.
+            "completed_steps": [t.get("node") for t in (zustand.get("trace") or [])],
+            "final_validation": abschluss,
+            "total_iterations": zustand.get("iteration", 0),
+            "architecture_mode": "graph",
+        }
+        if entscheidung != "stop_valid":
+            ergebnis["error"] = ((zustand.get("decision") or {}).get("reasoning")
+                                 or f"Graph endete mit '{entscheidung}'.")
+        if zustand.get("manual_intervention_required"):
+            ergebnis["waiting_for_decision"] = True
+        logger.info(f"[{self.name}] Graphlauf beendet: {entscheidung}, "
+                    f"{ergebnis['total_iterations']} Iteration(en), "
+                    f"errors_after={fehler_danach}")
+        return ergebnis
 

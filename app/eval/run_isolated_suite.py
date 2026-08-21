@@ -112,8 +112,18 @@ def upload_and_validate(case):
 
 
 def run_pipeline(sid):
-    env = {"RULEBOOK_MODE": "cards", "PYTHONIOENCODING": "utf-8"}
+    # AP-B (BA, 2026-08-19): Die Modi kamen bisher fest verdrahtet aus diesem Skript — damit war
+    # der Harness auf `cards` festgenagelt und fuer die Monolith-Baseline unbrauchbar. Jetzt
+    # duerfen sie von aussen gesetzt werden; die DEFAULTS sind exakt das bisherige PT4-Verhalten
+    # (`cards`, Gedaechtnis an), sodass jeder alte Aufruf unveraendert laeuft.
+    #   Baseline:  RULEBOOK_MODE=monolith MEMORY_MODE=off python eval/run_isolated_suite.py
+    #   PT4 wie bisher: python eval/run_isolated_suite.py
     import os
+    env = {
+        "RULEBOOK_MODE": os.getenv("RULEBOOK_MODE", "cards"),
+        "MEMORY_MODE": os.getenv("MEMORY_MODE", "on"),
+        "PYTHONIOENCODING": "utf-8",
+    }
     e = {**os.environ, **env}
     subprocess.run([sys.executable, "identify_error_llm.py", "--snapshot-id", sid],
                    cwd=RUNTIME, env=e, capture_output=True, text=True, timeout=400)
@@ -159,12 +169,32 @@ def evaluate(case, errs, proposal):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", default=None)
+    # AP-B2 (BA, 2026-08-19): --only nimmt jetzt auch eine Liste ("I01,I03,I07"), damit eine
+    # Teilmenge in EINEM Lauf unter identischen Bedingungen faellt. Ein einzelner Code
+    # funktioniert unveraendert.
+    ap.add_argument("--only", default=None,
+                    help="Fall-Code oder Komma-Liste, z.B. I03 oder I01,I03,I07")
+    # AP-B (BA, 2026-08-19): Die Ergebnisdatei war fest verdrahtet auf pt4-eval-results.json.
+    # Ein Lauf mit --only haette den PT4-NACHWEIS mit einer einzigen Zeile ueberschrieben —
+    # unwiederbringlich, weil data/ nicht unter Versionskontrolle steht. Der Pfad ist jetzt
+    # waehlbar; der Default bleibt der alte, damit PT4-Aufrufe unveraendert funktionieren.
+    ap.add_argument("--out", default=None,
+                    help="Zieldatei fuer die Ergebnisse (Default: pt4-eval-results.json)")
+    # AP-D-Nachpflege (BA-025, Befund F2, 2026-08-20): Die Ergebnisdatei war eine blanke Liste
+    # ohne Zeitstempel, Modell, Temperatur oder Schalterstellung - genau der Defekt, den
+    # CLAUDE.md ueber `pt4-eval-results.json` als bekannte Falle fuehrt. Mit diesem Schalter
+    # bekommt sie einen Metadatenkopf. DEFAULT AUS, damit jeder PT4-Aufruf byte-gleiche
+    # Ausgaben behaelt (harte Regel 1, Koexistenz statt Ersetzen).
+    ap.add_argument("--with-metadata", action="store_true",
+                    help="Ergebnisdatei mit Lauf-Metadaten umhuellen (BA-Messlaeufe: immer)")
     args = ap.parse_args()
+    if args.with_metadata:
+        from core.run_metadata import warn_if_wrong_env
+        warn_if_wrong_env("BA-Messlauf (run_isolated_suite)")
     spec = json.loads((SUITE / "expected-results.json").read_text(encoding="utf-8"))
     rows = []
     for case in spec["cases"]:
-        if args.only and case["code"] != args.only:
+        if args.only and case["code"] not in {c.strip() for c in args.only.split(",")}:
             continue
         print(f"\n=== {case['code']} {case['title']} ===")
         sid, errs = upload_and_validate(case)
@@ -189,8 +219,23 @@ def main():
     print(f"Erkannt: {sum(r['detected'] for r in rows)}/{n}  "
           f"Feld richtig: {sum(r['field_ok'] for r in rows)}/{n}  "
           f"Wert exakt: {sum(r['value_ok'] for r in rows)}/{n}")
-    out = SUITE / "pt4-eval-results.json"
-    out.write_text(json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
+    out = Path(args.out) if args.out else SUITE / "pt4-eval-results.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if args.with_metadata:
+        from core.run_metadata import collect_run_metadata
+        inhalt = {
+            "lauf_metadaten": collect_run_metadata({
+                "harness": "eval/run_isolated_suite.py",
+                "faelle": [r["code"] for r in rows],
+                "aufruf": " ".join(sys.argv),
+            }),
+            "ergebnisse": rows,
+        }
+    else:
+        print("HINWEIS: ohne --with-metadata - die Datei traegt keine Lauf-Metadaten "
+              "und ist als BA-Rohdatum nicht verwertbar (harte Regel 7).")
+        inhalt = rows
+    out.write_text(json.dumps(inhalt, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Details: {out}")
 
 

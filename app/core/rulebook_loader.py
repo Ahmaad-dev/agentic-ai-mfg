@@ -4,8 +4,8 @@ Rulebook loader (PT4 / AP7.0, drop-in cards seit AP7.5).
 Entscheidet, WELCHE Regeln in einen LLM-Prompt gehen. Zwei Modi, geschaltet über
 RULEBOOK_MODE in agent_config.py:
 
-  "monolith" (default) — die vollständige llm-validation-fix-rules.md, exakt wie früher.
-  "cards"              — skills/_core.md plus JEDE Karte, die für den [validate_*]-Tag
+  "monolith"            — die vollständige llm-validation-fix-rules.md, exakt wie früher.
+  "cards" (DEFAULT)    — skills/_core.md plus JEDE Karte, die für den [validate_*]-Tag
                          dieses Fehlers zuständig ist.
 
 --- Karten sind SELBSTBESCHREIBEND (drop-in) ---
@@ -246,6 +246,32 @@ def card_index() -> str:
     return "\n".join(lines) if lines else "(keine Regelkarten vorhanden)"
 
 
+def select_cards(error_type: Optional[str] = None,
+                 extra_cards: Optional[list] = None) -> tuple[list, list]:
+    """
+    WELCHE Karten fuer diesen Fehler gelten — ohne sie zusammenzusetzen.
+
+    Additiv herausgezogen (BA / AP-D4, 2026-08-19): `load_rulebook()` benutzt diese Funktion
+    jetzt ebenfalls. Knoten 4 (Regelzuordnung) muss die Auswahl PROTOKOLLIEREN, nicht nur den
+    zusammengesetzten Text bekommen — und wenn er die Auswahlregel nachbaute, koennten beide
+    auseinanderlaufen. Eine Implementierung, zwei Aufrufer (BA_MASTERPLAN Kap. 12.2).
+
+    Returns: (chosen, reasons) — die Kartendicts und je ein lesbarer Grund.
+    """
+    wanted = (error_type or "").strip().upper()
+    named = {str(n).strip().lower() for n in (extra_cards or [])}
+
+    chosen, reasons = [], []
+    for card in list_cards():
+        if wanted and wanted in card["tags"]:
+            chosen.append(card)
+            reasons.append(f"{card['file']} (Tag {wanted})")
+        elif card["file"].lower() in named or card["file"].lower().removesuffix(".md") in named:
+            chosen.append(card)
+            reasons.append(f"{card['file']} (vom Agenten als relevant gewaehlt)")
+    return chosen, reasons
+
+
 def load_rulebook(error_type: Optional[str] = None,
                   extra_cards: Optional[list] = None) -> str:
     """
@@ -273,18 +299,8 @@ def load_rulebook(error_type: Optional[str] = None,
     _, core_body = _split_frontmatter(core_raw)
     parts = [core_body]
 
-    cards = list_cards()
+    chosen, reasons = select_cards(error_type, extra_cards)
     wanted = (error_type or "").strip().upper()
-    named = {str(n).strip().lower() for n in (extra_cards or [])}
-
-    chosen, reasons = [], []
-    for card in cards:
-        if wanted and wanted in card["tags"]:
-            chosen.append(card)
-            reasons.append(f"{card['file']} (Tag {wanted})")
-        elif card["file"].lower() in named or card["file"].lower().removesuffix(".md") in named:
-            chosen.append(card)
-            reasons.append(f"{card['file']} (vom Agenten als relevant gewaehlt)")
 
     parts.extend(c["body"] for c in chosen)
     if chosen:

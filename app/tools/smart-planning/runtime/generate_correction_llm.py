@@ -826,52 +826,109 @@ def open_proposal_blocking(snapshot_id):
         return None
 
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
-                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
-    args, _ = parser.parse_known_args()
+def run_correction_generation(snapshot_id, fix_rules=None, identify_response=None,
+                             search_results=None, iteration_number=None,
+                             check_open_proposal=True) -> dict:
+    """
+    KNOTEN 5 — Korrekturgenerierung (BA / AP-D2, 2026-08-19).
 
-    print("=== LLM Correction Proposal Generator ===\n")
-    
-    # Load snapshot ID (Argument hat Priorität)
-    snapshot_id = load_current_snapshot_id(args.snapshot_id)
-    print(f"Snapshot ID: {snapshot_id}\n")
-    
-    # SPERRE — vor allem Teuren. Ein Lauf kostet rund 55.000 Token; die haben wir schon
-    # verbrannt, als der zweite Vorschlag entstand, der sich hinterher nicht anwenden liess.
-    wartet = open_proposal_blocking(snapshot_id)
-    if wartet:
-        print("=== ABGEBROCHEN: es wartet bereits ein Vorschlag auf eine Entscheidung ===")
-        print(f"Offener Vorschlag: {wartet['proposal_id']}")
-        print(f"  Fehlerart : {wartet.get('error_type')}")
-        print(f"  Zielpfad  : {wartet.get('target_path')}")
-        print(f"  Konfidenz : {round((wartet.get('confidence_score') or 0) * 100)} %")
-        print(f"  Entscheiden: {APP_BASE_URL}/review.html?proposal={wartet['proposal_id']}")
-        print()
-        print("Solange dieser Vorschlag offen ist, wird kein weiterer erzeugt: er waere "
-              "gegen einen Datenstand gerechnet, den deine Entscheidung veraendert - und "
-              "anwendbar ist ohnehin immer nur der neueste.")
-        print("Entscheide ihn (genehmigen, aendern oder ablehnen), dann laeuft die "
-              "Korrektur weiter.")
-        sys.exit(3)          # eigener Code: kein Fehler, sondern eine Wartesituation
+    Kernlogik, aufrufbar sowohl von main() (CLI/Subprozess) als auch vom Graph-Knoten.
+    Es gibt danach GENAU EINE Implementierung — main() ruft nur noch eine Ebene tiefer
+    (BA_MASTERPLAN Kap. 12.2).
+
+    Beobachtungspunkt fuer **Kategorie 1, fachliche Halluzination** (Kap. 15.1). Gemeinsam mit
+    `matched_rules` aus Knoten 4 ausserdem der Punkt, an dem **Kategorie 3 (Regelhalluzination)**
+    pruefbar wird: dort steht, welche Karten geladen WAREN, hier die Behauptung darueber.
+
+    WARUM `fix_rules` ein PARAMETER ist und nicht hier geladen wird:
+    Das Laden des Regelwerks gehoert zu **Knoten 4 (Regelzuordnung)** und wird dort
+    protokolliert (`GraphState["matched_rules"]`). Wird nichts uebergeben, laedt diese Funktion
+    es selbst — dann verhaelt sie sich exakt wie bisher, und der CLI-Pfad bleibt unveraendert.
+
+    Args:
+        fix_rules / identify_response / search_results / iteration_number:
+            optional. Was fehlt, wird geladen wie bisher in main().
+        check_open_proposal: HitL-Sperre pruefen. Bei HUMAN_IN_THE_LOOP=false ohnehin wirkungslos.
+
+    Returns dict:
+        {"proposal": dict|None, "output_data": dict|None, "llm_call": dict|None,
+         "iteration_number": int|None, "blocked_by": dict|None, "error": str|None}
+
+    Beendet den Prozess NIE (vgl. AP-D1): eine Sperre oder ein Fehler ist ein ZUSTAND, ueber
+    den die bedingte Kante entscheidet — kein Abbruch.
+
+    ================================================================================
+    WAS HIER ECHTE KORREKTURGENERIERUNG IST UND WAS OPERATIVE HUELLE
+    ================================================================================
+    Fuer die Evaluation entscheidend (BA_MASTERPLAN Kap. 15.1): Welches Feld ist die ROHE
+    LLM-Korrektur, und welches ist nachtraeglich veraendert oder nur Beiwerk?
+
+    ECHTE GENERIERUNG — das ist der Messgegenstand:
+      * `generate_correction_with_llm(...)`  — der EINZIGE LLM-Aufruf dieses Knotens.
+        Sein Rueckgabewert ist die rohe Modellausgabe.
+      * `correction_proposal["new_value"]` DIREKT nach diesem Aufruf = **die rohe LLM-Korrektur**.
+        WO SIE DAUERHAFT LIEGT (am 19.08.2026 an echten Artefakten geprueft):
+            `iteration-N/llm_correction_call.json` -> `response.content`
+        Struktur: {"content": <rohe Modellausgabe als dict>, "model": "gpt-4.1-2025-04-14",
+                   "usage": {...}}. `response.content` ist die UNVERAENDERTE Modellausgabe und
+        wird von DIESEM Skript bei jedem Lauf geschrieben — daneben steht mit `model` die
+        exakte Modellversion, was Kap. 17 ohnehin verlangt.
+        **Das ist die Quelle fuer die Halluzinationsmessung.**
+        NICHT hier: `llm_correction_proposal.ai_original.json` schreibt der REVIEW-Pfad
+        (`app/routes/apply_prep.py`), also erst bei einer menschlichen Entscheidung — in
+        Messlaeufen existiert die Datei gar nicht.
+        Im gespeicherten `llm_correction_proposal.json` steht dagegen der FINALE Wert; welcher
+        Fall vorliegt, sagt `value_source`:
+            value_source == "llm"        -> Wert stammt unveraendert vom Modell
+            value_source == "memory"     -> Wert wurde vom Gedaechtnis-Override ERSETZT
+            value_source == "llm_dissent"-> Modell wich begruendet vom Gedaechtnis ab
+        **Fuer die Halluzinationsmessung ist nur `value_source == "llm"` eine reine
+        Modellleistung.** Bei MEMORY_MODE=off (alle Messlaeufe) kann nur "llm" auftreten.
+
+    OPERATIVE HUELLE — beeinflusst den Vorschlagswert NICHT, wird aber mitgeschrieben:
+      * `open_proposal_blocking()`      — HitL-Sperre (Governance, nicht Vergleichsgegenstand)
+      * Laden von Regeln/Kontext/Iteration — Eingangsbeschaffung; im Graphen teils Knoten 3/4
+      * `derive_correction_identity()`   — Metadaten (correction_kind, target_entity_*)
+      * `compute_value_grounded()`       — deterministische Nachpruefung, VERAENDERT den Wert nicht
+      * `compute_memory_support()`       — Konfidenzterm; bei MEMORY_MODE=off immer 0.0
+      * `compute_confidence_score()`     — abgeleitete Kennzahl, KEIN Korrekturinhalt
+      * `save_correction_proposal()`     — Persistenz (Datei, zentraler Record, DB)
+
+    GRENZFALL, der bewusst dazwischen liegt:
+      * Der **Gedaechtnis-Override** (`same_entity_confirmed_value`) ist die einzige Stelle
+        ausserhalb des LLM-Aufrufs, die `new_value` ERSETZT. Deshalb laeuft er in allen
+        Messlaeufen ueber `MEMORY_MODE=off` ins Leere (Kap. 7.2) — sonst waere nicht mehr
+        entscheidbar, ob eine korrekte Korrektur vom Modell oder aus dem Gedaechtnis kam.
+    ================================================================================
+    """
+    # SPERRE: gibt den offenen Vorschlag zurueck, statt zu beenden. Die CLI-Semantik
+    # (Meldung + Exit-Code 3) haengt in main() daran.
+    if check_open_proposal:
+        wartet = open_proposal_blocking(snapshot_id)
+        if wartet:
+            return {"proposal": None, "output_data": None, "llm_call": None,
+                    "iteration_number": None, "blocked_by": wartet, "error": None}
 
     # Get latest iteration number (use existing, don't create new)
-    iteration_number = get_latest_iteration_number_local(snapshot_id)
+    if iteration_number is None:
+        iteration_number = get_latest_iteration_number_local(snapshot_id)
     print(f"Using existing iteration: {iteration_number}\n")
     
     # Load inputs
     print("Loading inputs...")
     # AP7.0: identify_response first — it carries the authoritative tag_error_type that selects
     # the rulebook card. In monolith mode the argument is ignored.
-    identify_response = load_identify_response(snapshot_id)
+    if identify_response is None:
+        identify_response = load_identify_response(snapshot_id)
     _analysis = identify_response.get("llm_analysis") or {}
     rulebook_error_type = _analysis.get("tag_error_type")
     # AP7.5: die Karten, die der Agent bei der Identifikation selbst als relevant benannt hat.
     relevant_cards = _analysis.get("relevant_cards") or []
-    fix_rules = load_validation_fix_rules(rulebook_error_type, relevant_cards)
-    search_results = load_search_results(snapshot_id)
+    # AP-D2: Von Knoten 4 uebergeben, sonst selbst laden (CLI-Verhalten unveraendert).
+    if fix_rules is None:
+        fix_rules = load_validation_fix_rules(rulebook_error_type, relevant_cards)
+    if search_results is None:
+        search_results = load_search_results(snapshot_id)
     print(f"- Fix rules loaded ({len(fix_rules)} chars, mode={RULEBOOK_MODE}, error_type={rulebook_error_type})")
     if relevant_cards:
         print(f"- Vom Agenten gewaehlt: {', '.join(relevant_cards)} "
@@ -1073,6 +1130,44 @@ def main():
     
     # Save output
     save_correction_proposal(snapshot_id, iteration_number, output_data, llm_call_data)
+
+    return {"proposal": correction_proposal, "output_data": output_data,
+            "llm_call": llm_call_data, "iteration_number": iteration_number,
+            "blocked_by": None, "error": None}
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
+                        help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
+    args, _ = parser.parse_known_args()
+
+    print("=== LLM Correction Proposal Generator ===\n")
+    
+    # Load snapshot ID (Argument hat Priorität)
+    snapshot_id = load_current_snapshot_id(args.snapshot_id)
+    print(f"Snapshot ID: {snapshot_id}\n")
+    
+    ergebnis = run_correction_generation(snapshot_id)
+
+    if ergebnis["blocked_by"]:
+        wartet = ergebnis["blocked_by"]
+        print("=== ABGEBROCHEN: es wartet bereits ein Vorschlag auf eine Entscheidung ===")
+        print(f"Offener Vorschlag: {wartet['proposal_id']}")
+        print(f"  Fehlerart : {wartet.get('error_type')}")
+        print(f"  Zielpfad  : {wartet.get('target_path')}")
+        print(f"  Konfidenz : {round((wartet.get('confidence_score') or 0) * 100)} %")
+        print(f"  Entscheiden: {APP_BASE_URL}/review.html?proposal={wartet['proposal_id']}")
+        print()
+        print("Solange dieser Vorschlag offen ist, wird kein weiterer erzeugt: er waere "
+              "gegen einen Datenstand gerechnet, den deine Entscheidung veraendert - und "
+              "anwendbar ist ohnehin immer nur der neueste.")
+        print("Entscheide ihn (genehmigen, aendern oder ablehnen), dann laeuft die "
+              "Korrektur weiter.")
+        sys.exit(3)          # eigener Code: kein Fehler, sondern eine Wartesituation
+
+    llm_call_data = ergebnis["llm_call"]
     
     print("\nToken Usage:")
     print(f"- Prompt: {llm_call_data['response']['usage']['prompt_tokens']}")

@@ -68,11 +68,21 @@ abschreiben.
 > aufgezeichnet**, nicht **vom Modell erzählt**: `matched_rules` hält fest, welche Regelkarte der
 > Loader tatsächlich geladen hat; `technical_check`, was der Schema-Validator tatsächlich
 > zurückgab; `applied`, was die Re-Validierung tatsächlich meldete. Das sind **Beobachtungen,
-> keine Selbstauskünfte.** Der Monolith hat nur die Selbstauskunft.
+> keine Selbstauskünfte.**
+>
+> **⚠ Korrektur 19.08.2026 — hier stand vorher etwas Falsches.** Der Satz lautete: *„Der Monolith
+> hat nur die Selbstauskunft."* **Das stimmt nicht** und widerspricht Masterplan Kap. 3.7: Der
+> Monolith schreibt sehr wohl maschinelle Artefakte — `llm_identify_response.json`,
+> `last_search_results.json`, `llm_correction_proposal.json`, `snapshot-validation.json`.
+> **Richtig ist:** Ihm fehlt die **Regelprovenienz** (welche Karten geladen wurden, steht nur in
+> einem `print`), die Reihenfolge, die Zeitstempel und der **zusammenhängende** Trace. Der
+> Unterschied ist **graduell, nicht binär** — was ohnehin besser zu L12 passt, das für eine
+> graduelle statt binäre Auffassung von *faithfulness* plädiert.
 >
 > Damit wird L11 vom Einwand zum **Verstärker**: Die Architektur liefert Nachvollziehbarkeit
 > genau dort, wo die Literatur zeigt, dass man Modellbegründungen nicht trauen darf.
-> **Gehört in Kapitel 4 und in Kapitel 8.**
+> **Gehört in Kapitel 4 und in Kapitel 8** — aber mit der graduellen Formulierung, nicht der
+> binären. Wie es gemessen wird: Masterplan Kap. 15.2.
 
 ---
 
@@ -155,12 +165,29 @@ Vorgehen ist.
 
 ---
 
-## 8. Recherchelücke — bewusst festgehalten
+## 8. Recherchelücke — und was daran noch nicht belastbar ist
 
-**Zu LLM-gestützter Korrektur strukturierter ERP- und Produktionsplanungsdaten existiert keine
-begutachtete Literatur.** Die Suche am 16.08.2026 lieferte dazu ausschliesslich Anbieter- und
-Beratungsinhalte, nichts Zitierfähiges. **Das ist kein Mangel der Recherche, sondern der Beitrag
-der Arbeit** — die Lücke ist in Kapitel 1 eng zu formulieren, siehe die Anmerkung zu L16.
+> **⚠ Selbstkorrektur 19.08.2026.** Hier stand: *„Zu LLM-gestützter Korrektur strukturierter
+> ERP- und Produktionsplanungsdaten existiert **keine** begutachtete Literatur."*
+> **Diese Behauptung ist in dieser Schärfe nicht gedeckt.** Grundlage waren rund **acht
+> Websuchen** am 16.08.2026 — das ist eine **explorative Recherche**, keine systematische.
+> Eine Nichtexistenz-Aussage braucht ein Suchprotokoll; ohne das ist sie angreifbar, und zwar
+> genau an der Stelle, die die Forschungslücke trägt.
+
+**So ist es belegbar formuliert:**
+
+> „Eine explorative Recherche (16.08.2026) ergab keine begutachtete Arbeit, die den Einfluss der
+> Systemarchitektur auf Halluzinationen bei der **Korrektur** strukturierter Planungsdaten unter
+> Revisionssicherheit empirisch untersucht. Der breitere Kontext ist dagegen gut belegt (L16:
+> 2.341 gesichtete Publikationen zu Foundation-Model-Agenten in der industriellen Automation)."
+
+**Vor der Abgabe zu erledigen — dann trägt die starke Formulierung:** ein kurzes
+**Recherche-Protokoll** anlegen mit Datenbanken (ACM DL, IEEE Xplore, Scopus, ACL Anthology,
+Google Scholar), verwendeten Suchstrings, Datum, sowie Ein- und Ausschlusskriterien. Das sind
+zwei bis drei Stunden und macht aus einer Behauptung einen Befund.
+
+**Ausserdem:** Die 16 Kernquellen sind ein **Kernbestand, kein Maximum.** Ergibt sich beim
+Schreiben eine unbelegte Stelle, kommt eine Quelle dazu — die Zahl ist kein Selbstzweck.
 
 
 ---

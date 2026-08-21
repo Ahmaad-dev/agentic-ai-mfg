@@ -153,14 +153,28 @@ Und der Absatz, der die Ehrlichkeit sichert (Methodenkapitel):
 
 **Ohne diese zwei Absätze ist jeder Vergleich angreifbar.**
 
-### 3.3 Der Nebeneffekt, der offen benannt werden muss
+### 3.3 Zwei gleichzeitige Unterschiede — und wie sie auseinandergehalten werden
 
-Diese Definition bedeutet: Der Graph hat gegenüber dem Monolith **zwei gleichzeitige**
-Unterschiede — bündelnder vs. selektiver Regelzugriff **und** impliziter vs. expliziter Zustand.
-Das ist **kein Konfundierungsfehler, solange du es offen benennst**: Beide Eigenschaften sind
-Bestandteil der Graph-Definition selbst (Knoten 4 *ist* die selektive Regelzuordnung). Schreibe im
-Methodenkapitel ausdrücklich, dass die Graph-Architektur **beide** Eigenschaften gemeinsam umfasst,
-und ordne beobachtete Effekte nicht vorschnell einer einzelnen Ursache zu.
+Diese Definition bedeutet: Die Graph-Variante unterscheidet sich vom Ausgangszustand in **zwei**
+Eigenschaften gleichzeitig — bündelnder vs. selektiver Regelzugriff **und** impliziter vs.
+expliziter Zustand.
+
+Die frühere Fassung dieses Kapitels hielt es für ausreichend, das *offen zu benennen*. **Das
+genügt nicht.** Wer zwei Dinge gleichzeitig ändert und nur eine Messung hat, kann den Effekt
+nicht zuordnen — Offenheit macht das Problem sichtbar, aber nicht kleiner.
+
+**Deshalb wird es gemessen statt eingeräumt:** Der Kontrollarm **B** (Kap. 7.1) hält die Pipeline
+konstant und variiert nur die Regelquelle. Damit ist der Beitrag der selektiven Regelauswahl
+empirisch abtrennbar, statt als Vorbehalt im Text zu stehen.
+
+**Konsequenz für die Formulierung:** Die Intervention A→C ist ein **Gesamtpaket**. Ein
+gemessener Effekt darf **nicht** dem `GraphState` allein zugeschrieben werden — was er wirklich
+trägt, sagt erst der Vergleich mit B.
+
+**Und eine Verschiebung, die daraus folgt:** Wenn B und C beide `cards` verwenden, leistet
+Knoten 4 im Vergleich nicht mehr „weniger Regeltext", sondern **„sichtbar machen, welche Karten
+geladen wurden"** — also **Provenienz statt Reduktion**. Für UF3 ist das wertvoller, für UF1
+ehrlicher.
 
 ### 3.4 Was hier „Graph" heisst — und was NICHT
 
@@ -200,20 +214,170 @@ gemacht.
 
 ### 3.6 Neun Knoten sind NICHT neun LLM-Aufrufe
 
-Am Code geprüft (16.08.2026, `grep -c "chat.completions.create"`): Von den neun Knoten rufen
-**drei** das Modell auf — genau so viele wie der Monolith heute.
+> **Korrigiert am 20.08.2026 (BA-031).** Die frühere Fassung zählte Knoten 9 als regulären
+> LLM-Aufruf und behauptete trotzdem „genau so viele wie der Monolith". Beides zusammen war
+> falsch: Knoten 9 rief `generate_audit_report_with_llm()`, und **keine** der vier
+> Monolith-Pipelines (`full_correction`, `correction_from_validation`, `analyze_only`,
+> `apply_and_upload`) enthält diesen Schritt. Bedingung C machte damit **vier** reguläre
+> Aufrufe gegen drei in A und B — im Durchstich AP-F1 waren das 20.291 ms von 44.792 ms, also
+> **45 % der Laufzeit**, plus zwei Artefakte, die A nicht hat.
+>
+> **Entschieden und umgesetzt:** Knoten 9 erzeugt das Endergebnis jetzt **deterministisch**
+> über `app/core/ergebnis_format.py` — kein Modell, kein Netzwerk, gleiche Eingabe gleiche
+> Ausgabe. `generate_audit_report()` bleibt unverändert als optionale, nachgelagerte
+> Produktfunktion und ist **nicht** Bestandteil der A/B/C-Hauptmessung.
+
+Am Code geprüft (`grep -c "chat.completions.create"`, nachgezählt 20.08.2026): Von den neun
+Knoten rufen **drei** das Modell — genau so viele wie die Monolith-Pipeline.
 
 | Knoten | LLM? | | Knoten | LLM? |
 |---|---|---|---|---|
-| 1 Eingabeanalyse | nein | | 6 Technische Prüfung | nein (nur bei Schema-Retry) |
+| 1 Eingabeanalyse | nein | | 6 Technische Prüfung | **bedingt** — siehe unten |
 | **2 Fehlerklassifikation** | **ja** | | 7 Anwendung & Re-Validierung | nein |
 | 3 Kontextsuche | nein | | 8 Ergebnisbewertung | nein |
-| 4 Regelzuordnung | nein | | **9 Antwortformulierung** | **ja** |
+| 4 Regelzuordnung | nein | | 9 Ausgabe/Finalisierung | **nein** (deterministisch) |
 | **5 Korrekturgenerierung** | **ja** | | | |
+
+**Die drei regulären Aufrufe:** Klassifikation (Knoten 2), Korrekturgenerierung (Knoten 5) und
+die Schemaprüfung (Knoten 6). In der Monolith-Pipeline sind es dieselben drei Skripte —
+`identify_error_llm`, `generate_correction_llm`, `validate_correction_schema_llm`.
+
+**Schema-Retries sind bedingte Zusatzaufrufe, in beiden Architekturen gleich.**
+`validate_with_retry(..., max_retries=5)` ruft das Modell erneut, wenn der Vorschlag das
+Schema verletzt. Wie oft, hängt vom Vorschlag ab — das ist ein **Ergebnis** der jeweiligen
+Architektur, kein Unterschied im Aufbau. Die Zahl steht je Lauf als `technical_check.retries`
+im Zustand und ist bei Zeit- und Tokenvergleichen **getrennt auszuweisen**, nicht
+wegzumitteln. Die Retry-Logik selbst ist in beiden Bedingungen dieselbe Funktion; eine
+Retry-Policy auf Graphebene ist ausdrücklich ausgeschlossen (Kap. 11).
 
 **Die Graph-Variante ist nicht „KI-lastiger".** Sie macht sichtbar, was zwischen denselben drei
 Aufrufen passiert. Wer das im Methodenteil nicht klarstellt, weckt den Verdacht, der Vergleich
 messe Aufwand statt Struktur.
+
+### 3.6.1 ⚑ F3 und F4 — die beiden Entscheidungen aus AP-F, festgehalten
+
+Beide waren als *„im Masterplan vermerken, nicht still treffen"* ausgewiesen (AP-F3/F4).
+Entschieden am **20.08.2026**, nach dem vertikalen Durchstich.
+
+**F3 — Es bleibt bei NEUN Knoten.** Der Durchstich hat den Ablauf End-to-End getragen; der
+einzige aufgetretene strukturelle Widerspruch betraf **nicht** den Schnitt, sondern Knoten 9
+als LLM-Aufruf — und der ist behoben (Kap. 3.6). Nach einem funktionierenden Durchstich
+Knoten zusammenzulegen wäre eine Änderung ohne Anlass; das Schnittkriterium *„eine Grenze
+dort, wo ein eigener Fehlermodus beobachtbar wird"* (Kap. 5.2) bleibt erfüllt. **Ab hier ist
+die Zahl bindend** (Kap. 9.1).
+
+**F4 — Provenienz bleibt auf KARTENEBENE.** `matched_rules.cards_loaded` weist aus, welche
+Regelkarten geladen waren; eine feinere Zuordnung auf einzelne Unterregeln wird **nicht**
+eingeführt.
+
+> **Das ist eine Grenze, keine Bequemlichkeit — und sie gehört in die Limitationen.**
+> Um Rule-IDs auf Regelebene zu bekommen, müsste das Regelwerk umgeschrieben und der Prompt
+> geändert werden. Beides sind **Kontrollbedingungen** (Kap. 3.4, 7.3): eine Änderung nur zum
+> Zweck feinerer Messung würde genau das verändern, was zwischen den Bedingungen gleich
+> bleiben muss. Ausserdem wäre eine so gewonnene Rule-ID **nicht belastbar**: dass eine
+> bestimmte Unterregel im Prompt stand, heisst nicht, dass das Modell sie benutzt hat. Ohne
+> weiteren Eingriff ist die tatsächlich angewandte Einzelregel **nicht beobachtbar**.
+> Kategorie 3 (Regelhalluzination) wird deshalb auf Kartenebene geprüft: *war die Karte, auf
+> die sich das Modell beruft, überhaupt geladen?* Diese Einschränkung ist in Kapitel 8
+> ausdrücklich zu benennen.
+
+### 3.6.2 Die Reporting-Schicht — gemeinsam, nachgelagert, nicht Teil des Vergleichs
+
+**Der Audit-Report ist ein wichtiges Produktartefakt, kein Nebenfeature.** Der angestrebte
+Nutzungspfad lautet:
+
+```
+Snapshot korrigiert  →  Audit-Report erzeugt  →  optionaler Versand / Benachrichtigung
+                                                  (z. B. E-Mail an eine verantwortliche Person)
+```
+
+Zweck: nachvollziehbar machen, **welche Fehler gefunden, welche Änderungen vorgenommen und wie
+der Snapshot abschliessend validiert wurde**. Genau deshalb darf er nicht verschwinden — und
+genau deshalb darf er auch nicht in den Architekturvergleich hineinragen.
+
+#### Warum er den Vergleich nicht berührt — technisch nachgewiesen
+
+`generate_audit_report.run_audit_report(snapshot_id)` liest ausschliesslich **Artefakte, die
+alle drei Bedingungen schreiben**:
+
+| Eingang | Fundstelle | in A | in B | in C |
+|---|---|---|---|---|
+| `metadata.txt` | `generate_audit_report.py:51` | ✔ | ✔ | ✔ |
+| `upload-result.json` | `generate_audit_report.py:58` | ✔ | ✔ | ✔ |
+
+Es liest **nichts** aus dem `GraphState` und nichts Graph-Spezifisches.
+
+> **Empirisch belegt (20.08.2026, BA-032):** `run_audit_report()` wurde **unverändert auf einen
+> Monolith-Snapshot** angewandt (Bedingung A, Fall I03, `e9ccf149-…`) und erzeugte einen
+> vollständigen Report — 6.905 Zeichen, 6.795 Tokens, kein Fehler. Die Reporting-Schicht ist
+> also bereits armneutral; sie **muss nicht integriert werden**, sie ist es schon.
+
+```
+A ─┐
+B ─┼─▶  run_audit_report(snapshot_id)  ─▶  audit-report.md (+ -stats.json)  ─▶  Versand
+C ─┘        gemeinsame Schicht                                                  (optional)
+```
+
+#### Bedarfsgesteuert — nicht automatisch nach einer Pipeline
+
+**Der Report läuft ausschliesslich auf ausdrückliche Anforderung**, etwa *„Generiere einen
+Report zu Snapshot X"*. Er wird **nicht** automatisch an eine Pipeline angehängt — weder heute
+noch später. **Das aktuelle Verhalten ist genau das gewollte; es ist kein Zwischenstand und
+kein Umbau geplant.** `SPAgent.execute_pipeline()` bleibt unangetastet, `full_correction`
+behält seine sieben Schritte, und `generate_audit_report` ist in keiner Pipeline-Schrittliste
+enthalten.
+
+Warum das auch fachlich richtig ist: Ein Report, den niemand angefordert hat, kostet je Lauf
+Zeit und Tokens, legt ein weiteres Artefakt ab und kann fehlschlagen — und würde damit einen
+sonst gültigen Korrekturlauf ohne Not in Frage stellen. Während Pilot- und Hauptläufen
+entsteht er deshalb gar nicht erst.
+
+Der Aufrufort ist entsprechend der **Nutzer bzw. Aufrufer**, nach Abschluss und getrennt vom
+Korrekturlauf — ein zweiter, eigenständiger Vorgang auf demselben Snapshot.
+
+#### Messgrössen trennen (verbindlich ab AP-H)
+
+| Präfix | umfasst | wofür |
+|---|---|---|
+| `core_*` | Klassifikation → Suche → Regeln → Korrektur → Schema → Anwendung → Re-Validierung → Bewertung → Finalisierung | **der Architekturvergleich** — UF1, UF2, UF3 |
+| `report_*` | `run_audit_report()` | die gemeinsame Reporting-Schicht, **separat** ausgewiesen |
+| `total_*` | beides zusammen | nur dort, wo eine Gesamtbetrachtung sinnvoll ist |
+
+**Für UF1 und UF2 hat der Audit-Report keinen Einfluss auf die fachlichen Ergebnisse.** Er
+entsteht **nach** der Korrekturentscheidung, liest sie nur und wirkt nicht auf sie zurück.
+Sein LLM-Aufruf ist deshalb **kein Aufruf der Graph-Orchestrierung** und darf nicht als solcher
+gezählt werden — dieselbe Funktion steht A und B nachgelagert genauso zur Verfügung.
+
+> **Formulierung für den Methodenteil.**
+> *Der Architekturvergleich bezieht sich auf den Korrektur- und Entscheidungsprozess. Die
+> natürlichsprachliche Audit-Report-Generierung ist eine gemeinsame nachgelagerte
+> Produktfunktion ohne Rückwirkung auf die Korrekturentscheidung und wird separat betrachtet.*
+
+#### Produktmodus und Evaluierungsmodus
+
+Zwei verschiedene Ausgaben mit zwei verschiedenen Anforderungen — sie dürfen nicht verwechselt
+werden:
+
+| | Produktmodus | Evaluierungsmodus |
+|---|---|---|
+| erzeugt von | `generate_audit_report()` | `core.ergebnis_format.als_text()` |
+| Form | natürlichsprachlicher Report | variantenneutrales Kurzformat |
+| Snapshot-ID | **real, erwünscht** | **ausschliesslich Pseudonym** (erzwungen) |
+| Adressat | verantwortliche Person, E-Mail | verblindete Fachgutachter |
+| im Vergleich | nein — `report_*` | Gegenstand von UF3 |
+
+Die Zuordnung **Pseudonym ↔ Snapshot ↔ Bedingung** gehört in eine **getrennte Datei, die den
+Bewertern nicht zugänglich ist** (Kap. 16). `als_text()` wirft ohne Pseudonym eine Ausnahme —
+ein stiller Rückfall auf die echte ID war der Befund aus AP-F5.
+
+#### E-Mail-Versand — Ausblick, nicht Messgegenstand
+
+Der Versandkanal ist **nur ein Verbraucher** des Reports und ebenfalls ein **separater
+Folgeprozess** — nicht Bestandteil des Korrektur- und erst recht nicht des A/B/C-Messpfads.
+Er wird **nicht** in den experimentellen Kern gebaut. Als praktischer Nutzungspfad gehört er in den Ausblick: der
+Report macht einen automatisierten Korrekturlauf gegenüber einer verantwortlichen Person
+rechenschaftsfähig — das ist der betriebliche Nutzen, der über den Architekturvergleich
+hinausweist.
 
 ### 3.7 Den Zustand gibt es bereits — er liegt nur verstreut
 
@@ -586,24 +750,174 @@ Orchestrator, Web-UI und Eval-Skripte nichts von der Umstellung merken.
 
 ## 7. Kontrollbedingungen — eingefroren
 
-### 7.1 Was zwischen Monolith- und Graph-Lauf identisch sein muss
+### 7.1 Das Untersuchungsdesign: zwei Architekturen, drei Messbedingungen
+
+**Entschieden am 2026-08-19**, nach externer Begutachtung des Plans. Ersetzt die frühere
+Zwei-Arm-Anordnung, die sich selbst widersprach (siehe Kasten am Ende dieses Abschnitts).
+
+| | Bedingung | Pipeline | `RULEBOOK_MODE` | Was sie im Projekt ist |
+|---|---|---|---|---|
+| **A** | **Ausgangszustand** | Monolith, impliziter Ablauf | `monolith` | der Zustand **bis 12.07.2026** — das System, das das Exposé beschreibt |
+| **B** | **Realer Ist-Zustand** | Monolith, impliziter Ablauf | `cards` | **produktiv ausgerollt seit 12.07.2026** |
+| **C** | **Neue Gesamtarchitektur** | LangGraph, `GraphState`, Provenienz | `cards` | die Vergleichsvariante dieser Arbeit |
+
+**Hauptvergleich: A gegen C** — genau die zwei Architekturen, die das Exposé nennt
+(„der bestehende monolithische Systemprompt und eine neu konzipierte graph-basierte
+Systemarchitektur"). Die Intervention ist dabei ausdrücklich ein **Gesamtpaket**: expliziter
+Zustand **plus** Graph-Orchestrierung **plus** selektiver Regelzugriff.
+
+**Kontrollvergleich: B** — trennt den Beitrag der selektiven Regelauswahl von dem der
+Graph-Orchestrierung. **Über alle 17 Fälle**, damit das Bild vollständig ist und keine
+Teilmengen-Einschränkung in den Text muss.
+
+> **B wird NICHT erst nach Sichtung der A/C-Ergebnisse auf Divergenzfälle eingeschränkt.**
+> Das wäre eine Auswahl nach dem Sehen der Daten und damit ein Verstoss gegen Regel 5.
+> Alle drei Bedingungen laufen für UF1 mindestens einmal über **dieselben vollständigen
+> 17 Messfälle**, alle **nach demselben Einfrieren (G5)**.
+
+**Die drei paarweisen Lesarten — so und nicht anders zu interpretieren:**
+
+| Vergleich | Was er beantwortet |
+|---|---|
+| **A vs. C** | *Der Gesamtvergleich.* Ursprünglicher Monolith gegen Graph-Zielarchitektur — die Frage des Exposé-Titels. Intervention = **Gesamtpaket** |
+| **A vs. B** | Einfluss der **Regelwerk-Modularisierung** allein (Cards), ohne Graph |
+| **B vs. C** | **zusätzlicher** Einfluss der Graph-Orchestrierung **bei gleichem Regelwerk** |
+
+Ein Effekt in A→C darf **nicht** dem `GraphState` allein zugeschrieben werden; was er wirklich
+trägt, sagt erst die Zerlegung über B.
+
+> **B ist keine dritte Architektur**, sondern dieselbe wie A mit anderer Regelkonfiguration.
+> Deshalb: *„zwei Architekturen, drei Messbedingungen"*. Damit bleibt die Anordnung wörtlich
+> innerhalb der Exposé-Abgrenzung.
+
+**Drei Probleme, die dieses Design löst:**
+
+1. **Attribution.** Bei A gegen C allein wäre nicht entscheidbar, woher ein Effekt kommt. Mit B
+   ist er zerlegbar.
+2. **Der Strohmann-Vorwurf entfällt beweisbar.** `cards` ist der produktiv ausgerollte Zustand
+   (`app/.env` setzt nichts, Terraform-Default `cards`, nicht überschrieben — verifiziert
+   19.08.2026). Mit B liegt **der reale Ist-Zustand im Vergleich**, nicht nur der historische.
+   Regel 2 ist damit nicht nur behauptet, sondern belegt.
+3. **Der Selbstwiderspruch ist weg** (siehe Kasten).
+
+**Was B leistet und was nicht:** B trägt **nur zu UF1** bei. Für UF3 ist es uninteressant (es hat
+dieselbe Nachvollziehbarkeit wie A), für UF2 wäre es zu teuer. **Ohne Wiederholungsläufe.**
+Als Einschränkung in den Text.
+
+**Zum Kartensystem und Eigenplagiat:** Das Kartensystem wurde im Praxisprojekt entwickelt
+(AP7.0). Die Arbeit **führt es mit**, sie beansprucht seine Entwicklung nicht. Formulierung für
+den Methodenteil:
+
+> „Das im Praxisprojekt entwickelte Kartensystem wird als Zwischenstufe mitgeführt, um den
+> Beitrag der Graph-Orchestrierung von dem der selektiven Regelauswahl zu trennen. Die hier
+> berichteten Werte wurden unter den Kontrollbedingungen dieser Arbeit **neu erhoben**."
+
+Die PT4-Zahlen (−16 % Tokens) dürfen **nicht** als Ergebnis dieser Arbeit auftreten.
+
+### 7.1.1 Was zwischen ALLEN drei Bedingungen identisch sein muss
 
 | Bedingung | Wert / Vorgehen |
 |---|---|
-| **Modell** | `gpt-4.1`, API-Version `2025-01-01-preview` — beide Varianten |
-| **Modellparameter** | `temperature=0.3` (aus dem Code ausgelesen, nicht geschätzt). Bewusst **nicht 0**: für die Wiederholungstests der UF2 braucht es Variabilität. Wert dokumentieren. |
-| **Kontextextraktion** | `identify_snapshot.py` unverändert, für beide Pfade identisch aufgerufen |
-| **Azure-Client** | **Nicht** neu bauen. Die extrahierten Funktionen nutzen denselben Client-Aufbau wie die bestehende `main()` — dadurch ist Modell- und Parametergleichheit **strukturell garantiert**, nicht nur dokumentiert |
-| **`RULEBOOK_MODE`** | **`monolith`** für die Monolith-Variante, **`cards`** für die Graph-Variante — architektonisch begründet (Kap. 3.3), kein Konfundierungsfehler, solange im Text benannt |
-| **`MEMORY_MODE`** | **`off` in beiden Varianten** (siehe 7.2) |
-| **`SP_ARCHITECTURE_MODE`** | `monolith` bzw. `graph` — **der einzige bewusst variierte Faktor** |
-| **Testfälle** | identisch, aus denselben Katalogen |
-| **Ausführungsreihenfolge** | randomisiert über (Fall × Variante), Zeitstempel protokolliert |
-| **`HUMAN_IN_THE_LOOP`** | bei beiden Varianten identisch behandeln — entweder beide eval-only direkt anwenden oder beide über echtes Review. **Nicht mischen.** |
-| **Schema-Retries** | `max_retries=5`, beide Varianten |
+| **Modell** | `gpt-4.1`, konkret **`gpt-4.1-2025-04-14`**, API-Version `2025-01-01-preview` |
+| **Modellparameter** | `temperature=0.3` (aus dem Code ausgelesen). Bewusst **nicht 0**: für die Wiederholungstests der UF2 braucht es Variabilität |
+| **Kontextextraktion** | `identify_snapshot.py` unverändert, für alle Bedingungen identisch aufgerufen |
+| **Azure-Client** | **Nicht** neu bauen — dadurch ist Modell- und Parametergleichheit **strukturell garantiert**, nicht nur dokumentiert |
+| **`MEMORY_MODE`** | **`off` in allen drei Bedingungen** (siehe 7.2) |
+| **Testfälle** | identisch, alle 17 distinkten Fälle |
+| **Ausführungsreihenfolge** | randomisiert über (Fall × Bedingung), Zeitstempel protokolliert |
+| **`HUMAN_IN_THE_LOOP`** | in allen drei identisch behandeln. **Vor** dem ersten Messlauf festzulegen (AP-B), nicht erst in AP-H |
+| **Schema-Retries** | `max_retries=5` |
+| **Umgebung** | dieselbe venv, dieselben Paketversionen — vor der ersten Messung eingefroren (AP-A) |
+| **Re-Validierung** | **ausgelöst und abgewartet** in allen drei Bedingungen (siehe 7.1.2) |
+| **Zeitpunkt** | **alle drei Bedingungen nach demselben Einfrieren (G5)**, siehe 8.3 |
 
-**Was sich unterscheiden darf:** ausschliesslich die interne Verarbeitungsarchitektur des
-Smart-Planning-Agenten. Orchestrator, RAG- und Chat-Agent bleiben unverändert.
+### 7.1.2 ⚠ Die Re-Validierung war ein falsches Grün — behoben am 19.08.2026
+
+**Der Befund.** `update_snapshot` (PUT) **löscht** die Validierungsmeldungen auf dem Server, und
+der Server rechnet **nicht von selbst neu**. `validate_snapshot` führt nur das GET aus. Ohne
+einen Trigger las der Re-Validierungsschritt jeder Korrektur-Pipeline deshalb eine **leere
+Liste** und meldete `errors=0` — ein **falsches Grün**.
+
+Das war seit AP3.3d in `app/routes/server_validation.py` dokumentiert und im **Review-Pfad**
+behoben, aber **nie in die Pipeline verdrahtet**: Weder `sp_agent.py` noch die Runtime-Skripte
+riefen `trigger_server_validation()`. Nur die Eval-Skripte taten es.
+
+**Warum das für den Vergleich entscheidend ist.** Die Iterationsschleife in
+`execute_pipeline()` liest `final_validation.errors`, um über eine weitere Runde zu
+entscheiden — auf Basis einer Zahl, die strukturell immer 0 war. Hätte ich den Trigger **nur**
+in den Graph-Knoten eingebaut, dann:
+
+* **A und B**: falsches Grün, Schleife bricht nach Iteration 1 ab
+* **C**: echte Zahl, Schleife läuft korrekt
+
+Der Graph hätte anders ausgesehen — **aus einem Grund, der nichts mit Architektur zu tun hat**.
+Ein Konfundierungsfaktor, der die gesamte Kategorie 4 (Folgefehler) und die Iterationszahlen
+verdorben hätte.
+
+**Behoben an der gemeinsamen Stelle:** Der Trigger sitzt jetzt in
+`SPAgent._execute_pipeline()` **und** im Graph-Knoten 7. Damit haben A, B und C dieselbe
+fachliche Re-Validierungssemantik. `trigger_server_validation()` ist synchron — es pollt den
+Job bis `FINISHED` und liefert `{"ok", "job_id", "status", "waited_s"}`.
+
+> **`errors_after = None` ist NICHT `errors_after = 0`.**
+> `None` = keine belastbare neue Validierung (Job offen, gescheitert, Timeout).
+> `0` = Validierung nachweislich abgeschlossen **und** fehlerfrei.
+> Knoten 8 entscheidet bei `None` auf `stop_uncertain` — lieber keine Zahl als eine veraltete.
+
+**Für Kategorie 4 reicht die Anzahl nicht.** `1 → 1` kann „nichts passiert" heissen oder
+„A behoben, B neu erzeugt". Knoten 7 leitet deshalb zusätzlich ab: `errors_resolved`,
+`errors_remaining`, `errors_new` und `new_error_types`. Die Fehleridentität ist eine
+**Näherung** (Validator-Tag + Hash der Meldung), weil der Server keine Fehler-ID liefert —
+als solche im Code ausgewiesen.
+
+### 7.1.3 ⚠ Der Suchkontext konnte veralten — behoben am 20.08.2026
+
+Die zweite gemeinsame Reparatur, gefunden bei der D7-Nachprüfung (BA-024).
+
+`identify_snapshot.py` schrieb die Leerergebnis-Datei nur, **wenn noch keine existierte**.
+Fand eine spätere Suche nichts, blieb `last_search_results.json` der **vorigen** Suche stehen
+und wurde vom nächsten Schritt als aktueller Kontext gelesen. Nachgestellt: Suche A → 16
+Treffer, `results_hash 6d538551…`; danach Suche B ohne Treffer → **derselbe Hash**.
+
+**Betroffen sind alle drei Bedingungen.** `SPAgent.execute_pipeline()` iteriert
+(`while True`, `MAX_CORRECTION_ITERATIONS`), und `identify_error_llm.py:504` stösst je
+Iteration eine neue Suche an. Ab Iteration 2 hätte das Modell in **A, B und C** den Kontext
+der Iteration davor bekommen — und ihn für aktuell gehalten. Für UF1 wäre das eine
+Halluzination, die das System nicht verschuldet hat; das Messinstrument hätte den falschen
+Gegenstand gemessen (harte Regel 6).
+
+**Behoben in der gemeinsamen Runtime**, nicht im Knoten — Bauregel B. Eine Abfangung im
+Knoten hätte nur C geholfen und später wie ein Architektureffekt ausgesehen.
+`last_search_results.json` bedeutet jetzt ausnahmslos *Ergebnis der zuletzt ausgeführten
+Suche*; die Leerdatei landet zusätzlich im Iterationsordner, wie in den beiden anderen
+Zweigen längst üblich.
+
+**Gegenprobe, dass sonst nichts anders wurde:** 8 Suchszenarien über alle drei Suchmodi,
+roh- und kanonisch gehasht gegen die Fassung davor — **0 Abweichungen**.
+
+**Anschliessend geschlossen: die Kontextprovenienz.** Knoten 5 lud die Datei ein zweites Mal
+von Platte, statt das Objekt aus Knoten 3 zu übernehmen — `results_hash` war damit eine
+Behauptung über einen früheren Dateizustand, keine Zusicherung über den Modelleingang.
+Jetzt reicht Knoten 3 das Objekt durch, und beide Knoten hashen über **dieselbe** Funktion
+`identify_snapshot.context_sha256()`. Dass daraus kein C-Vorteil entsteht, ist per
+Prompt-Hash belegt: Nachladen und Durchreichen ergeben denselben Prompt
+(205.573 Zeichen, `a4b55f4d…`).
+
+**Was sich unterscheiden darf:** ausschliesslich Pipeline-Architektur und Regelquelle, in der
+oben definierten Kombination. Orchestrator, RAG- und Chat-Agent bleiben unverändert.
+
+> ### ⚠ Was hier vorher falsch stand (korrigiert 19.08.2026)
+> Die frühere Fassung dieser Tabelle nannte in **einer Zeile** `RULEBOOK_MODE` als zwischen den
+> Varianten variiert und in der **nächsten** `SP_ARCHITECTURE_MODE` als „den einzigen bewusst
+> variierten Faktor". Das war ein **Selbstwiderspruch**: variiert wurden zwei Dinge gleichzeitig.
+>
+> Ausserdem war die Zuordnung sachlich falsch: `RULEBOOK_MODE=monolith` als „realer Ist-Zustand"
+> zu bezeichnen widerspricht Regel 2, denn produktiv läuft seit dem 12.07.2026 `cards`.
+> Eine Baseline mit dem Monolith-Regelwerk wäre der Zustand **davor** gewesen — also genau der
+> Strohmann, den Regel 2 verbietet.
+>
+> Beides ist mit dem Dreiarm-Design behoben: A **ist** der Ausgangszustand und wird als solcher
+> benannt, B **ist** der Ist-Zustand, und die Intervention A→C ist ausdrücklich ein Paket.
 
 ### 7.2 Das Gedächtnis wird für Messläufe abgeschaltet *(entschieden 16.08.2026)*
 
@@ -698,7 +1012,23 @@ in Frage kommen — das siehst du erst am ersten Trace. Nach dem Durchstich ents
 
 ---
 
-## 8. Die Monolith-Baseline einfrieren — BEVOR der Graph gebaut wird
+## 8. Regressionsreferenz und Einfrieren
+
+> ### ⚠ Was AP-B ist — und was es NICHT ist (korrigiert 19.08.2026)
+> Die frühere Fassung nannte den Baseline-Lauf „die Zahl, gegen die alles Weitere verglichen
+> wird". **Das war ein Konstruktionsfehler.** In AP-G wird danach das Regelwerk optimiert; eine
+> vor dieser Optimierung erhobene Zahl ist unter **anderen** Bedingungen entstanden und taugt
+> nicht als Vergleichsbasis.
+>
+> **Richtig ist:**
+> * **AP-B ist die Regressionsreferenz.** Sie beantwortet *„läuft das System noch wie vorher,
+>   hat der Umgebungswechsel etwas verändert?"* — nicht *„wie gut ist der Monolith?"*.
+>   Deshalb kann AP-B **kurz** gehalten werden.
+> * **Die wissenschaftlichen Zahlen für Kapitel 7 entstehen ausschliesslich in AP-H**, nach dem
+>   Einfrieren (G5), für **alle drei Bedingungen A, B und C gemeinsam** und unter identischen
+>   Bedingungen.
+>
+> Wer diese Trennung nicht macht, vergleicht Messungen aus zwei verschiedenen Systemzuständen.
 
 ### 8.1 Die `RULEBOOK_MODE`-Falle
 
@@ -808,7 +1138,7 @@ beobachtbar wird.** Spalte „macht messbar" ist die Begründung — sie gehört
 | 6 | **Technische Prüfung** | Vorschlag → Schemastatus | **Strukturelle Halluzination (Kat. 2)** | `validate_with_retry(...)` — **1:1 nutzbar** | Funktions-Wrapper |
 | 7 | **Anwendung & Re-Validierung** | geprüfter Vorschlag → `errors_after` | **Folgefehlererzeugung (Kat. 4)** | `apply_correction()`, `update_snapshot`, `validate_snapshot()` — alle aufrufbar | Wrapper; erzeugt den Wert, den Knoten 8 braucht |
 | 8 | **Ergebnisbewertung** | `errors_after` + Schemastatus → `decision` | **UF2-Grenzfallverhalten** (`stop_uncertain` statt erzwungener Korrektur) | heute reine `if/else`-Logik in `sp_agent.py:626-679` | **echter Knoten**, der `decision` in den State schreibt — siehe Kasten unten |
-| 9 | **Antwortformulierung** | finaler Zustand → Audit-Report | — (Ausgabe) | `generate_audit_report_with_llm(...)` — **1:1 nutzbar** | Funktions-Wrapper |
+| 9 | **Ausgabe / Finalisierung** | finaler Zustand → variantenneutrales Endergebnis | — (Ausgabe) | **kein** bestehender Schritt — `generate_audit_report` ist in **keiner** Monolith-Pipeline | **deterministisch** über `app/core/ergebnis_format.py`, **kein LLM** (geändert 20.08.2026, BA-031) |
 
 > **Zwei bewusste Abweichungen vom Vorgängerplan — beide mit Grund.**
 >
@@ -832,6 +1162,56 @@ expliziten, zustandsbehafteten Graphen zu überführen und ihre Zwischenzuständ
 zusammenlegen (beide deterministisch), Knoten 9 kann entfallen. **Nicht reduzierbar sind 4, 5, 6
 und 7** — an ihnen hängt je eine Halluzinationskategorie. Eine Reduktion ist im Methodenteil
 auszuweisen.
+
+### 9.0 Verantwortungsschnitt Knoten 2 / 3 / 4 *(festgelegt 19.08.2026, vor AP-D6)*
+
+**Befund am Code.** `identify_error_llm.py` erledigt heute die Aufgaben von **drei** Knoten.
+Sein LLM-Aufruf liefert in **einer** Antwort:
+
+| Feld | gehört fachlich zu |
+|---|---|
+| `selected_error_index`, `selected_error`, `prioritization_reasoning` | **Knoten 2** — Klassifikation und Priorisierung |
+| `search_mode`, `search_value`, `should_investigate` | **Knoten 3** — Suchstrategie |
+| **`relevant_cards`, `relevant_cards_reasoning`** | **Knoten 4** — Regelzuordnung |
+
+Zusätzlich ruft `main()` über `trigger_identify_tool()` direkt `identify_snapshot.py` auf —
+**Knoten 2 führt heute also auch Knoten 3 aus.**
+
+**Der festgelegte Schnitt:**
+
+* **Knoten 2 (D6)** — ruft `analyze_validation_with_llm()` mit **unverändertem Prompt** auf und
+  schreibt das Ergebnis in `classified_error`, einschliesslich `search_mode`, `search_value` und
+  `relevant_cards`. **Er führt die Suche NICHT mehr aus.**
+* **Knoten 3 (D7)** — nimmt `search_mode`/`search_value` aus dem State und führt die Suche aus.
+  Schreibt `extracted_context` samt benutztem Vergleichskollektiv (fängt Befund D ab).
+* **Knoten 4** — **die einzige Stelle, die Karten auflöst und protokolliert.**
+  `select_cards(tag, extra_cards=classified_error["relevant_cards"])`.
+
+> **Damit wählen Knoten 2 und 4 NICHT unabhängig voneinander Karten aus.**
+> Genau formuliert:
+>
+> * **Knoten 2 schlägt zusätzliche Karten vor** (`relevant_cards`, in Fachsprache und ohne
+>   Tag-Kenntnis — dafür war das Feld in AP7.5 gedacht). Er lädt nichts und protokolliert nichts.
+> * **Knoten 4 löst diese Vorschläge zusammen mit der deterministischen Tag-Zuordnung zum
+>   tatsächlich verwendeten Kartensatz auf, lädt ihn und protokolliert ihn** (`matched_rules`
+>   mit `cards_loaded`, `rule_text`, `rule_text_hash`).
+>
+> Beide Wege laufen in **`select_cards()`** zusammen — genau eine Auflösungsstelle. Was das
+> Modell in Knoten 5 zu sehen bekommt, ist ausschliesslich das, was Knoten 4 aufgelöst hat.
+
+> ### ⚠ Der Prompt von Knoten 2 wird NICHT geändert — und das ist eine bewusste Entscheidung
+> Architektonisch sauberer wäre, `relevant_cards` aus dem Prompt zu entfernen und die Auswahl
+> allein Knoten 4 zu überlassen. **Das wird nicht getan.**
+>
+> Grund: Der Prompt von Knoten 2 ist in **A, B und C identisch** — er ist Teil der
+> Kontrollbedingungen (Kap. 7.1.1). Ihn nur für C zu ändern, hiesse, die Varianten in etwas zu
+> unterscheiden, das **nicht** die Orchestrierung ist. Der gemessene Unterschied wäre dann
+> teilweise ein Prompt-Unterschied — und L09 (Sclar et al.) zeigt, wie gross solche Effekte
+> werden können.
+>
+> **Die Trennung ist eine Zuständigkeits-, keine Prompt-Änderung.** Falls der Prompt später
+> doch angepasst werden soll, ist das eine **Architekturänderung** und gehört vorher hierher —
+> nicht still in einen Commit.
 
 ### 9.1 Wann die Knotenzahl entschieden wird — drei Zeitpunkte
 
@@ -908,15 +1288,16 @@ Kette „Knoten → Eingabe → Entscheidung → nächster Knoten" (Kap. 5.3).
 
 ```
 START → [1 Eingabeanalyse] → [2 Fehlerklassifikation] → [3 Kontextsuche] → [4 Regelzuordnung]
-      → [5 Korrekturgenerierung] → [6 Technische Prüfung] ──┐
-                                                             │ schema_valid?
-                    ┌── nein, Retries übrig ────────────────┘
-                    ▼
-                  zurück zu [5]
-                                   ja ▼
+      → [5 Korrekturgenerierung] → [6 Technische Prüfung]
+                                     (Schema-Retries laufen INNERHALB des Knotens)
+                                          │
+                          schema_valid?   ├── nein ──▶ [8] ──▶ "stop_uncertain" ──▶ [9]
+                                          │
+                                          ja
+                                          ▼
       [7 Anwendung & Re-Validierung] → [8 Ergebnisbewertung] → Router liest decision.action
                     ▲                                                   │
-                    └──────── "continue" ───────────────────────────────┤
+                    └── (über [2]) ─── "continue" ──────────────────────┤
                                                                         ▼
                                                               [9 Antwortformulierung] → END
 ```
@@ -927,9 +1308,35 @@ START → [1 Eingabeanalyse] → [2 Fehlerklassifikation] → [3 Kontextsuche] �
 
 | Bedingung | Ziel |
 |---|---|
-| `technical_check.schema_valid == False` und Retries übrig | zurück zu **[5]** |
-| `schema_valid == False` und Retries erschöpft | weiter zu **[8]** → `"stop_uncertain"` |
-| `schema_valid == True` | weiter zu **[7]** |
+| `technical_check.schema_valid == True` | weiter zu **[7]** |
+| `technical_check.schema_valid == False` | weiter zu **[8]** → `"stop_uncertain"` |
+
+> ### ⚠ Es gibt KEINE Rückkante 6→5 (korrigiert 19.08.2026)
+> Die frühere Fassung sah vor: *„`schema_valid == False` und **Retries übrig** → zurück zu [5]"*.
+> **Das war ein Konstruktionsfehler.**
+>
+> `validate_with_retry(..., max_retries=5)` führt die technischen Schema-Retries **vollständig
+> innerhalb von Knoten 6** aus — inklusive erneutem LLM-Aufruf mit dem Schemafehler. Eine
+> zusätzliche Graph-Kante 6→5 wäre eine **zweite Retry-Schicht** über der bestehenden: bis zu
+> 5 interne × N Graph-Durchläufe. Der Graph verhielte sich damit **anders als der Monolith**,
+> und zwar in einer Dimension, die gar nicht Gegenstand des Vergleichs ist. Ein
+> Konfundierungsfaktor, den niemand bemerkt hätte.
+>
+> **Die verbindliche Aufteilung der Verantwortung:**
+>
+> | Ebene | Zuständig | Wofür |
+> |---|---|---|
+> | **innerhalb Knoten 6** | `validate_with_retry` | **technische** Schemafehler — bis zu `max_retries` LLM-Korrekturversuche |
+> | **Kante 8→2** | Router | **fachliche** Korrekturiteration, erst **nach** Re-Validierung des Snapshots (`errors_after > 0`) |
+>
+> Knoten 6 gibt nach erschöpften Retries schlicht `schema_valid=False` zurück; der Graph geht
+> dann über Knoten 8 auf `stop_uncertain`. **Die Rückkante 8→2 existiert ausschliesslich für
+> eine neue fachliche Iteration** — nie für denselben Schemafehler.
+>
+> **`retries` im `technical_check` bedeutet:** *Zusatzversuche **nach** dem ersten*, also die Zahl
+> der tatsächlich ausgeführten LLM-Retries. `0` = beim ersten Versuch gültig; die Obergrenze ist
+> `max_retries`. *(Der Zähler meldete anfangs um eins zu hoch, weil `retry_count` vor der
+> Schranke erhöht wird — am 19.08. korrigiert und geprüft.)*
 
 **(B) nach Knoten 8** — der Router liest nur noch das, was Knoten 8 in den State geschrieben hat:
 
@@ -1193,17 +1600,23 @@ Korrekturen — **unabhängig von syntaktischer Gültigkeit**.
 
 **Vier Kategorien, pro Testfall zu vergeben:**
 
-| # | Kategorie | Messbar wie | Knoten (Kap. 9) |
+Für jede Kategorie existiert im `GraphState` ein **definierter Beobachtungs- und
+Validierungspunkt**. Beachte die Spaltenüberschrift: **wo sie sichtbar wird**, nicht wo sie
+entsteht — das ist nicht dasselbe.
+
+| # | Kategorie | Messbar wie | **Beobachtungspunkt** |
 |---|---|---|---|
 | 1 | **Fachliche Halluzination** — falscher Korrekturwert | automatisch für injizierte Fälle (Vergleich mit Ground Truth); sonst Experten | **5** — `correction_proposal` |
-| 2 | **Strukturelle Halluzination** — ungültiges JSON / Schemaverstoss | automatisch | **6** — `technical_check` |
-| 3 | **Regelhalluzination** — Berufung auf nicht existente / falsch interpretierte Regel | prüfbar gegen das reale Regelwerk. **`matched_rules` ist dafür Gold wert**, weil dort protokolliert ist, welche Karte geladen wurde | **4** — `matched_rules` |
+| 2 | **Strukturelle Halluzination** — ungültiges JSON / Schemaverstoss | automatisch | **6** — `technical_check` *(erzeugt wird sie in Knoten 5, **erkannt** in 6)* |
+| 3 | **Regelhalluzination** — Berufung auf nicht existente / falsch interpretierte Regel | Abgleich der Behauptung aus Knoten 5 gegen `matched_rules` | **4 + 5 gemeinsam** — Knoten 4 belegt, *welche* Karten geladen waren; die falsche Berufung entsteht in Knoten 5. **Erst das Paar macht sie prüfbar** |
 | 4 | **Folgefehlererzeugung** — die Korrektur erzeugt einen neuen Fehler | automatisch (Re-Validierung: `errors_after > 0` oder neuer Fehlertyp) | **7** — `applied`, `errors_after` |
 
-**Das ist die Begründung des Knotenschnitts (Kap. 5.2), von der Messseite gelesen:** Jede Kategorie
-hat im Graphen **genau einen** Zustand, an dem sie entsteht und ablesbar ist. Beim Monolithen liegen
-alle vier hinter einer einzigen Ausgabe — man sieht *dass* etwas falsch ist, nicht *welcher*
-Fehlermodus zugeschlagen hat. **Genau diese Zurechenbarkeit ist der zu messende Unterschied.**
+**Das ist die Begründung des Knotenschnitts (Kap. 5.2), von der Messseite gelesen:** Jede
+Kategorie hat im Graphen einen definierten Punkt, an dem sie **prüfbar** wird. Beim Monolithen
+liegen alle vier hinter einer einzigen Ausgabe — man sieht *dass* etwas falsch ist, nicht
+*welcher* Fehlermodus zugeschlagen hat. **Genau diese Zurechenbarkeit ist der zu messende
+Unterschied** — und Kategorie 3 zeigt, warum „ein Knoten pro Kategorie" zu einfach gedacht war:
+Regelhalluzination braucht **zwei** Zustände, den geladenen Regelsatz und die Behauptung darüber.
 
 **Aufschlüsseln nach Standard- vs. Komplexfällen.** Die These erwartet den Effekt **primär bei
 Komplexfällen**; bei einfachen Fällen erwartet das Exposé selbst *keinen* Unterschied.
@@ -1215,13 +1628,34 @@ Begründung zählt nur, wenn sie den *realen* Entscheidungsprozess abbildet** �
 nachträglich bloss plausibel klingt. Diese Unterscheidung ist subtil und muss den Bewertenden
 ausdrücklich vermittelt werden.
 
-* **Struktureller Nachweis:** Der Graph hat per Konstruktion das `trace`-Feld, der Monolith nicht.
-  Das ist der qualitative Kernunterschied — belegt an konkreten Fallgegenüberstellungen (ein Fall,
-  beide Varianten, „was kann ich über den Weg sagen?").
-* **Experten-Rating:** Skala 1–5 — „Wie gut kann ich nachvollziehen, welcher Fehler erkannt, welche
-  Regel angewandt, welche Daten herangezogen wurden?"
-* **Der harte Test:** Bei *falschen* Korrekturen — kann man erkennen, **wo** der Prozess abbog?
-  Beim Monolith praktisch nie, beim Graph über `trace` lokalisierbar. **Stärkster Beleg für UF3.**
+> ### ⚠ Nicht so messen: „Graph hat einen Trace, Monolith nicht"
+> Das wäre **durch die Konstruktion vorweggenommen** und damit wertlos. Ausserdem ist es
+> **sachlich falsch**: Der Monolith schreibt sehr wohl maschinelle Zwischenartefakte —
+> `llm_identify_response.json`, `last_search_results.json`, `llm_correction_proposal.json`,
+> `snapshot-validation.json` (Kap. 3.7). Sie sind nur **verstreut, untypisiert, ohne Reihenfolge
+> und ohne Regelprovenienz**.
+>
+> Der Unterschied ist also **graduell, nicht binär** — und muss entsprechend gemessen werden.
+> Genau das verlangt auch L12 (Jacovi & Goldberg): *faithfulness* ist eine graduelle, keine
+> binäre Eigenschaft.
+
+**Messvorschrift — vier Grössen, jede so, dass der Graph auch verlieren kann:**
+
+| # | Grösse | Erhebung |
+|---|---|---|
+| 1 | **Lokalisierung** — wird der fehlerhafte Verarbeitungsschritt **korrekt** benannt? | pro Fehlfall, gegen die tatsächliche Ursache geprüft. **Richtig / falsch / nicht bestimmbar** |
+| 2 | **Rekonstruierbarkeit** — welche Regel wurde tatsächlich angewandt? Welcher Kontext tatsächlich benutzt? | je Frage: aus den Artefakten belegbar, nur vermutbar, oder gar nicht |
+| 3 | **Suchaufwand** — **wie viele Artefakte** müssen dafür zusammengesucht werden? | zählbar, deskriptiv (Monolith ≈ 4 verstreute Dateien + stdout, Graph = 1 `trace`) |
+| 4 | **Experten-Rating** | Skala 1–5, einheitliches Raster |
+
+**Die Kernfrage bleibt die harte:** Kann bei einer *falschen* Korrektur der Abzweig lokalisiert
+werden? Aber sie wird jetzt **beantwortet**, nicht vorausgesetzt.
+
+> **⚠ Wer lokalisiert?** Nicht der Autor — er hat den Graphen gebaut und kennt die Antwort.
+> Sonst tauschst du einen konstruktionsbedingten Vorteil gegen einen Bewerter-Bias.
+> Entweder über die Domänenexperten oder über ein **vorab festgelegtes Protokoll** mit
+> definierten Kriterien und dokumentierter Reihenfolge. **Vor der ersten Messung festlegen**
+> (Regel 5).
 
 ### 15.3 Robustheit
 
@@ -1232,6 +1666,14 @@ unbelegte Korrektur zu erzwingen**.
 * **Konsistenz (quantitativ):** Wiederholungstest, identische Eingabe, N Läufe. **Miss die Streuung
   der *fachlichen* Korrektur, nicht der Formulierung.** Metrik: Anteil identischer fachlicher
   Ergebnisse bzw. Anzahl distinkter Korrekturwerte pro Fall.
+
+  > **⚠ Wiederholungen sind keine zusätzlichen Fälle.** 5 Wiederholungen von 17 Fällen ergeben
+  > **nicht n=85**. Es bleiben **17 Fälle**, ergänzt um eine **Within-Case-Stabilität** je Fall.
+  > Die Fallzahl für jede Aussage über Halluzinationsraten bleibt 17. Wer die Wiederholungen
+  > mitzählt, überschätzt die Aussagekraft um das Fünffache — ein Fehler, den ein Gutachter mit
+  > Statistikhintergrund sofort sieht.
+  > **Berichte absolute Zahlen** („5 von 17"), nicht Prozente („30 %") — bei n=17 täuschen
+  > Prozentangaben eine Präzision vor, die nicht existiert.
   **Die entscheidende Unterscheidung:** sprachliche Variabilität (unvermeidbar, stochastisch) vs.
   **inhaltliche Instabilität** (dieselben Symptome → verschiedene fachliche Korrekturen). **Nur die
   zweite ist das Problem. Miss die zweite.**
@@ -1259,6 +1701,14 @@ unbelegte Korrektur zu erzwingen**.
   Nachvollziehbarkeits-Analyse, die ohnehin nicht blind sein kann.
 * **Protokollierung:** Alle Reviews und Gespräche protokollieren — qualitative Datenquelle für die
   Diskussion.
+* **Übereinstimmungsmass — nicht vorschnell Cohens κ.** Cohens κ ist für **zwei** Bewertende und
+  **nominale** Kategorien gebaut. Hier stehen **3–4** Personen auf einer **ordinalen** 1–5-Skala.
+  Passend wären je nach endgültigem Design **Fleiss' κ** (mehrere Rater, nominal),
+  **gewichtetes κ** (zwei Rater, ordinal) oder **Krippendorffs α** (beliebig viele Rater,
+  ordinal, verträgt fehlende Werte — die flexibelste Wahl).
+  **Festzulegen, sobald das Raster steht — und vor der ersten Bewertung** (Regel 5).
+  *Präzedenzfall für Trace-Annotation mit κ: MAST (NeurIPS 2025) berichtet κ = 0,88 über 150
+  annotierte Traces.*
 
 ### 16.2 SUS und UEQ — ergänzend
 
@@ -1267,14 +1717,66 @@ Verlässlichkeit), **mindestens 5 Teilnehmende**, aus dem Projektkontext und aus
 **Ehrliche Einordnung:** Bei n = 5 sind das **Indikatoren**, keine signifikanten Ergebnisse. Als
 „ergänzend" bezeichnen (so steht es auch im Exposé) und keine Hauptaussage daraus ziehen.
 
-### 16.3 RAGAS — nur für den RAG-Teil
+### 16.3 Provenienz-Matrix der verblindeten Ergebnisvorlage
+
+Die Vorlage für die Fachgutachter enthält **13 Felder**. Grundsatz: **ein Wert darf nur in die
+Vorlage, wenn er in A, B und C aus einem tatsächlichen Artefakt belegbar ist.** Keine
+konstruierten Vorgaben, keine erfundenen Ersatzwerte — ein Feld, das nur ein Arm liefern kann,
+verrät den Arm.
+
+Am Durchstich I03 (20.08.2026) für jedes Feld am realen Artefaktbestand geprüft:
+
+| Feld | Quelle A | Quelle B | Quelle C |
+|---|---|---|---|
+| `snapshot_id` | Laufmetadaten — **wird durch Pseudonym ersetzt** | dito | dito |
+| `fehler_vorher` | `data/snapshots/<id>/iteration-1/snapshot-validation.json` | dito | dito |
+| `fehler_nachher` | `snapshot-validation.json` (nach Re-Validierung) | dito | dito |
+| `ergebnis` | abgeleitet aus `fehler_nachher` + `revalidierung_ok` | dito | dito |
+| `korrektur_vorhanden` | `data/snapshots/<id>/iteration-1/llm_correction_proposal.json` | dito | dito |
+| `korrektur_aktion` | dieselbe Datei → `correction_proposal.action` | dito | dito |
+| `korrektur_feld` | dieselbe Datei → `.target_path` | dito | dito |
+| `korrektur_wert` | dieselbe Datei → `.new_value` | dito | dito |
+| `korrektur_begruendung` | dieselbe Datei → `.reasoning` | dito | dito |
+| `angewendet` | `snapshot-data.json` am Zielpfad gegengeprüft | dito | dito |
+| `hochgeladen` | `upload-result.json` → `success` | dito | dito |
+| `iterationen` | Anzahl der `iteration-*/`-Ordner | dito | dito |
+| `manuelle_pruefung_noetig` | `_proposals/` (leer = keine HitL-Sperre) | dito | dito |
+
+**13 von 13 in allen drei Bedingungen belegbar.** `angewendet` wird ausdrücklich **nicht** aus
+`success` abgeleitet, sondern am Zielpfad in `snapshot-data.json` nachgesehen — ob der Wert
+wirklich dort steht.
+
+#### Die vier Felder ausserhalb der Vorlage — sie bleiben UF3-Material
+
+| Feld | A | B | C | warum ausserhalb |
+|---|---|---|---|---|
+| `schema_gueltig` | — | — | ✔ | `validate_correction_schema_llm` persistiert sein Ergebnis nicht; nur Knoten 6 legt es als `technical_check` ab |
+| `schema_versuche` | — | — | ✔ | dito |
+| `revalidierung_abgeschlossen` | (nur zur Laufzeit) | (nur zur Laufzeit) | ✔ | der Trigger-Ausgang ist nur in C persistiert (`graph_state.applied.revalidation`); in A/B steht er ausschliesslich in der Rückgabe im Arbeitsspeicher |
+| `schema_version` | ✔ | ✔ | ✔ | Konstante des Formats, kein Datenfeld |
+
+> **Sie werden NICHT verworfen.** Dass die technische Schemaprüfung und der Ausgang der
+> Re-Validierung in C **explizit persistiert** sind und in A/B nur flüchtig existieren, ist
+> **kein Störfaktor, sondern genau der Gegenstand von UF3**. Die Frage lautet nicht „wie viele
+> Schritte gab es", sondern **„was lässt sich hinterher aus den Artefakten rekonstruieren"**.
+> Diese Felder gehören deshalb in die Nachvollziehbarkeitsanalyse in Kapitel 7 — nur eben nicht
+> in die verblindete Vorlage, wo ihre blosse Anwesenheit den Arm verraten würde.
+
+#### Was die Vorlage nicht dicht bekommt
+
+`korrektur_begruendung` ist Modellprosa und unterscheidet sich zwischen den Läufen in Länge und
+Stil, obwohl das Argument dasselbe ist (im Durchstich: Median 1.14 über 330 Vergleichsartikel).
+Das ist **Systemausgabe, kein Formatfehler** — aber es ist ein Restrisiko für die Blindung und
+gehört als solches in Kapitel 8.
+
+### 16.4 RAGAS — nur für den RAG-Teil
 
 RAGAS (Faithfulness, Context Precision) passt **nur** dort, wo eine klassische RAG-Situation
 vorliegt. Für JSON-Korrekturen, Tool-Ausgaben und operative Entscheidungen ist es **nicht**
 geeignet — das sagt das Exposé selbst, und es ist korrekt. Punktuell für Regelzuordnungs-/
 Kontextqualität einsetzen, nicht als Bewertung der Korrektur.
 
-### 16.4 Was bewusst nicht eingesetzt wird
+### 16.5 Was bewusst nicht eingesetzt wird
 
 **BLEU/ROUGE** — sie messen Wortüberlappung, nicht fachliche Korrektheit. Das kurz zu begründen
 zeigt methodisches Urteilsvermögen.
@@ -1309,9 +1811,26 @@ Komplexfällen besser, Robustheit moderat, technische Komplexität höher. **Die
 Aussage ist wertvoller als ein pauschales „besser".**
 
 **Auswertungsraster für Kapitel 7:**
-* Pro Dimension eine Tabelle Monolith vs. Graph, aufgeschlüsselt nach Standard-/Komplexfällen.
-* Deskriptive Statistik (Raten, Streuungen). Signifikanztest **nur**, wenn n und Voraussetzungen
-  es zulassen — sonst ehrlich deskriptiv bleiben.
+* Pro Dimension eine Tabelle **A / B / C**, aufgeschlüsselt nach Standard-/Komplexfällen.
+  *(B nur bei UF1 — siehe Kap. 7.1.)*
+* **Absolute Zahlen, nicht Prozente.** Bei n=17 ist „5 von 17" ehrlich, „30 %" nicht.
+* Deskriptive Statistik. Signifikanztest **nur**, wenn n und Voraussetzungen es zulassen —
+  bei 17 Fällen wird das in aller Regel **nicht** der Fall sein.
+
+**Wie das Ergebnis zu formulieren ist — Muster:**
+
+> Die vollständige graph-basierte Variante (C) korrigierte *x von 17* Fällen fachlich falsch,
+> gegenüber *y von 17* im ursprünglichen monolithischen Ausgangszustand (A). Der
+> Kontrollvergleich zeigt, dass der aktuelle Produktivzustand (B — selektive Regelauswahl ohne
+> Graph) bereits *z von 17* erreichte. Das Muster ist damit **vereinbar**, dass ein Teil der
+> Verbesserung auf die Modularisierung des Regelkontexts zurückgeht und nicht auf die
+> Graph-Orchestrierung; **bei dieser Fallzahl ist die Aufteilung deskriptiv und nicht
+> statistisch belastbar**. Unabhängig davon zeigten sich die Vorteile von C bei
+> Nachvollziehbarkeit und Fehlerlokalisierung.
+
+**Warum diese Formulierung stärker ist als „der Graph gewinnt":** Sie zeigt, dass dem eigenen
+Befund nicht mehr zugetraut wird, als er hergibt. Das ist der Unterschied zwischen einer Arbeit,
+die verteidigt werden kann, und einer, die auseinandergenommen wird.
 * Für Nachvollziehbarkeit und UF3: qualitative Fallgegenüberstellungen — der stärkste Teil, weil
   der strukturelle Unterschied dort am greifbarsten ist.
 

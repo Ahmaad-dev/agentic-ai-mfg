@@ -18,6 +18,7 @@ Two keys, in order of authority:
 """
 from typing import Any, Optional
 
+from core.agent_config import MEMORY_MODE
 from db import repository as repo
 from memory.long_term import entity_pattern, entity_key
 
@@ -62,7 +63,15 @@ def find_similar_cases(
 
     Ranking: same entity first, then same error_type, then a correction that survived
     revalidation, then recency.
+
+    MEMORY_MODE="off" (BA measurement runs) short-circuits here — ONE place, so every consumer
+    degrades on its own: `same_entity_confirmed_value([])` -> None (no override),
+    `compute_memory_support(v, [])` -> 0.0, `format_cases_for_prompt([])` -> the neutral
+    "no comparable case" line. Callers stay unaware, exactly like RULEBOOK_MODE.
     """
+    if MEMORY_MODE == "off":
+        return []
+
     pattern = entity_pattern(target_path)
     if not pattern:
         return []

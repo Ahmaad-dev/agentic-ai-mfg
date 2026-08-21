@@ -47,8 +47,11 @@ Es gibt genau **drei Brücken** von PT4 in die Arbeit:
    Snapshots live über die API an; die 10+10 Fälle auf Platte stammen aus PowerShell-Skripten
    mit Ground Truth in `expected-results.json`. **Zwei Mechanismen nebeneinander** — für neue
    Fälle einen wählen und durchhalten (Masterplan Kap. 14).
-2. Der `RULEBOOK_MODE`-Schalter als **Teilbaustein** (Knoten 4) und Pilotergebnis — **nicht**
-   als „die Graph-Architektur".
+2. Das **Kartensystem** (`RULEBOOK_MODE=cards`, PT4/AP7.0) — es wird als **eigener
+   Kontrollarm B** im Dreiarm-Design **mitgeführt** (Masterplan Kap. 7.1), nicht als „die
+   Graph-Architektur". **Die Entwicklung wird nicht als BA-Leistung beansprucht**, die Werte
+   werden unter den Kontrollbedingungen dieser Arbeit **neu erhoben**. PT4-Zahlen (−16 % Tokens)
+   dürfen nie als BA-Ergebnis auftreten.
 3. Die **deterministische technische Prüfung** (belegbar vs. erfunden).
 
 ## Referenzdokumente — vor jeder Arbeitseinheit lesen
@@ -117,11 +120,14 @@ Eigenplagiat und ausserdem nicht vergleichbar, weil die Bedingungen andere waren
    künstlich verschlechterte Fassung. Der Unterschied liegt in gebündeltem Prompt-Kontext
    und fehlendem explizitem Zwischenzustand — nicht in der Anzahl der Schritte (der
    Ist-Zustand hat bereits sieben).
-3. **Kontrollbedingungen sind heilig.** Modell, Modellparameter, Kontextextraktion und
-   Testfälle sind zwischen beiden Varianten **identisch**. Jede Abweichung ist ein
-   konfundierender Faktor. Unterscheiden darf sich **nur** die interne Verarbeitungs-
-   architektur des Smart-Planning-Agenten; Orchestrator, RAG- und Chat-Agent bleiben gleich.
-   Dazu gehört: **`MEMORY_MODE=off` in beiden Varianten** (siehe Fallen unten).
+3. **Kontrollbedingungen sind heilig.** Das Design hat **zwei Architekturen in drei
+   Messbedingungen** (Masterplan Kap. 7.1): **A** Monolith-Pipeline + `RULEBOOK_MODE=monolith`
+   (Ausgangszustand) · **B** Monolith-Pipeline + `cards` (**realer Ist-Zustand**, Kontrollarm,
+   nur UF1, ohne Wiederholungen) · **C** Graph + `cards`. Hauptvergleich ist **A gegen C**, und
+   die Intervention ist ausdrücklich ein **Gesamtpaket** — ein Effekt darf **nicht** dem
+   `GraphState` allein zugeschrieben werden.
+   Modell, Parameter, Kontextextraktion, Testfälle, Umgebung und **`MEMORY_MODE=off`** sind in
+   **allen drei** identisch. Alle drei laufen **nach demselben Einfrieren**.
 4. **Nie Messergebnisse erfinden.** Konstruierter **Input** ist zulässig und gängige Praxis
    (Fehlerinjektion). Konstruierte **Ergebnisse, Bewertungen oder Experten-Urteile** sind es
    nie. Wenn eine Zahl nicht gemessen wurde, wird sie nicht genannt.
@@ -163,6 +169,28 @@ Eigenplagiat und ausserdem nicht vergleichbar, weil die Bedingungen andere waren
     **Belege statt Behauptungen.** Nenne im Eintrag die konkrete Fundstelle (Datei + Zeile,
     Commit, Rohdatenpfad, Zeitstempel) — nicht „geprüft", sondern **womit**. Eine Zahl ohne
     Rohdatenpfad ist beim Schreiben wertlos, weil sich nichts nachrechnen lässt.
+
+## Zwei Regeln für den Bau — sie schützen den Vergleich
+
+Beide sind aus konkreten Fehlern entstanden (BA-021) und gelten dauerhaft.
+
+**A — Keine Optimierung auf Geschwindigkeit zulasten der Vergleichbarkeit.**
+Könnte eine Extraktion die **fachliche Semantik**, den **LLM-Input**, die
+**Kontrollbedingungen** oder die **Messbarkeit** berühren, dann **zuerst stoppen, prüfen,
+dokumentieren** — danach ändern. **Keine Annahmen über APIs, Artefakte oder Prozessverhalten:
+am echten Code oder an einem echten Lauf verifizieren.**
+Gleichwertigkeit wird **empirisch** belegt — SHA-256 des tatsächlichen Prompts, Hash des
+injizierten Regeltexts, Exit-Codes und Artefakte des CLI-Pfads. **Nicht** über Näherungen wie
+Tokenzahl oder Zeichenlänge.
+
+**B — Ein neuer Graph-Knoten darf nicht einfach nur funktionieren.**
+Nachzuweisen ist zweierlei: Er übernimmt **genau** die im Forschungsdesign vorgesehene
+Verantwortung (Masterplan Kap. 9 und 9.0) — und er führt **keine zusätzliche Verbesserung ein,
+die nur Bedingung C erhält**.
+Jede Fähigkeit, die es nur in C gibt — ein behobener Fehler, ein besserer Retry, eine
+zusätzliche Prüfung, ein geänderter Prompt — erscheint später als Architektureffekt, obwohl sie
+keiner ist. **Ist es eine Reparatur, gehört sie in die gemeinsame Runtime, damit A, B und C sie
+gleichermassen bekommen.** Genau das war beim fehlenden Re-Validierungs-Trigger der Fall.
 
 ## Bekannte Fallen
 
@@ -230,12 +258,22 @@ reine Prompt-Wortlaut-Optimierung.
 Testläufe ausschliesslich auf der Smart-Planning-Testinstanz, nie produktiv. Das System darf
 keine Snapshots löschen. Nur anonymisierte oder freigegebene Daten verwenden.
 
-## Berichten — kurz halten
+## Berichten — immer sagen, was tatsächlich getan wurde
 
-Beim Melden einer fertigen Aufgabe **keine vollständigen Diffs, keine ganzen Dateien**:
-1. Ein Satz: was geändert wurde + welche Datei(en), nur Namen.
+**In jeder Antwort steht, was konkret getan wurde** — nicht nur das Ergebnis oder die Empfehlung.
+Welche Dateien angelegt oder geändert, welche Befehle und Prüfungen gelaufen sind, was dabei
+herauskam. Auch, was **nicht** getan wurde: übersprungen, blockiert, bewusst nicht angefasst.
+Und ausdrücklich unterscheiden zwischen **„geprüft, indem …"** und **„angenommen"**.
+
+Grund: Der Nutzer setzt jetzt um und verfasst die Arbeit später aus `BA_PROJECT_LOG.md`. Eine
+Antwort, die nur die Schlussfolgerung trägt, verliert den Schritt, der sie erzeugt hat — und
+später ist nicht mehr unterscheidbar, was gemessen und was vermutet war.
+
+**Trotzdem kurz halten** — keine vollständigen Diffs, keine ganzen Dateien:
+1. Ein Satz je Änderung: was + welche Datei(en), nur Namen.
 2. Das funktionale Ergebnis, das belegt, dass es wirkt.
 3. Bestätigung, dass nur die vereinbarten Dateien angefasst wurden.
 
 Einen Code-Ausschnitt nur, wenn ausdrücklich verlangt — oder wenn du BLOCKIERT bist und die
 konkreten Zeilen zeigen musst, um das Problem zu erklären.
+Hat eine Runde nichts verändert, sag auch das.

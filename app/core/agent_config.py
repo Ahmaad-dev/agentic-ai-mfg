@@ -37,7 +37,86 @@ APP_BASE_URL = _basis_adresse()
 # -16% prompt tokens. More importantly, the skills folder is only effective in this mode — with
 # "monolith" every rule card a domain expert writes is inert. The monolith file stays in the repo
 # untouched and remains one env var away, so the A/B evaluation for AP-E is always possible.
-RULEBOOK_MODE = os.getenv("RULEBOOK_MODE", "cards").lower()
+#
+# STRICT PARSING (BA, 2026-08-19), same reasoning as MEMORY_MODE below: rulebook_loader branches
+# on `!= "cards"`, so ANY unrecognised value — "card", "Cards ", a typo — silently yields the
+# MONOLITH. For measurement bedingung C ("cards" intended) that would quietly measure the wrong
+# variant, and nothing would say so. An unknown value now aborts at import time.
+_RULEBOOK_VALID = {"cards", "monolith"}
+_rulebook_raw = os.getenv("RULEBOOK_MODE", "cards").strip().lower()
+if _rulebook_raw not in _RULEBOOK_VALID:
+    raise ValueError(
+        f"RULEBOOK_MODE={_rulebook_raw!r} ist kein gueltiger Wert. "
+        f"Erlaubt: {sorted(_RULEBOOK_VALID)}. "
+        f"Abbruch mit Absicht: ein Tippfehler wuerde still den Monolithen laden und damit "
+        f"die falsche Messbedingung erzeugen (BA_MASTERPLAN Kap. 7.1)."
+    )
+RULEBOOK_MODE = _rulebook_raw
+
+# ========== EPISODIC MEMORY (BA / AP-A1) ==========
+# Whether the correction pipeline may read the episodic case base (AP7.2).
+# "on"  = normal operation (DEFAULT — production behaviour is unchanged).
+# "off" = no retrieval, no deterministic value override, memory_support forced to 0.0.
+#
+# Why this switch exists: the case base holds past HUMAN decisions and, for the SAME object,
+# deterministically OVERRIDES the model's value (generate_correction_llm, memory re-retrieval).
+# As of 2026-08-16 it contains 20 entries which cover the measurement catalogue entity-precisely
+# (e.g. articles:100005 -> relDensityMin 1.017, the ground truth of case I03). Measuring with it
+# active would score the memory, not the architecture, and would push BOTH variants' hallucination
+# rate toward zero — destroying the resolution the comparison needs.
+# The bachelor thesis therefore runs every measurement with "off" in BOTH variants; see
+# docs/BA_MASTERPLAN.md Kap. 7.2. Enforced in ONE place: memory/retrieval.find_similar_cases().
+#
+# STRICT PARSING, and deliberately so (2026-08-19): the first version accepted only the literal
+# "off" and silently left the memory ON for "false", "0", "no" or any typo. That is the worst
+# possible failure mode here — you believe the memory is disabled, the baseline is contaminated,
+# and nothing says so. Same class as Muster 1 in 04_PT4/BEFUNDE_UND_LEHREN.md ("a step that does
+# not deliver its result still reports success"). An unknown value now aborts at import time
+# instead of guessing. Production never sets the variable, so it cannot break.
+_MEMORY_ON = {"on", "true", "1", "yes"}
+_MEMORY_OFF = {"off", "false", "0", "no"}
+_memory_raw = os.getenv("MEMORY_MODE", "on").strip().lower()
+if _memory_raw in _MEMORY_ON:
+    MEMORY_MODE = "on"
+elif _memory_raw in _MEMORY_OFF:
+    MEMORY_MODE = "off"
+else:
+    raise ValueError(
+        f"MEMORY_MODE={_memory_raw!r} ist kein gueltiger Wert. "
+        f"Erlaubt: {sorted(_MEMORY_ON)} (an) oder {sorted(_MEMORY_OFF)} (aus). "
+        f"Abbruch mit Absicht: ein stillschweigend aktives Gedaechtnis verfaelscht jede Messung."
+    )
+
+# ========== ARCHITEKTUR-SCHALTER (BA / AP-C) ==========
+# Which internal processing architecture the Smart-Planning agent uses for the correction
+# pipelines. THE core switch of the bachelor thesis.
+#   "monolith" = the existing subprocess chain (DEFAULT — production behaviour is unchanged)
+#   "graph"    = LangGraph orchestration with an explicit GraphState (BA_MASTERPLAN Kap. 9-11)
+#
+# Coexistence, not replacement (Regel 1): the monolith path stays byte-identical and remains the
+# default. The ONLY branch point is SPAgent.execute_pipeline(); nothing else in the codebase asks
+# for this value. Strict parsing for the same reason as the two switches above — a typo must not
+# silently select a variant.
+#
+# Measurement design (Kap. 7.1) — two architectures, three conditions:
+#   A  SP_ARCHITECTURE_MODE=monolith  RULEBOOK_MODE=monolith   Ausgangszustand
+#   B  SP_ARCHITECTURE_MODE=monolith  RULEBOOK_MODE=cards      realer Ist-Zustand (Kontrollarm)
+#   C  SP_ARCHITECTURE_MODE=graph     RULEBOOK_MODE=cards      neue Gesamtarchitektur
+# In allen dreien: MEMORY_MODE=off, HUMAN_IN_THE_LOOP=false.
+_ARCHITECTURE_VALID = {"monolith", "graph"}
+_architecture_raw = os.getenv("SP_ARCHITECTURE_MODE", "monolith").strip().lower()
+if _architecture_raw not in _ARCHITECTURE_VALID:
+    raise ValueError(
+        f"SP_ARCHITECTURE_MODE={_architecture_raw!r} ist kein gueltiger Wert. "
+        f"Erlaubt: {sorted(_ARCHITECTURE_VALID)}. "
+        f"Abbruch mit Absicht: ein Tippfehler wuerde still auf den Monolithen zurueckfallen "
+        f"und einen vermeintlichen Graph-Lauf als Monolith-Lauf messen."
+    )
+SP_ARCHITECTURE_MODE = _architecture_raw
+
+#: Nur die beiden Korrektur-Pipelines sind vom Architektur-Schalter betroffen. Alle uebrigen
+#: (analyze_only, apply_and_upload, ...) laufen IMMER ueber den bestehenden Pfad.
+GRAPH_ENABLED_PIPELINES = {"full_correction", "correction_from_validation"}
 
 # NOTE: there is deliberately NO card mapping here any more.
 # The cards in app/skills/ describe THEMSELVES (YAML frontmatter `applies_to`, or by

@@ -12,3 +12,12 @@ azure-storage-blob
 SQLAlchemy>=2.0,<3.0
 alembic>=1.13,<2.0
 mcp>=1.27,<2
+
+# Bachelorarbeit (AP-A2, 19.08.2026): Orchestrierung der Graph-Variante.
+# NUR als Orchestrator verwendet — keine LangChain-LLM-Wrapper, keine Prebuilt-Agenten,
+# keine Retry-Policies. Der Azure-Client bleibt der bestehende, damit Modell und Parameter
+# zwischen Monolith und Graph strukturell identisch sind (BA_MASTERPLAN Kap. 7.1, 12.1).
+# langsmith kommt als Transitivabhaengigkeit mit, wird aber NICHT scharfgeschaltet:
+# keine LANGSMITH_*/LANGCHAIN_TRACING_* Variablen setzen (Datenschutz, Kap. 12.5).
+langgraph==1.2.11
+langchain-core==1.5.6

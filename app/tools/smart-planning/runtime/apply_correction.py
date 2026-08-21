@@ -525,6 +525,57 @@ def append_correction_to_metadata(snapshot_id, correction_proposal):
     storage.save_text(f"{snapshot_id}/metadata.txt", existing_content + correction_entry)
     print(f"\n✓ Correction entry added to metadata.txt")
 
+def run_apply(snapshot_id, iteration_number=None, correction_proposal=None) -> dict:
+    """
+    KNOTEN 7, Teil 1 — Anwendung (BA / AP-D3, 2026-08-19).
+
+    Kernlogik aus main(), aufrufbar. Sichert wie bisher in den Iterationsordner, prueft das
+    Schema, wendet an und haengt den Eintrag an metadata.txt. Die Ausgaben bleiben dieselben,
+    weil derselbe Code laeuft.
+
+    Returns: {"applied_ok": bool, "iteration_number": int|None, "proposal": dict|None,
+              "error": str|None}
+
+    Beendet den Prozess NIE (vgl. AP-D1). `validate_proposal_schema()` ruft intern `sys.exit`;
+    das wird hier abgefangen und zu einem Zustand gemacht — im Graphen entscheidet darueber die
+    bedingte Kante, nicht ein Programmabbruch. Die CLI-Semantik haengt in main() daran.
+    """
+    try:
+        if iteration_number is None:
+            iteration_number = get_latest_iteration_number(snapshot_id)
+        print(f"Using iteration: {iteration_number}\n")
+
+        backup_files_to_iteration(snapshot_id, iteration_number)
+
+        if correction_proposal is None:
+            print(f"\nLoading correction proposal...")
+            correction_proposal = load_correction_proposal(snapshot_id, iteration_number)
+
+        print(f"Checking JSON schema...")
+        validate_proposal_schema(correction_proposal)
+        print(f"  ✓ Schema is valid")
+
+        proposal = correction_proposal.get("correction_proposal", {})
+        print(f"\nProposal details:")
+        print(f"  Action: {proposal.get('action')}")
+        print(f"  Target: {proposal.get('target_path')}")
+        print(f"  Reasoning: {proposal.get('reasoning')}")
+
+        apply_correction(snapshot_id, correction_proposal)
+        append_correction_to_metadata(snapshot_id, correction_proposal)
+
+        return {"applied_ok": True, "iteration_number": iteration_number,
+                "proposal": correction_proposal, "error": None}
+    except SystemExit as exc:
+        return {"applied_ok": False, "iteration_number": iteration_number,
+                "proposal": correction_proposal,
+                "error": f"Schemapruefung abgebrochen (exit {exc.code})"}
+    except Exception as exc:
+        return {"applied_ok": False, "iteration_number": iteration_number,
+                "proposal": correction_proposal,
+                "error": f"{type(exc).__name__}: {exc}"}
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(add_help=False)
@@ -538,34 +589,11 @@ def main():
     snapshot_id = load_current_snapshot_id(args.snapshot_id)
     print(f"Snapshot ID: {snapshot_id}")
     
-    # Get latest iteration number
-    iteration_number = get_latest_iteration_number(snapshot_id)
-    print(f"Using iteration: {iteration_number}\n")
-    
-    # Backup files to iteration folder
-    backup_files_to_iteration(snapshot_id, iteration_number)
-    
-    # Load correction proposal (must be validated beforehand!)
-    print(f"\nLoading correction proposal...")
-    correction_proposal = load_correction_proposal(snapshot_id, iteration_number)
-    
-    # Validate schema (exits with clear message if invalid)
-    print(f"Checking JSON schema...")
-    validate_proposal_schema(correction_proposal)
-    print(f"  ✓ Schema is valid")
-    
-    proposal = correction_proposal.get("correction_proposal", {})
-    print(f"\nProposal details:")
-    print(f"  Action: {proposal.get('action')}")
-    print(f"  Target: {proposal.get('target_path')}")
-    print(f"  Reasoning: {proposal.get('reasoning')}")
-    
-    # Apply correction
-    apply_correction(snapshot_id, correction_proposal)
-    
-    # Append correction to metadata.txt
-    append_correction_to_metadata(snapshot_id, correction_proposal)
-    
+    ergebnis = run_apply(snapshot_id)
+    if not ergebnis["applied_ok"]:
+        print(f"ERROR {ergebnis['error']}")
+        sys.exit(1)
+
     print("\n=== Done ===")
 
 if __name__ == "__main__":

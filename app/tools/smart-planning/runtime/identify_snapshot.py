@@ -885,21 +885,129 @@ def get_latest_iteration_dir(snapshot_dir: Path) -> Path:
     return None
 
 
-def main():
+def context_sha256(obj) -> str:
+    """
+    Kanonischer Hash des Suchkontexts. BA / AP-D7, 2026-08-20.
+
+    Bewusst EINE Definition: Knoten 3 bildet damit `results_hash`, Knoten 5 damit
+    `context_input_sha256`. Wuerden beide je eigen serialisieren, verglichen sie
+    Serialisierungen statt Inhalte - und die Zusicherung waere wertlos.
+    """
+    import hashlib as _h, json as _j
+    return _h.sha256(_j.dumps(obj, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def run_context_search(snapshot_id, search_mode, search_value) -> dict:
+    """
+    KNOTEN 3 — Kontextsuche (BA / AP-D7, 2026-08-19).
+
+    BEWUSSTE MVP-ENTSCHEIDUNG — hier wird NICHTS aus main() herausgeloest.
+    ---------------------------------------------------------------------
+    `main()` traegt rund 295 Zeilen Ablaufsteuerung mit drei Modi, verschachtelten
+    Fallbacks (Referenzdaten, Fuzzy-Suche, Kontextanreicherung) und vielen `return`-Punkten.
+    Diese Logik zu verschieben, waere der risikoreichste Eingriff des ganzen Blocks — und er
+    braechte fuer die Forschungsfrage **nichts**: Knoten 3 soll Kontext liefern und
+    protokollieren, WELCHEN. WIE die Suche intern arbeitet, ist nicht Gegenstand des
+    Vergleichs.
+
+    Der Masterplan erlaubt genau das ausdruecklich (Kap. 9, MVP-Entscheidung): das bestehende
+    Skript **als Ganzes** aufrufen und die Vereinfachung dokumentieren — *„kein Strohmann, weil
+    es derselbe, unveraenderte Code ist"*. Diese Funktion baut deshalb nur die Argumentliste
+    und ruft `main(argv=...)` auf.
+
+    Der EINZIGE Eingriff war, `main()` um den optionalen Parameter `argv` zu ergaenzen. Vorher
+    ueberschrieb es `sys.argv` **global** — in-process haette das jeden weiteren Schritt im
+    selben Lauf betroffen. Default `None` = unveraendertes CLI-Verhalten.
+
+    Returns dict fuer `GraphState["extracted_context"]`:
+        {search_mode, search_value, results_count, error_type, results_hash,
+         lines_used, field_examples, error}
+
+    Beendet den Prozess NIE (vgl. AP-D1).
+    """
+    import hashlib as _hashlib
+    import json as _json
+
+    if not search_value:
+        return {"search_mode": search_mode, "search_value": search_value,
+                "results_count": 0, "error_type": None, "results_hash": None,
+                "lines_used": None, "field_examples": None,
+                "error": "Kein search_value — Knoten 2 hat keinen geliefert."}
+
+    if search_mode == "equipment_workitem":
+        argv = ["identify_snapshot.py", "--snapshot-id", snapshot_id,
+                "--equipment-workitem", str(search_value)]
+    elif search_mode == "empty_field":
+        argv = ["identify_snapshot.py", "--snapshot-id", snapshot_id,
+                "--empty", str(search_value)]
+    else:  # "value" — der Default, wie im CLI
+        argv = ["identify_snapshot.py", "--snapshot-id", snapshot_id, str(search_value)]
+
+    try:
+        main(argv=argv)
+    except SystemExit as exc:
+        return {"search_mode": search_mode, "search_value": search_value,
+                "results_count": 0, "error_type": None, "results_hash": None,
+                "lines_used": None, "field_examples": None,
+                "error": f"Suche abgebrochen (exit {exc.code})"}
+    except Exception as exc:
+        return {"search_mode": search_mode, "search_value": search_value,
+                "results_count": 0, "error_type": None, "results_hash": None,
+                "lines_used": None, "field_examples": None,
+                "error": f"{type(exc).__name__}: {exc}"}
+
+    # Das Skript schreibt last_search_results.json — genau dieselbe Datei wie im CLI-Pfad.
+    ergebnis = get_storage().load_json(f"{snapshot_id}/last_search_results.json")
+    if ergebnis is None:
+        return {"search_mode": search_mode, "search_value": search_value,
+                "results_count": 0, "error_type": None, "results_hash": None,
+                "lines_used": None, "field_examples": None,
+                "error": "Die Suche hat keine last_search_results.json erzeugt."}
+
+    treffer = ergebnis.get("results") or []
+    # PROVENIENZ DER DATEN (Kap. 7.3): Befund D aus PT4 — ein Vorschlag berief sich auf ein
+    # Vergleichskollektiv, das er gar nicht benutzt hatte. Hier wird festgehalten, welche
+    # Pfade tatsaechlich im Kontext lagen.
+    pfade = [r.get("path") for r in treffer if isinstance(r, dict) and r.get("path")]
+
+    return {
+        "search_mode": ergebnis.get("search_mode"),
+        "search_value": ergebnis.get("search_value"),
+        "results_count": ergebnis.get("results_count"),
+        "error_type": ergebnis.get("error_type"),
+        # Hash der vollstaendigen Ergebnisdatei — damit spaeter beweisbar ist, welcher
+        # Kontext dem Modell in Knoten 5 vorlag.
+        "results_hash": context_sha256(ergebnis),
+        # Das Objekt selbst - Knoten 5 bekommt GENAU dieses, statt die Datei erneut zu laden.
+        # Sonst koennte zwischen Schreiben und Lesen etwas anderes auf Platte stehen und
+        # `results_hash` wuerde einen Kontext beglaubigen, den das Modell nie gesehen hat.
+        "results_object": ergebnis,
+        "lines_used": pfade[:20],
+        "field_examples": sorted({p.split(".")[-1] for p in pfade})[:10],
+        "error": None,
+    }
+
+
+def main(argv=None):
     """Main function"""
     import argparse
     # Erst --snapshot-id extrahieren, ohne die restlichen Args zu zerstören
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("--snapshot-id", dest="snapshot_id", default=None)
-    pre_args, remaining_argv = pre_parser.parse_known_args()
+    # AP-D7 (BA, 2026-08-19): `argv` ist jetzt optional. Default None = exakt das bisherige
+    # Verhalten (liest sys.argv). Der Graph-Knoten uebergibt seine Argumente explizit,
+    # damit `sys.argv` des laufenden Prozesses NICHT mehr global ueberschrieben wird —
+    # in-process waere das ein Seiteneffekt auf alles andere im selben Lauf.
+    import sys as _sys
+    _quelle = list(_sys.argv if argv is None else argv)
+    pre_args, remaining_argv = pre_parser.parse_known_args(_quelle[1:])
     snapshot_id_arg = pre_args.snapshot_id
 
-    # Ersetze sys.argv mit den übrigen Args für die nachfolgende Logik
-    import sys as _sys
-    _sys.argv = [_sys.argv[0]] + remaining_argv
+    # Lokale Argumentliste statt globaler Mutation.
+    _argv = [_quelle[0]] + remaining_argv
 
     # Check for command line arguments
-    if len(_sys.argv) < 2:
+    if len(_argv) < 2:
         print("Usage:")
         print("  Search by value: python identify_snapshot.py <search_value>")
         print("  Search empty fields: python identify_snapshot.py --empty <field_name>")
@@ -909,8 +1017,8 @@ def main():
         return
     
     # WORK_ITEM_EQUIPMENT_AVAILABILITY: anchor on the equipment ANOMALY, not the present key.
-    if sys.argv[1] == "--equipment-workitem":
-        required_key = sys.argv[2] if len(sys.argv) > 2 else None
+    if _argv[1] == "--equipment-workitem":
+        required_key = _argv[2] if len(_argv) > 2 else None
         search_mode = "equipment_workitem"
         search_value = required_key
         snapshot_id, data = load_snapshot_data(snapshot_id_arg)
@@ -938,13 +1046,13 @@ def main():
         return
 
     # Check for empty field search mode
-    if sys.argv[1] == "--empty":
-        if len(sys.argv) < 3:
+    if _argv[1] == "--empty":
+        if len(_argv) < 3:
             print("Error: Field name required for --empty mode")
             print("Example: python identify_snapshot.py --empty demandId")
             return
         
-        field_name = sys.argv[2]
+        field_name = _argv[2]
         search_mode = "empty_field"
         search_value = field_name
         
@@ -1022,7 +1130,7 @@ def main():
         
     else:
         # Regular value search mode
-        search_value = sys.argv[1]
+        search_value = _argv[1]
         search_mode = "value"
         
         # Load snapshot data
@@ -1150,8 +1258,20 @@ def main():
         print(f"Error Type: {error_type}")
         print(f"Total demands in snapshot: {context['total_demands_count']}")
     
-    # Falls KEINE Ergebnisse gefunden wurden UND noch keine Datei erstellt wurde
-    if not results and not storage.exists(f"{snapshot_id}/last_search_results.json"):
+    # Falls KEINE Ergebnisse gefunden wurden: IMMER eine frische Datei schreiben.
+    #
+    # REPARATUR 2026-08-20 (BA / AP-D7) - GEMEINSAME RUNTIME, gilt fuer A, B und C.
+    # Vorher stand hier zusaetzlich `and not storage.exists(...)`. Fand eine spaetere
+    # Suche nichts, blieb die Datei der VORIGEN Suche stehen und wurde vom naechsten
+    # Schritt als aktueller Kontext gelesen - nachgewiesen: Suche A (16 Treffer), danach
+    # Suche B (0 Treffer) lieferte denselben results_hash wie A.
+    # Der Monolith ist genauso betroffen: `sp_agent.execute_pipeline()` iteriert
+    # (`while True`, MAX_CORRECTION_ITERATIONS) und `identify_error_llm.py:504` stoesst je
+    # Iteration eine neue Suche an. Deshalb Reparatur in der gemeinsamen Runtime und NICHT
+    # im Knoten - sonst waere es eine Verbesserung, die nur Bedingung C erhielte
+    # (CLAUDE.md, Bauregel B). `last_search_results.json` bedeutet jetzt ausnahmslos:
+    # Ergebnis der zuletzt ausgefuehrten Suche.
+    if not results:
         # KEINE ERGEBNISSE → Erstelle trotzdem eine leere Datei für generate_correction_llm!
         print(f"No results found - creating empty last_search_results.json for pipeline compatibility")
 
@@ -1178,6 +1298,13 @@ def main():
                 "recommendations": ["Verify search term spelling", "Check if field name is correct", "Data may already be correct"]
             }
         })
+
+        # Genau wie die beiden anderen Zweige auch in den Iterationsordner, sonst bliebe
+        # dort die veraltete Fassung liegen.
+        _leer_num = _get_latest_num(snapshot_id)
+        if _leer_num is not None:
+            storage.save_json(f"{snapshot_id}/iteration-{_leer_num}/last_search_results.json",
+                              storage.load_json(f"{snapshot_id}/last_search_results.json"))
 
         print(f"Empty results file saved to: {snapshot_id}/last_search_results.json")
 

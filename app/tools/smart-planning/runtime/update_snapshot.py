@@ -220,104 +220,148 @@ def save_upload_result(snapshot_id: str, success: bool, response_data: dict = No
     print(f"\nUpload result saved ({storage.mode} mode): {snapshot_id}/upload-result.json")
 
 
+def run_upload(snapshot_id) -> dict:
+    """
+    KNOTEN 7, Teil 2 — Hochladen (BA / AP-D3, 2026-08-19).
+
+    Kernlogik aus main(), aufrufbar. Laedt die korrigierten Daten, holt Name und Kommentar aus
+    metadata.txt, schickt sie an den Server, sichert das Ergebnis und haengt es an metadata.txt.
+
+    Returns: {"uploaded": bool, "response": dict|None, "error": str|None}
+
+    Beendet den Prozess NIE. main() behaelt seine Exit-Codes und haengt sie an diese Rueckgabe.
+    """
+    try:
+        storage = get_storage()
+        snapshot_data = storage.load_json(f"{snapshot_id}/snapshot-data.json")
+        if snapshot_data is None:
+            return {"uploaded": False, "response": None, "fehler_art": "kein_snapshot",
+                    "error": f"snapshot-data.json not found for snapshot {snapshot_id}"}
+
+        data_json = json.dumps(snapshot_data, ensure_ascii=False)
+        print(f"  Data loaded ({len(data_json):,} characters)")
+
+        metadata = parse_metadata(snapshot_id=snapshot_id)
+        print(f"  Name: {metadata['name']}")
+        print(f"  Comment: {metadata['comment'] or '(none)'}")
+
+        api = SmartPlanningAPI()
+        response_data = api.update_snapshot(
+            snapshot_id=snapshot_id,
+            name=metadata['name'],
+            comment=metadata['comment'],
+            data_json=data_json,
+        )
+
+        save_upload_result(snapshot_id, success=True, response_data=response_data)
+        append_upload_to_metadata(snapshot_id, response_data)
+        return {"uploaded": True, "response": response_data, "fehler_art": None, "error": None}
+
+    except requests.exceptions.HTTPError as exc:
+        save_upload_result(snapshot_id, success=False, error=str(exc))
+        status = exc.response.status_code if exc.response is not None else "?"
+        return {"uploaded": False, "response": None, "fehler_art": "http",
+                "http_status": status,
+                "http_text": (exc.response.text if exc.response is not None else None),
+                "error": f"HTTP {status}: {exc}"}
+    except Exception as exc:
+        save_upload_result(snapshot_id, success=False, error=str(exc))
+        return {"uploaded": False, "response": None, "fehler_art": "sonstiges",
+                "fehler_typ": type(exc).__name__, "fehler_text": str(exc),
+                "error": f"{type(exc).__name__}: {exc}"}
+
+
 def main():
-    """Main function to upload corrected snapshot data to server"""
+    """
+    CLI-Huelle. Enthaelt seit dem 20.08.2026 KEINE Uploadlogik mehr.
+
+    BEFUND F3 (BA-025): main() hatte die Kernlogik von run_upload() nachgebaut - laden,
+    parse_metadata(), SmartPlanningAPI, speichern. Zwei Wege durch dieselbe Aufgabe.
+    Bedingung A und B laufen ueber diese CLI (Subprozess aus sp_agent), Bedingung C ueber
+    run_upload(). Jede spaetere Aenderung an nur einem der beiden Wege haette einen
+    Unterschied erzeugt, der in den Ergebnissen wie ein Architektureffekt aussieht, ohne
+    einer zu sein (CLAUDE.md, Bauregel B; BA_MASTERPLAN Kap. 12.2 - "eine Implementierung,
+    kein Drift").
+
+    Hier bleibt ausschliesslich CLI-Semantik: Argumente, current_snapshot.txt-Fallback,
+    Banner, Exit-Codes. Die stdout-Zeilen sind bewusst wortgleich zur Fassung davor.
+    """
     import argparse
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--snapshot-id", dest="snapshot_id", default=None,
                         help="Snapshot UUID (optional, Fallback auf current_snapshot.txt)")
     args, _ = parser.parse_known_args()
-    
-    try:
-        # 1. Snapshot-ID bestimmen: Argument hat Priorität, Fallback auf Datei
-        snapshot_id = args.snapshot_id
-        if not snapshot_id:
-            runtime_files_dir = Path(__file__).parent / "runtime-files"
-            current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
-            
-            if not current_snapshot_file.exists():
-                print(f"ERROR: {current_snapshot_file} not found")
-                print("Please run create_snapshot.py first")
-                sys.exit(1)
-            
-            with open(current_snapshot_file, 'r') as f:
-                content = f.read().strip()
-                if "snapshot_id = " in content:
-                    snapshot_id = content.split("snapshot_id = ")[1].strip()
-                else:
-                    print(f"ERROR: Invalid format in {current_snapshot_file}")
-                    sys.exit(1)
-        
-        print("=" * 70)
-        print("UPDATE SNAPSHOT - Upload Corrected Data to Server")
-        print("=" * 70)
-        print(f"\nSnapshot ID: {snapshot_id}")
 
-        # 2. Load corrected snapshot data via StorageManager
-        storage = get_storage()
-        snapshot_data = storage.load_json(f"{snapshot_id}/snapshot-data.json")
-        if snapshot_data is None:
-            print(f"ERROR: snapshot-data.json not found for snapshot {snapshot_id}")
+    # 1. Snapshot-ID bestimmen - reine CLI-Zustaendigkeit, kein Knoten braucht das.
+    snapshot_id = args.snapshot_id
+    if not snapshot_id:
+        runtime_files_dir = Path(__file__).parent / "runtime-files"
+        current_snapshot_file = runtime_files_dir / "current_snapshot.txt"
+
+        if not current_snapshot_file.exists():
+            print(f"ERROR: {current_snapshot_file} not found")
+            print("Please run create_snapshot.py first")
             sys.exit(1)
 
-        data_json = json.dumps(snapshot_data, ensure_ascii=False)
-        print(f"  Data loaded ({len(data_json):,} characters)")
+        with open(current_snapshot_file, 'r') as f:
+            content = f.read().strip()
+            if "snapshot_id = " in content:
+                snapshot_id = content.split("snapshot_id = ")[1].strip()
+            else:
+                print(f"ERROR: Invalid format in {current_snapshot_file}")
+                sys.exit(1)
 
-        # 3. Load metadata (name and comment)
-        metadata = parse_metadata(snapshot_id=snapshot_id)
-        print(f"  Name: {metadata['name']}")
-        print(f"  Comment: {metadata['comment'] or '(none)'}")
-        
-        # 5. Upload to server
-        api = SmartPlanningAPI()
-        
-        response_data = api.update_snapshot(
-            snapshot_id=snapshot_id,
-            name=metadata['name'],
-            comment=metadata['comment'],
-            data_json=data_json
-        )
-        
-        print("\n" + "=" * 70)
+    print("=" * 70)
+    print("UPDATE SNAPSHOT - Upload Corrected Data to Server")
+    print("=" * 70)
+    print()
+    print(f"Snapshot ID: {snapshot_id}")
+
+    ergebnis = run_upload(snapshot_id)
+
+    # BEKANNTE, FACHLICH FOLGENLOSE CLI-ABWEICHUNG (20.08.2026, Befund F3/BA-026).
+    # Auf dem Fehlerpfad erscheint die Zeile "Upload result saved (...)" jetzt VOR dem
+    # Fehlerbanner statt danach. Ursache: `save_upload_result()` liegt in `run_upload()` -
+    # dort muss es liegen, damit Bedingung C (Knoten 7) dasselbe Artefakt schreibt wie A und B.
+    # Die CLI besitzt die Reihenfolge deshalb nicht mehr.
+    #
+    # Bewusst NICHT wiederhergestellt: das ginge nur, indem entweder die Logik wieder
+    # dupliziert wird (genau der Befund, der hier behoben wurde) oder ein gemeinsamer Helfer
+    # einen Druckunterdrueckungs-Schalter bekommt - beides ein Eingriff aus rein kosmetischem
+    # Grund. Geprueft, dass es folgenlos ist: Zeilenmenge, Exit-Code (1) und erzeugtes
+    # Artefakt (`upload-result.json`) sind unveraendert, und niemand parst dieses stdout -
+    # `sp_agent._read_snapshot_metadata_from_stdout()` gilt nur fuer `rename_snapshot` und
+    # `identify_snapshot`, sonst wertet der Agent ausschliesslich `returncode` aus.
+    if ergebnis["uploaded"]:
+        print()
+        print("=" * 70)
         print("SUCCESS - Snapshot updated on server!")
         print("=" * 70)
-        print(f"\nServer response:")
-        print(json.dumps(response_data, indent=2))
-        
-        # Save upload result
-        save_upload_result(snapshot_id, success=True, response_data=response_data)
-
-        # Append to metadata.txt for LLM context
-        append_upload_to_metadata(snapshot_id, response_data)
-        
-        print("\nNext step: Run validate_snapshot.py to verify corrections")
-        
+        print()
+        print("Server response:")
+        print(json.dumps(ergebnis["response"], indent=2))
+        print()
+        print("Next step: Run validate_snapshot.py to verify corrections")
         sys.exit(0)
-        
-    except requests.exceptions.HTTPError as e:
-        print("\n" + "=" * 70)
+
+    # Fehlerpfade - wortgleich zur Fassung vor F3.
+    art = ergebnis.get("fehler_art")
+    if art == "kein_snapshot":
+        print(f"ERROR: {ergebnis['error']}")
+    elif art == "http":
+        print()
+        print("=" * 70)
         print("ERROR: HTTP Error during upload")
         print("=" * 70)
-        print(f"Status Code: {e.response.status_code}")
-        print(f"Response: {e.response.text}")
-        
-        # Save error result
-        if 'snapshot_id' in locals():
-            save_upload_result(snapshot_id, success=False, error=str(e))
-        
-        sys.exit(1)
-        
-    except Exception as e:
-        print("\n" + "=" * 70)
+        print(f"Status Code: {ergebnis.get('http_status')}")
+        print(f"Response: {ergebnis.get('http_text')}")
+    else:
+        print()
+        print("=" * 70)
         print("ERROR: Upload failed")
         print("=" * 70)
-        print(f"{type(e).__name__}: {str(e)}")
-        
-        # Save error result
-        if 'snapshot_id' in locals():
-            save_upload_result(snapshot_id, success=False, error=str(e))
-        
-        sys.exit(1)
+        print(f"{ergebnis.get('fehler_typ')}: {ergebnis.get('fehler_text')}")
+    sys.exit(1)
 
 
 if __name__ == "__main__":
