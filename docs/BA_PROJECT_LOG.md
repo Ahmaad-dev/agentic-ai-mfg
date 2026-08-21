@@ -6084,3 +6084,148 @@ existiert und ist validiert, die Expertenvorlage entsteht aber erst aus Messerge
     still — dieselbe Klasse wie die fünf Marker aus BA-053.
 - **Offen / nächstes:** **H5 — die Hauptmessung.** 255 Läufe, randomisiert, nach diesem
   Einfrieren. Danach AP-I und AP-X.
+
+---
+
+### [BA-058] 2026-08-21 — Dry-Run findet fehlenden Messumfang: 150 statt 255 · Ground Truth für die 7 kombinierten Fälle rekonstruiert
+- **Status:** done — Messkatalog vollständig, **G5 von 12:39 Uhr ist überholt**, neuer G5 steht aus
+- **Kapitelbezug:** K5 *(Testfallkatalog, Ground-Truth-Methode)*, K6, K7, K8
+- **Literatur:** —
+- **Changed files:** `app/eval/run_ba_abc_suite.py` *(KATALOGE, `lade_katalog()`)*,
+  `app/eval/test_messkatalog_h5.py` *(neu)*,
+  `data/snapshots/pt4-manipulated_snapshots/kombinierte-fehler-snapshots/expected-results.json` *(neu)*,
+  `data/archive/ba-h5-messplan/` *(neu)*, Dokumentation.
+  **Kein Prompt, keine Regelkarte, keine Produktlogik, keine A/B/C-Semantik geändert.**
+- **Status der Läufe:** **kein Messlauf.** Ausschliesslich Trockenläufe und Katalogprüfung —
+  keine Pipeline, kein LLM, kein Server.
+
+## Der Befund
+
+Der H5-Trockenlauf mit dem eingefrorenen Stand ergab:
+
+```
+Messplan: 150 Laeufe, Seed 20260821, 5x fuer A/B/C
+je Bedingung: {'A': 50, 'B': 50, 'C': 50}
+```
+
+**150 statt 255.** `KATALOGE["mess"]` zeigte nur auf `isolated-error-snapshots/` — und der hat
+**10** Fälle. Die 17 setzen sich laut Masterplan Kap. 13.1 anders zusammen:
+
+> `isolated-error-snapshots/` → 10 · `kombinierte-fehler-snapshots/` → 10, davon sind
+> **01–03 Einzelfehler**, die I01–I03 wiederholen. **→ 17 distinkte Fälle, davon 3 redundant.**
+
+Der zweite Katalog fehlte im Runner vollständig — und hatte **keine
+`expected-results.json`**, konnte also gar nicht geladen werden.
+
+> **Der Dry-Run hat genau das geleistet, wofür er da ist.** Ohne ihn wäre die Hauptmessung mit
+> **41 % zu wenig Fällen** gelaufen — und ausgerechnet ohne die Mehrfehlerfälle, bei denen der
+> Masterplan den Effekt **primär** erwartet.
+
+## Freeze-Semantik: der alte G5 ist überholt, es gibt keine Nachmessung
+
+**Unter dem G5 von 12:39 Uhr wurde kein einziger H5-Messlauf durchgeführt.** Es existiert kein
+Messwert, der von der Korrektur betroffen wäre. Damit ist dies **keine Nachmessung**, sondern
+eine Korrektur **vor Beginn der Datenerhebung**.
+
+**BA-057 bleibt unverändert stehen** — der Einfrierzeitpunkt, die Hashes und der Stand sind
+korrekt protokolliert und werden nicht rückwirkend verändert. Er ist ab jetzt als *überholt vor
+der ersten Datenerhebung* gekennzeichnet. Ein neuer verbindlicher G5 wird nach Abnahme gesetzt.
+
+## Schritt 1 — Ground-Truth-Herkunft, unabhängig belegt
+
+`generate-error-snapshots.ps1` deklariert je Injektion `Path / Anchor / Before / After`.
+Das ist eine **Behauptung** — geprüft wurde sie per **Deep-Diff** zwischen
+`ok-snapshot.json` und jedem Fehler-Snapshot:
+
+| Datei | deklariert | im Diff | |
+|---|---|---|---|
+| `snapshot-error-01…03` | je 1 | je 1 | ✔ |
+| `snapshot-error-04…07` | je 2 | je 2 | ✔ |
+| `snapshot-error-08, 09` | je 3 | je 3 | ✔ |
+| `snapshot-error-10` | 4 | 4 | ✔ |
+
+**Die Menge der abweichenden JSON-Pfade entspricht in allen zehn Fällen exakt der deklarierten
+Menge** — nicht mehr, nicht weniger, und alle Werte stimmen. Damit hängt die Ground Truth an
+den **Daten**, nicht am Skript und nicht am untersuchten System.
+
+**Nicht verwendet:** `pt4-combined-results.json` (PT4-*Ergebnisse*, kein Ground Truth), keine
+Modellantworten, keine erwarteten Systemausgaben.
+
+## Schritt 2 — Mehrfach-Ground-Truth
+
+Neu: `kombinierte-fehler-snapshots/expected-results.json`, **7 Fälle** `K04`–`K10`,
+**18 Korrekturen**, im Format des bestehenden isolierten Katalogs.
+
+| Fall | Fehler | Korrekturen | Validatoren |
+|---|---|---|---|
+| K04 | 2 | 2 | `unique_ids`, `demand_article_ids` |
+| K05 | 2 | 2 | `density_values`, `work_plan_ids` |
+| K06 | 2 | 2 | `packaging_references`, `unique_ids` |
+| K07 | 2 | 2 | `equipment_predecessor_references`, `equipment_worker_qualification_compatibility` |
+| K08 | 3 | 3 | `unique_ids`, `demand_article_ids`, `density_values` |
+| K09 | 3 | 3 | `work_plan_ids`, `packaging_references`, `packaging_equipment_compatibility_references` |
+| **K10** | **3** | **4** | `unique_ids`, `equipment_predecessor_references`, `start_end_operation_existence` |
+
+> **K10 ist der Fall, der still verlorengegangen wäre:** drei Fehler, aber **vier**
+> Korrekturen — `E12` verlangt *zwei* Zeitwerte (`rampUpTime` **und** `netTimeFactor`). Wer
+> „ein Fehler = eine Korrektur" annimmt, misst hier falsch.
+
+**Braucht es neue Bewertungslogik? Nein — und das ist geprüft, nicht vermutet.** `changes` ist
+im bestehenden Format **bereits eine Liste**, und der Runner reicht sie unverändert nach
+`artefakte.ground_truth`. Mehr noch: **der isolierte Katalog führt seit jeher selbst einen
+Mehrfachfall — I08** (derselbe HE01-Fall, zwei Zeitwerte). Mehrfach-Ground-Truth ist also nicht
+neu, sondern war die ganze Zeit da.
+
+Zusätzlich je Fall `expectedErrors[]` mit Validator, Typ, erwarteter Meldung und Korrektur —
+die singulären Felder des isolierten Formats (`expectedContext`, `expectedMessageContains`)
+können mehrere Validatoren nicht abbilden und hätten den Fall auf einen Fehler reduziert.
+
+## Schritt 3 — der finale Messkatalog
+
+**10 isolierte (`I01`–`I10`) + 7 kombinierte (`K04`–`K10`) = n = 17.**
+
+`snapshot-error-01…03` stehen **gar nicht erst** in der Ground-Truth-Datei — mit Begründung im
+Feld `ausgeschlossen`. Sie können damit nicht versehentlich mitgezählt werden.
+
+## Schritt 4 — Runner
+
+`KATALOGE` trägt jetzt je Katalog eine **Liste** von Verzeichnissen; `lade_katalog()` sammelt
+die Fälle darüber hinweg und **wirft bei doppelten Fall-Codes** — zwei Kataloge mit derselben
+Kennung wären stillschweigend ein Fall zu wenig, also genau die Lücke, die hier aufgefallen ist.
+
+Unverändert: A/B/C-Semantik, N=5, Seed `20260821`, Kategorien, 29-Feld-Schema, `MEMORY_MODE`,
+Prompts, Regeln, Produktlogik.
+
+## Schritt 5 — Validierung, ausschliesslich Trockenlauf
+
+`app/eval/test_messkatalog_h5.py`, **31/31**:
+
+* Katalog **17** Fälle, Codes eindeutig, 10 isoliert + 7 kombiniert, keine Fremdcodes
+* `snapshot-error-01…03` **nicht** als Messfälle geführt, Ausschluss begründet
+* Ground Truth für **alle 17** ladbar, alle Snapshot-Dateien vorhanden, **29 Korrekturen** gesamt
+* **8 Mehrfachfälle** (I08 + die sieben kombinierten), K10 mit 4 Korrekturen
+* Plan **255** Positionen, A/B/C je **85**, Positionen lückenlos 1..255
+* **keine doppelten und keine fehlenden** (Fall, Bedingung, Wiederholung)-Tripel
+* jeder Fall je Arm genau **5×**, jeder Fall in allen drei Armen
+* Seed **20260821**, Reihenfolge mit 255 Einträgen im Kopf
+
+**Archiviert:** `data/archive/ba-h5-messplan/h5-messplan-trockenlauf-20260821T105431Z.json` —
+die vollständige 255er-Reihenfolge. **Gesamtstand: 257 Assertions über 9 Dateien, alle grün.**
+
+- **Verifikation:** Deep-Diff gegen den sauberen Snapshot für alle zehn Dateien; HE01-Index am
+  Snapshot nachgesehen (`workItemKey` auf Index 3); Trockenlauf; Katalogtest; Gesamtlauf.
+- **Was NICHT funktioniert hat:**
+  * **Mein Diff meldete zunächst eine Abweichung bei `snapshot-error-10`** — der Generator
+    schreibt `workItemConfigs[HE01]` als *logisches* Label, im JSON ist es eine **Liste** und
+    HE01 liegt auf Index 3. Kein Datenproblem, sondern meine Notation. Am Snapshot geprüft:
+    Index 3 trägt `workItemKey: "HE01"`, `rampUpTime: 120`, `netTimeFactor: 0.3`.
+  * **Meine Testerwartung „28 Korrekturen" war falsch — es sind 29.** `I08` im *isolierten*
+    Katalog hat schon immer **zwei** Korrekturen. Ich hatte „10 isolierte = 10 Korrekturen"
+    angenommen, statt nachzuzählen. Der Fehler war harmlos, weil der Test ihn sofort meldete —
+    aber er zeigt, dass auch der **isolierte** Katalog nie „ein Fehler = eine Korrektur" war.
+  * **Die beiden Kataloge benutzen unterschiedliche Pfadnotation** — der isolierte semantisch
+    (`articles[articleId=100005].workItemConfigs[HE01]`), der neue indexbasiert
+    (`articles[0].workItemConfigs[3]`). **Bewusst nicht vereinheitlicht:** eine nachträgliche
+    Umschreibung von Ground-Truth-Pfaden wäre eine Normalisierung ohne unabhängigen Beleg. Im
+    Katalog unter `herkunft.pfadnotation` festgehalten — **AP-I muss beide Formen behandeln.**
+- **Offen / nächstes:** **neuen G5 setzen** (nach Abnahme), dann **H5**. Kein Messlauf gestartet.

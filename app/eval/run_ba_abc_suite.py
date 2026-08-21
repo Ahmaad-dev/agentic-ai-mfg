@@ -56,10 +56,47 @@ from pathlib import Path
 APP = Path(__file__).resolve().parent.parent
 SP = APP / "tools" / "smart-planning"
 SNAP = APP.parent / "data" / "snapshots"
+#: Ein Katalog kann aus MEHREREN Verzeichnissen bestehen. `mess` tut das seit BA-058:
+#: der Dry-Run vor der ersten Datenerhebung zeigte **150 statt 255 Laeufe** - hier stand nur
+#: der isolierte Katalog, und der hat 10 Faelle. Die 17 setzen sich anders zusammen
+#: (Masterplan Kap. 13.1):
+#:
+#:     isolated-error-snapshots/     10 Einzelfehler, 10 verschiedene Validatoren  (I01-I10)
+#:     kombinierte-fehler-snapshots/  7 distinkte Mehrfehlerfaelle                 (K04-K10)
+#:
+#: Die kombinierten Faelle 01-03 sind Einzelfehler und wiederholen die Klassen von I01-I03.
+#: Sie sind **keine unabhaengigen Messfaelle** und stehen deshalb gar nicht erst in der
+#: Ground-Truth-Datei des kombinierten Katalogs.
 KATALOGE = {
-    "pilot": SNAP / "ba-pilot-snapshots",
-    "mess": SNAP / "pt4-manipulated_snapshots" / "isolated-error-snapshots",
+    "pilot": [SNAP / "ba-pilot-snapshots"],
+    "mess": [SNAP / "pt4-manipulated_snapshots" / "isolated-error-snapshots",
+             SNAP / "pt4-manipulated_snapshots" / "kombinierte-fehler-snapshots"],
 }
+
+
+def lade_katalog(name: str):
+    """
+    Alle Faelle eines Katalogs, ueber seine Verzeichnisse hinweg.
+
+    Returns `[(fall_dict, basisverzeichnis), ...]` in Verzeichnisreihenfolge. Das Basisverzeichnis
+    muss mitgefuehrt werden, weil `fall["file"]` relativ dazu liegt.
+
+    **Doppelte Fall-Codes sind ein harter Fehler.** Zwei Kataloge mit derselben Kennung waeren
+    stillschweigend ein Fall zu wenig - genau die Sorte Luecke, die BA-058 aufgedeckt hat.
+    """
+    raus, gesehen = [], {}
+    for basis in KATALOGE[name]:
+        datei = basis / "expected-results.json"
+        if not datei.exists():
+            raise FileNotFoundError(f"Katalog {name}: {datei} fehlt")
+        for fall in json.loads(datei.read_text(encoding="utf-8"))["cases"]:
+            code = fall["code"]
+            if code in gesehen:
+                raise ValueError(f"Katalog {name}: Fall-Code {code!r} doppelt "
+                                 f"({gesehen[code]} und {basis.name})")
+            gesehen[code] = basis.name
+            raus.append((fall, basis))
+    return raus
 ARCHIV = APP.parent / "data" / "archive" / "ba-h4a"
 
 BEDINGUNGEN = {
@@ -181,9 +218,7 @@ def kind(fall: str, bedingung: str, katalog: str, wiederholung: str = "1") -> di
     # ist nicht "unbrauchbar mit Vermerk", sondern schlicht nicht vergleichbar (BA-027).
     meta = require_ba_env(f"BA-Messlauf {fall} / Bedingung {bedingung}")
 
-    basis = KATALOGE[katalog]
-    spec = json.loads((basis / "expected-results.json").read_text(encoding="utf-8"))
-    f = next(c for c in spec["cases"] if c["code"] == fall)
+    f, basis = next((c, b) for c, b in lade_katalog(katalog) if c["code"] == fall)
     daten = json.loads((basis / f["file"]).read_text(encoding="utf-8"))
 
     zeile = {k: None for k in MESSSCHEMA}
@@ -380,8 +415,7 @@ def main(argv=None):
         print("###JSON###" + json.dumps(kind(*args.kind), ensure_ascii=False, default=str))
         return 0
 
-    spec = json.loads((KATALOGE[args.katalog] / "expected-results.json").read_text(encoding="utf-8"))
-    codes = [c["code"] for c in spec["cases"]]
+    codes = [c["code"] for c, _ in lade_katalog(args.katalog)]
     if args.only:
         w = {x.strip() for x in args.only.split(",")}
         codes = [c for c in codes if c in w]

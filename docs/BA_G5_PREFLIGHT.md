@@ -1,6 +1,10 @@
 # G5-Preflight — Bereitschaft zum Einfrieren
 
-**Status: ✅ `G5 GESETZT` — eingefroren am 21.08.2026, 12:39:27 +02:00 (BA-057).**
+**Status: 🟡 `READY_FOR_G5` — der Freeze von 12:39:27 ist ÜBERHOLT (BA-058), neuer G5 steht aus.**
+
+> **Keine Nachmessung:** unter dem alten Freeze wurde **kein einziger H5-Lauf** durchgeführt.
+> Der Trockenlauf fand vor der ersten Datenerhebung, dass der Messkatalog nur 10 statt 17 Fälle
+> lud. Korrigiert in **BA-058**; **BA-057 bleibt unverändert stehen**.
 
 > Dieses Dokument hat seinen Zweck erfüllt und bleibt als **Nachweis der Bereitschaft** stehen.
 > Der Einfrierzeitpunkt und der vollständige Stand sind in **BA-057** protokolliert.
@@ -40,6 +44,7 @@ Erstellt 21.08.2026, Grundlage BA-035 bis BA-056.
 | **Root-Umgebung dokumentiert** | ✅ | `ba_env_ok=True`, `sys_prefix=…\agentic-ai-mfg\.venv`, **77 Pakete** in `requirements-frozen.txt` | — |
 | **Ground Truth der MESSfälle gehasht** | ✅ | **BA-054**: 14 + 13 Messfall-Dateien **einzeln** + Gesamthashes (`0b0a9aff…`, `5a237594…`); zuvor nur zwei Index-Dateien, davon eine ohne GT-Felder | — |
 | **Regelbasis Bedingung A eingefroren** | ✅ | `llm-validation-fix-rules.md` **in Git** *und* SHA `a3c14bd1…` (36.165 Byte) — deckungsgleich mit BA-016 B3.1 | — |
+| **Messkatalog vollständig: n=17** | ✅ | **BA-058**: 10 isolierte + 7 kombinierte (`K04`–`K10`); Ground Truth per **Deep-Diff** gegen `ok-snapshot.json` belegt; `test_messkatalog_h5.py` **31/31** | — |
 | **Keine Messfälle verbraucht** | ✅ | alle Läufe auf `ba-pilot-snapshots`; kein `I01…I10` in den Rohdaten; G2 Exit 0 | — |
 | **Keine offenen Produkt-/Prompt-/Regeländerungen** | ✅ | 0 Promptänderungen, 0 Regelkartenänderungen (BA-050, an BA-Markern belegt); AP-G ohne offene Punkte ausser G5a/G5 | — |
 | **H2 Wiederholungen fixiert** | ✅ | **N=5** verbindlich (BA-055) für **alle drei Arme** (BA-056); **255 Läufe** (85+85+85); Wiederholungsnr. in `lauf_metadaten`, Schema unverändert | — |

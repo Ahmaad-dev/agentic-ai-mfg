@@ -577,7 +577,15 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
   > weil diese Artefakte **nicht** unter Versionskontrolle stehen (`data/` ist ignoriert) und
   > Git sie deshalb nicht abdeckt. Alles Übrige deckt der Commit ab.
 
-- [x] ██ **G5 — EINGEFROREN am 21.08.2026, 12:39:27 +02:00** ██ *(= 2026-08-21T10:39:28Z,
+- [ ] 🟡 **G5 — der Freeze von 12:39:27 ist ÜBERHOLT (BA-058), neuer G5 steht aus**
+
+  > **Kein Messwert betroffen, also KEINE Nachmessung.** Unter dem alten Freeze wurde **kein
+  > einziger H5-Lauf** durchgeführt. Der Trockenlauf fand vor der ersten Datenerhebung, dass
+  > `KATALOGE["mess"]` nur 10 statt 17 Fälle lud — **150 statt 255 Läufe**. Korrigiert in
+  > BA-058: die 7 distinkten kombinierten Fälle `K04`–`K10` haben jetzt maschinenlesbare, per
+  > Deep-Diff belegte Ground Truth. **BA-057 bleibt unverändert stehen.**
+
+- [x] ~~██ **G5 — EINGEFROREN am 21.08.2026, 12:39:27 +02:00** ██~~ *(überholt, siehe oben)* *(= 2026-08-21T10:39:28Z,
       freigegeben durch den Nutzer, dokumentiert in **BA-057**)*
 
   > **Ab diesem Zeitpunkt ist jede Änderung an Regelwerk, Graphstruktur, Prompts, Parametern
@@ -717,7 +725,9 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
   >   Dafür gibt es `app/core/run_metadata.py` → `require_ba_env()`: wirft `RuntimeError`,
   >   **bevor** der erste Fall läuft. Ein halb gelaufener Messsatz unter gemischten
   >   Umgebungen wäre schlimmer als gar keiner.
-- [ ] **H5** **Die eigentliche Messung.** Alle 17 Fälle × **drei Bedingungen** (Masterplan Kap. 7.1):
+- [ ] **H5** **Die eigentliche Messung.** **Katalog seit BA-058 vollständig:** 10 isolierte
+      (`I01`–`I10`) + 7 distinkte kombinierte (`K04`–`K10`) = **n = 17**; `snapshot-error-01…03`
+      ausgeschlossen (redundant zu I01–I03). **255 Läufe.** Alle 17 Fälle × **drei Bedingungen** (Masterplan Kap. 7.1):
       **A** Monolith-Pipeline + `RULEBOOK_MODE=monolith` · **B** Monolith-Pipeline + `cards`
       (Kontrollarm, realer Ist-Zustand) · **C** Graph + `cards`.
       **Wiederholungen (UF2) für alle drei Arme, je 5** — geändert 21.08. (BA-056), damit
