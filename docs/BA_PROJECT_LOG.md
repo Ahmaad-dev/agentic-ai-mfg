@@ -77,6 +77,11 @@ Zwei Regeln, die aus PT4 mitgenommen werden, weil sie dort Geld und Zeit gekoste
 
 ## Kapitelregister — Einstieg beim Schreiben
 
+> **Für die Synthese: `docs/BA_METHODISCHE_BEFUNDE.md`** (BA-060). Dort stehen die Befunde
+> aus BA-035 bis BA-059 **nach Kapitel sortiert**, jeder mit Verweis hierher — inklusive der
+> acht wiederkehrenden Arbeitsmuster für Kapitel 8. Dieses Register bleibt der Einstieg in die
+> Einträge selbst.
+
 Beim Verfassen eines Kapitels hier beginnen, nicht oben im Protokoll.
 **Bei jedem neuen Eintrag mitpflegen.**
 
@@ -6333,3 +6338,86 @@ der alles gleich findet, besteht jeden Positivtest.
     statt gegen eine Auswahl.
 - **Offen / nächstes:** **neuen G5 setzen** (nach Abnahme), dann **H5**. Keine weiteren
   Vorbereitungsbaustellen.
+
+---
+
+### [BA-060] 2026-08-21 — Analysewerkzeuge gesichert · methodische Befunde nach Kapitel sortiert
+- **Status:** done — Dokumentation und Werkzeugsicherung. **Neuer G5 steht weiterhin aus.**
+- **Kapitelbezug:** K3, K5, K6, K7, K8 *(dieser Eintrag ist selbst ein Einstieg für alle)*
+- **Literatur:** —
+- **Changed files:** `docs/BA_METHODISCHE_BEFUNDE.md` *(neu)*;
+  `app/eval/{verify_ground_truth,preflight_messrunner,g5a_messstand_festhalten}.py` *(neu,
+  aus dem Scratchpad übernommen)*.
+  **Kein Produktcode, kein Prompt, keine Regel, kein Messlauf.**
+
+## Anlass: drei Beweismittel lagen ungesichert
+
+Die Analyse dieser Arbeitsphase entstand in **38 Scratchpad-Skripten**. Die meisten sind
+Einmal-Patches — ihr Ergebnis steht im Repository und im Protokoll, sie werden nicht gebraucht.
+**Drei sind es sehr wohl**, und sie lagen in einem sitzungsgebundenen Temp-Verzeichnis:
+
+| Werkzeug | Warum es bleiben muss |
+|---|---|
+| `verify_ground_truth.py` | **ist selbst das Beweismittel** für BA-058: der Deep-Diff belegt die Ground Truth unabhängig vom Generator. Ohne das Skript ist der zentrale Beleg nicht nachrechenbar. |
+| `preflight_messrunner.py` | **wird vor der Messung erneut gebraucht** — 35 Kriterien am Runner |
+| `g5a_messstand_festhalten.py` | **wird für den finalen G5 erneut gebraucht** — erzeugt das Lock-Artefakt |
+
+> **Das ist genau die Lücke, die dieses Projekt schon einmal getroffen hat.** In BA-044 gingen
+> die Regressionsskripte 1 und 2 im Scratchpad verloren; R1 galt danach als *unbelegt*, bis es
+> neu gebaut war. Denselben Fehler ein zweites Mal zu machen — mit dem Skript, das die Ground
+> Truth der Hauptmessung belegt — wäre schwer zu erklären.
+
+Übernommen, Pfadkonstanten generalisiert (`Path(__file__)` statt hartkodiert), aus dem Repo
+heraus laufen lassen: alle drei laufen.
+
+## Beim Übernehmen einen dauerhaften Fehlalarm gefunden
+
+`verify_ground_truth.py` meldete **`>>> NICHT VOLLSTAENDIG REKONSTRUIERBAR <<<`** für
+`snapshot-error-10` — obwohl alles stimmt. Ursache: seine Pfadnormalisierung ersetzte nur die
+Klammern, sodass `workItemConfigs[HE01]` als `workItemConfigs.HE01` stehen blieb, während der
+Diff `workItemConfigs.3` liefert. Reine Notation, in BA-058 bereits am Snapshot geklärt
+(Index 3 trägt `workItemKey='HE01'`).
+
+Behoben durch **Wiederverwendung von `pfadaufloesung.aufloesen()`** — keine neue Logik. Das
+Werkzeug meldet jetzt `ALLE SIEBEN REKONSTRUIERBAR`, Exit 0.
+
+> **Ein Werkzeug, das dauerhaft falschen Alarm schlägt, wird ignoriert — und dann übersieht man
+> den echten.** Als Wegwerfskript war das egal; als versioniertes Beweismittel nicht.
+
+## `docs/BA_METHODISCHE_BEFUNDE.md`
+
+Das Protokoll ist chronologisch — die richtige Ordnung für ein Protokoll, die falsche für eine
+Arbeit. Das neue Dokument sortiert die Befunde aus BA-035 bis BA-059 **nach Kapitel**, jeder
+mit Verweis auf den Eintrag, in dem er entstanden ist. Es wiederholt das Protokoll nicht und
+ersetzt es nicht.
+
+**Aufbau:**
+
+* **Die drei wertvollsten Befunde** — falscher Wert ≠ Halluzination · zwei von vier Kategorien
+  zeigten auf das Instrument · die Fehlerinjektion hat eine benennbare Reichweitengrenze
+* **Befunde nach Kapitel** — K3, K5, K6, K7, K8, je als Tabelle mit Beleg
+* **Was das Projekt über sein eigenes Arbeiten gelernt hat** — acht wiederkehrende Muster,
+  darunter: fehlende Evidenz als Unbedenklichkeit gelesen · ein grüner Nachbarfall belegt den
+  Nachbarn nicht · **sechsmal am falschen Merkmal gemessen** · Zeitstempel sind kein
+  Änderungsnachweis · eine Attrappe, die alles akzeptiert, prüft nichts · jeder Fix braucht
+  eine Negativkontrolle · vier Reissbrett-Entwürfe in Folge daneben · der Dry-Run hat sich
+  bezahlt gemacht
+* **Werkzeuge**, die den Belegen zugrunde liegen
+
+**Warum dieser Abschnitt der wichtigste ist:** Kapitel 8 und die Limitationen leben von dem,
+was **nicht** funktioniert hat — und genau das lässt sich später nicht rekonstruieren. Die
+acht Muster stehen verstreut über sechzehn Protokolleinträge; als Muster erkennbar werden sie
+erst nebeneinander.
+
+- **Verifikation:** alle drei übernommenen Werkzeuge aus dem Repo heraus ausgeführt;
+  `verify_ground_truth.py` nach der Korrektur mit Exit 0; Gesamttestlauf unverändert
+  **280 Assertions über 10 Dateien**, alle grün.
+- **Was NICHT funktioniert hat:**
+  * **Der Fehlalarm im übernommenen Werkzeug wäre beinahe mitversioniert worden.** Ich hatte
+    ihn in BA-058 erklärt und abgehakt — als Wegwerfskript zu Recht. Beim Übernehmen ins Repo
+    ändert sich die Anforderung: ein Dauerwerkzeug darf nicht dauerhaft falsch melden. Das war
+    mir beim Kopieren zunächst nicht präsent.
+  * **35 der 38 Scratchpad-Skripte werden nicht übernommen** — bewusst. Einmal-Patches, deren
+    Ergebnis im Repository steht; sie zu versionieren erzeugte eine zweite, veraltende
+    Beschreibung desselben Zustands. Was sie taten, steht im jeweiligen Protokolleintrag.
+- **Offen / nächstes:** **neuen G5 setzen** (nach Abnahme), dann **H5**.
