@@ -4,8 +4,13 @@
 
 > **Aktualisiert 21.08. (BA-054).** Der zuvor benannte Vorbehalt — Working Tree nicht
 > sauber — ist **aufgelöst**: der Messstand liegt jetzt als Commit `61a3f51` auf
-> Branch `ba-messstand-g5`, der Tree ist leer, und G5a zeigt auf diesen Commit.
-Erstellt 21.08.2026, Grundlage BA-035 bis BA-052.
+> Branch `ba-messstand-g5`, der Tree ist leer, und G5a zeigt darauf.
+>
+> **Zwei Commits, ein Codestand:** `61a3f51` fixiert den **Messcode** (53 Dateien),
+> `f0e5f41` legt nur die **Dokumentation** dazu (BA-054, Preflight). Am gemessenen Code
+> ändert der zweite Commit nichts; `lock.json` führt den jeweils aktuellen HEAD.
+
+Erstellt 21.08.2026, Grundlage BA-035 bis BA-054.
 
 > **Was dieses Dokument ist und was nicht.** Es prüft, ob alle Voraussetzungen für G5 erfüllt
 > *wären* — es setzt den Einfrierzeitpunkt **nicht**. Der Freeze ist eine Abnahmeentscheidung
@@ -54,7 +59,8 @@ nicht umbenannt.
 
 ## Was nach der Abnahme zu tun ist
 
-1. Entscheidung zum Working Tree (committen oder Lock-Artefakt als Delta akzeptieren).
+1. ~~Entscheidung zum Working Tree~~ — **erledigt (BA-054)**: Messstand als Commit fixiert,
+   Tree sauber.
 2. **G5 setzen** — Einfrierzeitpunkt mit Datum und den Hashes aus `lock.json` protokollieren.
 3. Ab dann: **AP-H**, und jede Änderung ist eine Nachmessung.
 
