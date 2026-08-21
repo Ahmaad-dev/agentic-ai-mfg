@@ -1,6 +1,11 @@
 # G5-Preflight — Bereitschaft zum Einfrieren
 
-**Status: `READY_FOR_G5`. Der formale Freeze ist NICHT gesetzt.**
+**Status: ✅ `G5 GESETZT` — eingefroren am 21.08.2026, 12:39:27 +02:00 (BA-057).**
+
+> Dieses Dokument hat seinen Zweck erfüllt und bleibt als **Nachweis der Bereitschaft** stehen.
+> Der Einfrierzeitpunkt und der vollständige Stand sind in **BA-057** protokolliert.
+> **Ab dem Freeze ist jede Änderung an Regelwerk, Graphstruktur, Prompts, Parametern oder
+> Umgebung eine Nachmessung.**
 
 > **Aktualisiert 21.08. (BA-054).** Der zuvor benannte Vorbehalt — Working Tree nicht
 > sauber — ist **aufgelöst**: der Messstand liegt jetzt als Commit `61a3f51` auf

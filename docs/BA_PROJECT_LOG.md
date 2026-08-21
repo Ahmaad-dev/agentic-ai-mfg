@@ -5988,3 +5988,99 @@ geladen. Trockenlauf mit drei Pilotfällen: 45 Läufe, `{A: 15, B: 15, C: 15}`.
     Prüfung auf betroffene Stellen (`ohne Wiederholungen`, `nur UF1`) fand **vier** Fundstellen
     in drei Dateien — drei habe ich nachgezogen, die vierte ist oben gemeldet.
 - **Offen / nächstes:** `CLAUDE.md` Zeile 126, dann **G5**. **H5 nicht gestartet.**
+
+---
+
+### [BA-057] 2026-08-21 — ██ G5: EINGEFROREN ██ — ab hier ist jede Änderung eine Nachmessung
+- **Status:** done — **AP-G vollständig abgeschlossen.** Nächstes: **H5**, die Hauptmessung
+- **Kapitelbezug:** K5 *(Forschungsdesign, Kontrollbedingungen, Reproduzierbarkeit)*, K6, K7
+- **Literatur:** —
+- **Changed files:** `docs/BA_ARBEITSPAKETE.md` *(G5, X2)*, `docs/BA_G5_PREFLIGHT.md`,
+  `docs/BA_PROJECT_LOG.md`. **Kein Produktcode, kein Prompt, keine Regelkarte, kein Testlauf.**
+
+## Einfrierzeitpunkt
+
+```
+2026-08-21  12:39:27 +02:00        (= 2026-08-21T10:39:28Z)
+```
+
+**Freigegeben durch den Nutzer** nach dem Preflight in `docs/BA_G5_PREFLIGHT.md`.
+
+## Was eingefroren ist
+
+| | Stand |
+|---|---|
+| **Codestand** | Commit **`93ad674`** — der letzte, der `app/` berührt hat. Alles danach ist reine Dokumentation. |
+| **HEAD beim Einfrieren** | `beae011` auf Branch `ba-messstand-g5`, Working Tree **sauber** |
+| **Graphstruktur** | **9 Knoten**, 12 Kanten — am kompilierten Graphen nachgezählt, nicht aus der Doku |
+| **Regelkarten** | **14** Stück · Gesamt-SHA `4d380884…f658` |
+| **Monolith-Regelwerk (Bedingung A)** | `llm-validation-fix-rules.md`, 36.165 Byte · SHA `a3c14bd1…b4b1` — **identisch mit BA-016 B3.1**, seit April unverändert |
+| **Messkatalog isoliert** | **14** Dateien · Gesamt-SHA `0b0a9aff…da76` |
+| **Messkatalog kombiniert** | **13** Dateien · Gesamt-SHA `5a237594…cedb` |
+| **Referenz-Snapshot** | SHA `b429ba26…57ac` |
+| **Pilot-Ground-Truth** | SHA `6c4c3bb4…2767` |
+| **Modell** | `gpt-4.1` · API `2025-01-01-preview` · `temperature=0.3` |
+| **Umgebung** | Wurzel-`.venv`, **77 Pakete**, `requirements-frozen.txt`; `ba_env_ok=True` |
+| **Prompts** | unverändert — **0 Promptänderungen** während der gesamten Pilotphase (BA-050, an BA-Markern im Code belegt, nicht an Zeitstempeln) |
+
+**Vollständiges Lock-Artefakt:**
+`data/archive/ba-umgebung-eingefroren-20260821/{lock.json, requirements-frozen.txt}`
+
+## Die Messvorschrift, die ab jetzt gilt
+
+| | |
+|---|---|
+| **Bedingungen** | **A** `monolith`+`monolith` · **B** `monolith`+`cards` · **C** `graph`+`cards` |
+| **Fälle** | **17** |
+| **Wiederholungen** | **5 je Fall, in allen drei Armen** (BA-055, BA-056) |
+| **Umfang** | **255 Läufe** — A 85 · B 85 · C 85 |
+| **Reihenfolge** | randomisiert, Seed **`20260821`**, Seed und erzeugte Reihenfolge gehen in die Rohdaten |
+| **Schalter** | `MEMORY_MODE=off`, `HUMAN_IN_THE_LOOP=false`, je Bedingung ein **eigener Prozess** |
+| **Messschema** | **29 Felder**, in allen Zeilen identisch |
+| **Kategorie 4** | für A, B und C aus **derselben Funktion** (`kategorie4.py`); `GraphState` bei C nur Cross-Check |
+| **Audit-Report** | **nicht** Bestandteil der Messung — kein Aufruf, kein Import (AST-belegt) |
+
+> ⚠ **`n` bleibt 17.** Die 255 Läufe sind **Within-Case**-Wiederholungen. 255 ergibt nicht
+> n=255, und 5 × 17 nicht n=85. Jede Aussage über Halluzinationsraten hat die Fallzahl **17**.
+
+## Was der Freeze bedeutet
+
+**Ab diesem Zeitpunkt ist jede Änderung an Regelwerk, Graphstruktur, Prompts, Parametern oder
+Umgebung eine Nachmessung** — und muss als solche gekennzeichnet werden (harte Regel 5). Das
+gilt auch für Änderungen, die offensichtlich Verbesserungen wären: nach dem Sehen der
+Ergebnisse nachzujustieren ist genau der Fehler, den der Einfrierzeitpunkt verhindert.
+
+**Nicht eingefroren** sind: die Auswertungsschicht (AP-I), die Expertenmaterialien (AP-X) und
+das Protokoll. Sie erzeugen keine Messwerte.
+
+## Belege, auf denen der Freeze steht
+
+* **G3** abgeschlossen (BA-049) — 7 von 10 Pilotzielen real belegt, 3 begründet nicht
+* **G4** abgeschlossen (BA-050) — `BA_G4_PILOTPHASE_ABSCHLUSS.md`, keine Inkonsistenz
+* **H4a** abgeschlossen (BA-051/052) — Runner-Preflight **35/35**
+* **H2/H3/H4** abgeschlossen (BA-055/056) — vor dem Freeze, weil selbst messrelevant
+* **G5a** abgeschlossen (BA-053/054) — sechs Punkte, Lock auf `beae011`
+* **Regressionen** — **226 Assertions** über 8 Dateien, alle grün
+* **0 Promptänderungen · 0 Regelkartenänderungen · kein Messfall verbraucht**
+
+## Nebenkorrektur: X2
+
+Bei der Schlussdurchsicht der Arbeitspakete fiel auf, dass **X2** („Variantenneutrales
+Präsentationsformat") auf `[ ]` stand, obwohl `app/core/ergebnis_format.py` vollständig gebaut
+und in **F5 für beide Bedingungen erprobt** ist. Auf `[~]` korrigiert, nicht auf `[x]`:
+`aus_pipeline_ergebnis()` und `als_text()` werden derzeit **nirgends aufgerufen** — das Format
+existiert und ist validiert, die Expertenvorlage entsteht aber erst aus Messergebnissen.
+
+- **Verifikation:** Einfrierzeitpunkt aus der Systemzeit (lokal und UTC); Codestand über
+  `git log -1 -- app/`; Knotenzahl am **kompilierten** Graphen; alle Hashes aus dem
+  Lock-Artefakt; Working Tree vor dem Freeze-Commit leer.
+- **Was NICHT funktioniert hat:**
+  * **Meine erste Prüfung der Knotenzahl scheiterte an einem geratenen Funktionsnamen**
+    (`baue_graph` statt `build_graph`). Die 9 stammt jetzt aus dem kompilierten Graphen, nicht
+    aus der Dokumentation — was bei einer Zahl, die seit BA-023 durch alle Dokumente wandert,
+    der einzig sinnvolle Beleg ist.
+  * **X2 stand acht Arbeitspakete lang falsch auf offen.** Aufgefallen erst bei der
+    ausdrücklichen Frage, ob die Haken stimmen. Ein Statusmarker, den niemand prüft, veraltet
+    still — dieselbe Klasse wie die fünf Marker aus BA-053.
+- **Offen / nächstes:** **H5 — die Hauptmessung.** 255 Läufe, randomisiert, nach diesem
+  Einfrieren. Danach AP-I und AP-X.

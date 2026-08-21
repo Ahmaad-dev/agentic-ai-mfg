@@ -577,10 +577,30 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
   > weil diese Artefakte **nicht** unter Versionskontrolle stehen (`data/` ist ignoriert) und
   > Git sie deshalb nicht abdeckt. Alles Übrige deckt der Commit ab.
 
-- [ ] 🟡 **G5 — READY_FOR_G5, Abnahme ausstehend** *(Preflight `docs/BA_G5_PREFLIGHT.md`,
-      zwölf Kriterien erfüllt, **kein Blocker**; einziger Vorbehalt: Working Tree nicht sauber —
-      committen oder `lock.json` Punkt 2 als Delta akzeptieren)*
-      ██ **EINFRIEREN** ██ — **ab diesem Zeitpunkt bis zum Abschluss der
+- [x] ██ **G5 — EINGEFROREN am 21.08.2026, 12:39:27 +02:00** ██ *(= 2026-08-21T10:39:28Z,
+      freigegeben durch den Nutzer, dokumentiert in **BA-057**)*
+
+  > **Ab diesem Zeitpunkt ist jede Änderung an Regelwerk, Graphstruktur, Prompts, Parametern
+  > oder Umgebung eine NACHMESSUNG** und als solche zu kennzeichnen (harte Regel 5). Das gilt
+  > auch für Änderungen, die offensichtlich Verbesserungen wären.
+
+      **Eingefroren:**
+      * **Codestand** Commit `93ad674` (letzter Commit, der `app/` berührt); HEAD `beae011`,
+        Working Tree sauber, Branch `ba-messstand-g5`
+      * **Graphstruktur** 9 Knoten, 12 Kanten — am kompilierten Graphen nachgezählt
+      * **Regelkarten** 14 Stück, Gesamt-SHA `4d380884…f658`
+      * **Monolith-Regelwerk (A)** 36.165 Byte, SHA `a3c14bd1…b4b1` — identisch mit BA-016 B3.1
+      * **Messkatalog** isoliert 14 Dateien `0b0a9aff…da76` · kombiniert 13 Dateien `5a237594…cedb`
+      * **Modell** `gpt-4.1` · `2025-01-01-preview` · `temperature=0.3`
+      * **Umgebung** Wurzel-`.venv`, 77 Pakete, `ba_env_ok=True`
+      * **Prompts** unverändert — 0 Änderungen während der gesamten Pilotphase
+      * Lock-Artefakt: `data/archive/ba-umgebung-eingefroren-20260821/`
+
+      **Messvorschrift ab hier:** 17 Fälle × 3 Bedingungen × 5 Wiederholungen = **255 Läufe**,
+      randomisiert mit Seed `20260821`, 29-Feld-Schema, `MEMORY_MODE=off`, eigener Prozess je
+      Bedingung. **`n` bleibt 17** — die Wiederholungen sind Within-Case.
+
+      **Nicht eingefroren:** Auswertungsschicht (AP-I), Expertenmaterialien (AP-X), Protokoll. — **ab diesem Zeitpunkt bis zum Abschluss der
       A/B/C-Hauptmessung keine messrelevanten Änderungen** an Code, Prompts, Regeln,
       Messinstrument, Testkatalog, Ground Truth, Modellkonfiguration oder Umgebung.
       **Dokumentationsänderungen bleiben erlaubt.**
@@ -731,8 +751,12 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
 
 - [ ] **X1** Experten-Bewertungsraster: fachliche Korrektheit, Regelkonformität,
       Nachvollziehbarkeit, technische Verwendbarkeit, Folgefehler-Risiko
-- [ ] **X2** **Variantenneutrales Präsentationsformat** — nur das fachliche Endergebnis, **nie**
-      der Rohtrace (der verrät sofort die Variante)
+- [~] **X2** **Variantenneutrales Präsentationsformat** — nur das fachliche Endergebnis, **nie**
+      der Rohtrace (der verrät sofort die Variante).
+      **Format gebaut und erprobt** (`app/core/ergebnis_format.py`; deterministisch, kein LLM,
+      mit `als_text(neutral, pseudonym)`); in **F5** für beide Bedingungen durchgelaufen.
+      **Offen:** `aus_pipeline_ergebnis()` und `als_text()` werden noch **nirgends aufgerufen** —
+      die Expertenvorlage entsteht erst aus Messergebnissen (BA-057).
 - [ ] **X3** SUS/UEQ-Fragebögen vorbereiten — dazu die offene Entscheidung: Vollerhebung oder nur
       die UEQ-Skalen *Durchschaubarkeit* und *Steuerbarkeit* auf die Ausgaben
 - [ ] **X4** Termine 2–4 Experten und ≥5 Teilnehmende
