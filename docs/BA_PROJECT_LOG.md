@@ -5625,3 +5625,136 @@ und wurde nicht vorweggenommen.**
 - **Offen / nächstes:** **Abnahme durch den Nutzer**, dann Entscheidung zum Working Tree, dann
   **G5 setzen**. **AP-H nicht begonnen** — kein Messfall ausgeführt oder angesehen, keine
   Vorabmessung, kein Audit-Report.
+
+---
+
+### [BA-054] 2026-08-21 — Messstand als Commit fixiert · G5a auf den echten Codestand aktualisiert
+- **Status:** done — Reproduzierbarkeitslücke geschlossen. **G5 weiterhin NICHT gesetzt.**
+- **Kapitelbezug:** K5 *(Reproduzierbarkeit, Kontrollbedingungen)*, K8
+- **Literatur:** —
+- **Changed files:** Git-Commit `61a3f51` auf neuem Branch `ba-messstand-g5` (53 Dateien);
+  `data/archive/ba-umgebung-eingefroren-20260820/lock.json` *(neu erzeugt)*;
+  `docs/BA_G5_PREFLIGHT.md`, `docs/BA_PROJECT_LOG.md`.
+  **Kein Produktcode inhaltlich geändert, kein Prompt, keine Regelkarte, kein Testlauf.**
+
+## Der Befund: HEAD beschrieb den Messstand nicht
+
+`3ed63bf1` enthielt **keine einzige** messrelevante Datei:
+
+```
+git ls-tree -r HEAD --name-only | grep -c "smart-planning/graph"      -> 0
+git ls-tree -r HEAD --name-only | grep -cE "run_ba_abc_suite|kategorie4" -> 0
+```
+
+**Die gesamte Bedingung C, der BA-Runner und die Kategorie-4-Auswertung lagen untracked im
+Working Tree.** Ein G5a-Lock, das `3ed63bf1` als Messstand führt, hätte auf einen Commit
+gezeigt, in dem der Messcode nicht existiert — die Messung wäre aus dem Repository heraus
+nicht rekonstruierbar gewesen.
+
+## Klassifikation aller Einträge
+
+39 Einträge auf oberster Ebene, **53 expandiert** (`--untracked-files=all`, zwei
+Verzeichnisse aufgelöst).
+
+| Klasse | Anzahl | Inhalt |
+|---|---|---|
+| **Bestandteil des finalen BA-/Messstands** | **46** | Graph-Variante (15), `app/eval/*` (17), gemeinsame Runtime (7), `app/core/*` (4), `sp_agent.py`, `retrieval.py`, `requirements.txt` |
+| **Reine Dokumentation** | **7** | `CLAUDE.md`, `docs/BA_*.md` (6), `docs/abbildungen/graph-korrekturablauf.mmd` |
+| **Eindeutig fachfremd/unabhängig** | **0** | — |
+| **Unklar** | **0** | — |
+
+**Alle 53 sind im BA-Projektprotokoll dokumentiert.** Damit war die saubere Trennung möglich,
+und es gab keinen Grund, den Commit zu verweigern.
+
+## Der Commit
+
+`61a3f51e0b77…` auf **neuem Branch `ba-messstand-g5`** — bewusst nicht auf `main`: der
+Messstand ist ein Zustand, auf den zurückgezeigt wird, kein Fortschritt der Hauptlinie.
+
+Vor dem Stagen geprüft: `app/.env` ist per `.gitignore:6` ausgeschlossen und **nicht gestagt**;
+kein Klartext-Geheimnis in den Diffs. `data/` ist per `.gitignore:12` ausgeschlossen — das
+G5a-Lock ist deshalb **bewusst nicht versioniert**, es hasht ja genau die nicht versionierten
+Artefakte.
+
+**Nichts verworfen, resettet oder gestasht.** Working Tree danach: **0 Einträge**.
+
+## Die zwei geprüften Punkte
+
+### 1 — Ground Truth der Messfälle: Lücke gefunden und geschlossen
+
+**Der erste Lockstand reichte nicht.** Er hashte zwei Index-Dateien:
+
+* `isolated-error-snapshots/expected-results.json` — trägt echte Ground Truth ✔
+* `kombinierte-fehler-snapshots/ERROR-SNAPSHOTS.md` — **eine Beschreibung**. Eine Prüfung auf
+  Feldnamen (`before`, `after`, `jsonPath`) fand **keine**; die Datei besteht aus
+  Überschriften. Als maschinenlesbare Ground Truth **ungeeignet**.
+
+**Und die eigentlichen Messeingänge — die manipulierten Snapshots — waren gar nicht erfasst.**
+Ohne sie ist die Hauptmessung nicht reproduzierbar: der Ground-Truth-Wert allein sagt nichts,
+wenn der Eingang, auf den er sich bezieht, nicht fixiert ist.
+
+**Geschlossen:** Punkt 6 hasht jetzt **jede Datei beider Messkataloge einzeln plus einen
+Gesamthash**:
+
+| | Dateien | Gesamt-SHA-256 |
+|---|---|---|
+| `messfaelle_isoliert` | **14** | `0b0a9aff6100406f…` |
+| `messfaelle_kombiniert` | **13** | `5a237594fb9f6f0c…` |
+
+27 Dateien sind kein „riesiges Manifest", sondern genau der Umfang, den G5a Punkt 6 meint —
+und es ist die einzige Stelle, an der Einzeldateien gehasht werden.
+
+> **Die Messfälle wurden ausschliesslich gehasht, nicht gelesen.** Geprüft wurde nur, *ob*
+> Ground-Truth-Feldnamen vorkommen — keine Werte, keine Fallinhalte.
+
+### 2 — Regelbasis der Bedingung A: doppelt gesichert
+
+`app/tools/smart-planning/runtime/runtime-files/llm-validation-fix-rules.md`
+
+* **versioniert** — `git ls-files` bestätigt: in Git enthalten, unverändert seit `3ed63bf1`
+* **gehasht** — `a3c14bd1b66cc1e3…`, 36.165 Byte
+
+Der Hash **stimmt mit BA-016 (B3.1) überein**, wo dasselbe Regelwerk vor dem AP-B-Baselinelauf
+archiviert wurde. Die Regelbasis von A ist seit April unverändert.
+
+## Datumsabweichung `20260820` vs. Testbericht 21.08. — reine Zeitzone
+
+Der Ordnername kommt aus `datetime.now(timezone.utc).strftime("%Y%m%d")`, der Testbericht nennt
+**Lokalzeit** (`+02:00`):
+
+```
+lock erzeugt_utc : 2026-08-20T22:13:07+00:00
+Testbericht      : 2026-08-21 00:07:41+02:00   (= 2026-08-20 22:07 UTC)
+```
+
+**Dieselbe Stunde, zwei Zeitzonen.** Kein inhaltlicher Versatz. **Nicht umbenannt** — der
+Ordnername bleibt UTC-basiert, wie alle Rohdatenstempel des Projekts (`…T215517Z`), und
+`lock.json` führt `erzeugt_utc` ausdrücklich mit.
+
+## G5a aktualisiert
+
+| # | Punkt | Wert |
+|---|---|---|
+| 1 | Git-Commit | **`61a3f51e0b77…`** auf `ba-messstand-g5` *(vorher `3ed63bf1`)* |
+| 2 | Working Tree | **sauber** *(vorher 38 Einträge)* |
+| 3 | `pip freeze` | 77 Pakete |
+| 4 | `collect_run_metadata()` | `ba_env_ok=True` |
+| 5 | Modell + Schalter | `gpt-4.1` / `2025-01-01-preview` / `T=0.3` |
+| 6 | SHA-256 | **+27 Messfall-Dateien einzeln**, 14 Regelkarten, 4 Katalog-/Referenzdateien, Monolith-Regelwerk |
+
+- **Verifikation:** `git ls-tree` für die HEAD-Lücke; `git status --porcelain
+  --untracked-files=all` für die Klassifikation; `git check-ignore` für `.env` und `data/`;
+  Diff-Grep auf Geheimnisse; Lock nach dem Commit neu erzeugt.
+- **Was NICHT funktioniert hat:**
+  * **Die erste Geheimnis-Kontrolle meldete `trace_keys.py` als Treffer** — mein Grep suchte
+    nach `key` im Pfadnamen. Dritter Textsuche-Fehlalarm in Folge (BA-053 zweimal). Präzise
+    geprüft: `.env` nicht gestagt, keine Klartext-Geheimnisse in den Diffs.
+  * **Ich hatte das G5a-Lock für vollständig gehalten, obwohl die Messeingänge fehlten.**
+    Erst die gezielte Frage nach der Ground Truth der Messfälle hat es aufgedeckt. Zwei
+    gehashte Index-Dateien sahen nach Abdeckung aus — eine davon enthält gar keine Ground
+    Truth. **Ein Hash über die falsche Datei ist keine Sicherung.**
+  * **Der dokumentierte HEAD war neun Einträge lang falsch.** Seit BA-045 steht in mehreren
+    Protokolleinträgen `git 3ed63bf1` als Lauf-Metadatum — technisch richtig als *Commit zum
+    Laufzeitpunkt*, aber irreführend, weil der gemessene Code nie darin lag. **Historische
+    Einträge bleiben unverändert**; ab hier ist `61a3f51` der Messstand.
+- **Offen / nächstes:** **Abnahme und G5 setzen.** AP-H nicht begonnen.
