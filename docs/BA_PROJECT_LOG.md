@@ -89,10 +89,10 @@ Beim Verfassen eines Kapitels hier beginnen, nicht oben im Protokoll.
 |---|---|
 | **K3** Das bestehende System | BA-004, **BA-030** *(Artefakte des Monolithen)*, **BA-032**, **BA-033** *(Reporting-Schicht, B-Durchstich)*, **BA-046** *(Domaenenheuristik `similar_items`, Median aus Python)*, **BA-049** *(Fuzzy-Fallback im aktuellen Korrekturworkflow nicht erreichbar)* |
 | **K4** Konzeption der Graph-Architektur | BA-005 … BA-015, BA-017 … BA-023, **BA-026** *(Knoten 1)*, **BA-027** *(State-Schnitt)*, **BA-028** *(Graphstruktur)*, **BA-029** *(Durchstich)*, **BA-031**, **BA-043** *(Iterations-/Proposal-Handoff)*, **BA-044**, **BA-045** *(Knotenvertraege, Guards, K8-Entscheidungsvertrag)*, **BA-047** *(Huellen-Handoff K5->K6)* |
-| **K5** Forschungsdesign und Methodik | BA-004 … BA-016, BA-021 … **BA-035** |
-| **K6** Evaluierungsdesign | BA-004, BA-007, **BA-014**, BA-017 … BA-021, **BA-023**, **BA-024** *(Datenprovenienz, Kontext-Handoff)*, **BA-025** *(Rohdatenluecke, Umgebungskontrolle)*, **BA-026** *(Lauf-Metadaten, Handoff-Smoke)*, **BA-027** *(Identify-Handoff)*, **BA-028** *(Trace-Persistenz)*, **BA-029** *(UF3-Beleg)*, **BA-030** *(autoritative Validitaet, UF3-Raster)*, **BA-031**, **BA-032** *(Blindungsbrueche)*, **BA-033** *(Provenienz-Matrix)*, **BA-034** *(Pilotkatalog)*, **BA-035** … **BA-052** *(First Pass, Rueckkante, Iterationsfuehrung, Handoff-Fix, Regressionen R1-R9, Trace-Registry, Kategorien-Instrumente, AP-G3-Abschlussmatrix, AP-G4-Pilotphasenabschluss, BA-Runner, gemeinsame Kategorie-4-Auswertung)*, **BA-051** *(Kategorie-4-Messgleichheit)* |
-| **K7** Ergebnisse | BA-013, BA-016 *(Regressionsreferenz)*, **BA-033** *(Durchstichmaterial)*, **BA-045** *(P04/P10 nach dem Fix — PILOT, kein Messwert)* — die Messwerte entstehen erst in AP-H |
-| **K8** Diskussion und Limitationen | BA-004 … BA-009, BA-013, **BA-014**, **BA-016** *(I10)*, **BA-021** *(falsches Gruen)*, **BA-024** *(veralteter Kontext)*, **BA-025** *(zwei venvs, fehlende Lauf-Metadaten)*, **BA-026** *(Restrisiken)*, **BA-027** *(Server-Teil offen)*, **BA-042** *(vier Auswertungsfehler in Folge)*, **BA-044** *(fehlende Evidenz als Unbedenklichkeit gelesen)*, **BA-045** *(Suite einzeln gruen / gesamt kaputt, schwache Negativkontrolle)*, **BA-046** *(zwei Messpunkte zeigen aufs Instrument; C-eigener Zusatz-LLM-Aufruf)*, **BA-047** *(ungueltige Test-Huelle, K2-Klassifikator zweimal daneben)*, **BA-048** *(zwei Pilotpfade nicht konstruierbar, P11-Pfad verfehlt)*, **BA-049** *(drei Pilotziele nicht belegbar; Guard fing den eigenen Testaufbau)*, **BA-050** *(vier ueberdehnte Formulierungen; Zeitstempel sind kein Aenderungsnachweis)*, **BA-052** *(fuenfte Formatannahme; Cross-Check fing sie)*, **BA-053** *(falscher FAIL durch Textsuche; git-porcelain-Parsing)* |
+| **K5** Forschungsdesign und Methodik | BA-004 … BA-016, BA-021 … **BA-035**, **BA-063** *(technischer Abbruch vs. fachliches Nullergebnis; Fortsetzung eines unterbrochenen Messlaufs)* |
+| **K6** Evaluierungsdesign | BA-004, BA-007, **BA-014**, BA-017 … BA-021, **BA-023**, **BA-024** *(Datenprovenienz, Kontext-Handoff)*, **BA-025** *(Rohdatenluecke, Umgebungskontrolle)*, **BA-026** *(Lauf-Metadaten, Handoff-Smoke)*, **BA-027** *(Identify-Handoff)*, **BA-028** *(Trace-Persistenz)*, **BA-029** *(UF3-Beleg)*, **BA-030** *(autoritative Validitaet, UF3-Raster)*, **BA-031**, **BA-032** *(Blindungsbrueche)*, **BA-033** *(Provenienz-Matrix)*, **BA-034** *(Pilotkatalog)*, **BA-035** … **BA-052** *(First Pass, Rueckkante, Iterationsfuehrung, Handoff-Fix, Regressionen R1-R9, Trace-Registry, Kategorien-Instrumente, AP-G3-Abschlussmatrix, AP-G4-Pilotphasenabschluss, BA-Runner, gemeinsame Kategorie-4-Auswertung)*, **BA-051** *(Kategorie-4-Messgleichheit)*, **BA-063** *(Fortsetzungsmechanik, Vorpruefung `verify_fortsetzung.py`)*, **BA-064** *(Cross-Check als Kontrollmechanismus; 25 Messinkonsistenzen restlos geklaert)* |
+| **K7** Ergebnisse | BA-013, BA-016 *(Regressionsreferenz)*, **BA-033** *(Durchstichmaterial)*, **BA-045** *(P04/P10 nach dem Fix — PILOT, kein Messwert)*, **BA-063** *(**die Hauptmessung: 255 Positionen, `abc-mess-20260822T141347Z.json`** — Auswertung in AP-I)*, **BA-064** *(Datensatz auditiert, sha256 `db867a26…`)* |
+| **K8** Diskussion und Limitationen | BA-004 … BA-009, BA-013, **BA-014**, **BA-016** *(I10)*, **BA-021** *(falsches Gruen)*, **BA-024** *(veralteter Kontext)*, **BA-025** *(zwei venvs, fehlende Lauf-Metadaten)*, **BA-026** *(Restrisiken)*, **BA-027** *(Server-Teil offen)*, **BA-042** *(vier Auswertungsfehler in Folge)*, **BA-044** *(fehlende Evidenz als Unbedenklichkeit gelesen)*, **BA-045** *(Suite einzeln gruen / gesamt kaputt, schwache Negativkontrolle)*, **BA-046** *(zwei Messpunkte zeigen aufs Instrument; C-eigener Zusatz-LLM-Aufruf)*, **BA-047** *(ungueltige Test-Huelle, K2-Klassifikator zweimal daneben)*, **BA-048** *(zwei Pilotpfade nicht konstruierbar, P11-Pfad verfehlt)*, **BA-049** *(drei Pilotziele nicht belegbar; Guard fing den eigenen Testaufbau)*, **BA-050** *(vier ueberdehnte Formulierungen; Zeitstempel sind kein Aenderungsnachweis)*, **BA-052** *(fuenfte Formatannahme; Cross-Check fing sie)*, **BA-053** *(falscher FAIL durch Textsuche; git-porcelain-Parsing)*, **BA-063** *(Korrelation als Ursache gelesen; blinder Monitor; zweimal ungepruefte Kennzahl gemeldet; Instrumentendefekt `_schreibe_aggregat`; geteilter Runnerstand)*, **BA-064** *(GraphState misst nur die letzte Iteration; ueberdehnte Regel durch Negativkontrolle verhindert)* |
 | **K9** Fazit und Ausblick | BA-006, BA-009, **BA-032** *(E-Mail-Nutzungspfad)* |
 | *(ohne Kapitelbezug — Hausarbeit)* | BA-001, BA-002, BA-003 |
 
@@ -6645,3 +6645,288 @@ Regelwerk A `a3c14bd1…` · GT `635a1e06…` / `24f45798…`. **`n` bleibt 17.*
     Arbeit ist das ein Befund über die Methode, kein Betriebsunfall.
 - **Offen / nächstes:** **H5 — die Hauptmessung.** 255 Läufe, randomisiert, laufend gesichert.
   **Nicht gestartet.**
+
+---
+
+### [BA-063] 2026-08-22 — ██ H5: Hauptmessung vollständig erhoben ██ · technische Unterbrechung und Fortsetzung
+- **Status:** done — **AP-H abgeschlossen. 255 von 255 Positionen. READY_FOR_AP-I.**
+- **Kapitelbezug:** K5 *(Reproduzierbarkeit, Umgang mit technischen Ausfällen)*, K6, K7 *(die
+  Messdaten selbst)*, K8 *(zwei Limitationen: Instrumentendefekt, geteilter Runnerstand)*
+- **Literatur:** — *(keine der 16 Kernquellen behandelt den Umgang mit Infrastrukturausfällen
+  während einer Messreihe. **Fundstelle fehlt** — das ist selbst ein Befund: die Frage, wie
+  ein technischer Abbruch von einem fachlichen Nullergebnis zu trennen ist, wird in der von
+  uns gesichteten Literatur nicht adressiert.)*
+- **Changed files:** `app/eval/run_ba_abc_suite.py` *(rein additiv, +53/−0)*,
+  `app/eval/verify_fortsetzung.py` *(neu)*, Dokumentation.
+  **Keine Änderung an A/B/C, Messplan, Reihenfolge, Seed, 29-Feld-Schema, Kategorie-4-,
+  Korrektheits- oder Pfadlogik, Ground Truth, Prompts, Regeln, Modell, Bewertung oder an der
+  Ausführung eines einzelnen Runs.**
+
+## Der Messdatensatz
+
+| | |
+|---|---|
+| **Rohdaten** | `data/archive/ba-h4a/abc-mess-20260822T141347Z.json` |
+| Positionen | **255**, lückenlos 1…255, **keine Duplikate** |
+| Bedingungen | **A 85 · B 85 · C 85** |
+| Zellen | **51** (17 Fälle × 3 Arme), **jede mit genau 5 Wiederholungen** |
+| Reihenfolge | **Position für Position identisch mit dem eingefrorenen Plan**, Seed `20260821` |
+| Technische Abbrüche im Enddatensatz | **0** |
+| Schema | 29 Felder in **jeder** Zeile · `MEMORY_MODE=off` in **jeder** Zeile |
+| Erhebungszeitraum | 2026-08-22 **11:30:46Z** … **16:17:31Z** |
+
+> **`n` bleibt 17.** Die 255 Läufe sind Within-Case-Wiederholungen.
+
+**Keine Auswertung in diesem Eintrag** — die Ergebnisverteilung ist nur als Integritätsbeleg
+festgehalten, nicht als Befund: `fehlerfrei` 203 · `messinkonsistenz_kategorie4` 25 ·
+`unsicher` 15 · `verbleibend:1` 11 · `verbleibend:2` 1. **Die Deutung gehört in AP-I.**
+
+## Was unterbrochen hat — zwei getrennte Vorgänge
+
+**1. Die Verbindung zur Test-VM brach um 13:47:15Z weg.** Ab Position 134 scheiterte jeder Lauf
+an derselben Stelle:
+
+```
+ConnectionError: HTTPSConnectionPool(host='vm-t-weu-ccadmm-idp-test02.internal.idp.cca-dev.com',
+port=443): /keycloak/realms/Esarom/protocol/openid-connect/token
+```
+
+22 Läufe fielen in **32 Sekunden**, weil jeder sofort an der Token-Beschaffung scheitert.
+**Alle 22 wurden als `abgebrochen` erfasst**, mit `fehler_vorher = fehler_nachher = None` —
+**kein Ausfall wurde als fachliches Ergebnis oder als „0 Fehler" verbucht.** Genau dafür war
+die Unterscheidung vorgesehen. Sie hat gehalten.
+
+**2. Danach starb der Runner-Prozess** beim Sichern von Position 155:
+`PermissionError: [WinError 5]` in `os.replace(tmp, ziel)`.
+
+**Datenlage nach dem Absturz — nichts verloren, nichts korrupt:** Zieldatei
+`abc-mess-20260822T113043Z.json` valide mit 154 Zeilen, die `.tmp` valide mit 155, und die 154
+sind **exakt** das Präfix der 155. Das ist der Ausfallmodus, für den die atomare Sicherung aus
+**BA-062** gebaut wurde. **Ohne BA-062 wären 2 h 13 min Messung verloren gewesen.**
+
+## Der Absturz ist ein Instrumentendefekt — und er ist reproduzierbar
+
+Beim Gesamttestlauf fiel `test_persistenz.py` sporadisch aus: **2 von 12 Durchläufen** sterben
+mit **demselben `WinError 5`** an **derselben Zeile** — im **Temp-Verzeichnis**, ohne
+Messbetrieb, ohne lesenden Nebenprozess.
+
+> **Das widerlegt die erste Hypothese.** Ich hatte den Fortschrittsmonitor als Hauptverdächtigen
+> benannt, weil er die Zieldatei alle 120 s las. Der Testfall kommt **ohne jeden Leser** aus.
+> Es ist ein Windows-Dateisperren-Effekt bei schnell aufeinanderfolgenden Ersetzungen —
+> Defender-Echtzeitschutz ist aktiv und der plausibelste Halter des Handles, **nachgewiesen ist
+> das nicht** (Ausnahmen sind ohne Adminrechte nicht einsehbar).
+
+Größenordnung: 2 Fehler auf ~490 Ersetzungen im Test, 1 auf 155 im Messlauf — **0,4 bis 0,65 %
+je Schreibvorgang**. `_schreibe_aggregat()` hat **keine Toleranz** gegen eine vorübergehende
+Sperre.
+
+**Nicht repariert** — der Runner stand unter Freeze, und die Regel lautet: bei Verdacht auf
+einen Defekt des Messinstruments stoppen und berichten, nicht reparieren. Für die verbleibenden
+122 Läufe lag das Risiko bei rund 40 %; es trat **nicht** ein.
+
+## Die Fortsetzung — Entscheidung des Nutzers, nicht des Runners
+
+Ein vollständiger Neulauf wäre ohne Codeeingriff möglich gewesen (Seed-Determinismus belegt).
+**Der Nutzer entschied sich für die Fortsetzung ab Position 134** und gab die Bedingungen vor.
+Vorher belegt: **kein bestehender CLI-Pfad kann den eingefrorenen Rest reproduzieren** —
+`--only` filtert die Fallliste **vor** `messplan()`, das anschliessend neu mischt; der Rest
+beginnt mit `K10/A/W2`, ein `--only`-Lauf mit `I05/A/W4`.
+
+Zwei Schalter, **rein additiv (+53/−0)**, die **nur gemeinsam** wirken:
+
+* `--ab-position N` — schneidet den **unverändert erzeugten** Plan auf Positionen ≥ N.
+  **Keine zweite Mischung.**
+* `--uebernahme PFAD` — übernimmt die Zeilen 1…N−1.
+
+**Der Runner entscheidet nichts selbst:** kein Abbruch wird erkannt, nichts automatisch
+wiederholt. Startposition und Quelle nennt der Mensch. Vier harte Abbrüche mit Exit 2, wenn
+Seed oder Reihenfolge der Quelle abweichen, die Übernahme nicht lückenlos ist oder einen
+technischen Abbruch enthält.
+
+**Die 22 Abbruchzeilen wurden bewusst nicht übernommen** — sie sind keine Messergebnisse, und
+ihre Positionen 134…155 wurden neu gefahren. Hätte man sie mitgenommen, stünden dort Duplikate.
+
+## Verifikation
+
+`app/eval/verify_fortsetzung.py` — **27/27**, führt nichts aus und schreibt nichts. Belegt
+**vor** dem Start: Plan deterministisch reproduziert · archivierte Reihenfolge == reproduzierter
+Plan (alle 255) · Fortsetzungsplan **exakt** Suffix 134…255 · **keine** Position aus 1…133 ·
+Übernahme lückenlos 1…133, ohne Abbruch, 29 Felder, `MEMORY_MODE=off` · Übernahme inhaltlich
+identisch mit der Quelle · **Projektion** des Enddatensatzes auf alle Abnahmekriterien.
+
+**Nach dem Lauf** am tatsächlichen Datensatz nachgeprüft: alle Kriterien oben, dazu
+**Zeilen 1…133 inhaltsgleich mit der Quelldatei** und **48 eingefrorene Messartefakte
+byte-identisch** gegen `lock.json` (Messfälle 28, Regelkarten 14, Regelwerk 3, Kataloge 3).
+
+**Gesamtstand: 307 Assertions über 12 Dateien, alle grün.**
+
+## Ein geteilter Runnerstand — offen benannt
+
+Die Zeilen **1…133** entstanden unter Runner-SHA `064c2271…`, die Zeilen **134…255** unter
+`8ef70528…`. Das ist eine **Abweichung vom G5-Prinzip**: der Runner wurde geändert, **nachdem**
+die Datenerhebung begonnen hatte — anders als bei BA-057/BA-061, die beide **vor** dem ersten
+Messwert überholt wurden.
+
+**Was dafür spricht, dass es die Messsemantik nicht berührt:** die Differenz ist rein additiv
+(+53/−0, `git diff --stat`), betrifft ausschliesslich `argparse` und den Codeblock **vor** der
+Ausführungsschleife, und lässt `_schreibe_aggregat()`, die Schleife, den Kindprozessaufruf und
+jede Bewertungslogik unangetastet. Jeder Lauf ist ein **eigener Prozess** mit identischer
+Umgebung und `MEMORY_MODE=off`, trägt also keinen Zustand aus vorherigen Läufen.
+
+**Das ist eine Begründung, kein Beweis** — und gehört als solche in die Limitationen.
+
+- **Verifikation:** Abbruchgründe aus den 22 Zeilen gelesen (alle identisch); Ziel- und
+  `.tmp`-Datei elementweise verglichen; Erreichbarkeit der VM vor dem Neustart geprüft
+  (DNS → 10.112.19.8, TCP 443 41 ms, Keycloak HTTP 200); `test_persistenz.py` 12× wiederholt,
+  Traceback eingefangen; `git diff --stat` für den Umfang der Runner-Änderung;
+  `verify_fortsetzung.py` vor **und** die Kriterienprüfung nach dem Lauf; Lock-Abgleich.
+  Rohdaten: `abc-mess-20260822T141347Z.json` (Enddatensatz),
+  `abc-mess-20260822T113043Z.json` + `.tmp` (Abbruchlauf, unverändert aufbewahrt),
+  `abc-mess-20260821T115134Z.json` (erster Abbruchlauf, 10 Zeilen).
+- **Was NICHT funktioniert hat:**
+  * **Meine erste Ursachenhypothese zum Absturz war falsch.** Ich benannte meinen eigenen
+    Fortschrittsmonitor als Hauptkandidaten, weil er die Zieldatei las. Der Testfall
+    reproduziert den Fehler **ohne jeden Leser**. Ich hatte aus einer **Korrelation**
+    (Monitor lief, Absturz kam) eine Ursache gemacht, ohne den Fall zu konstruieren, der sie
+    ausschliesst. **Dass der Befund überhaupt auffiel, war Zufall** — ein sporadischer
+    Testfehler im Routinelauf, den ich fast als Flackern abgetan hätte.
+  * **Mein Fortschrittsmonitor für die Fortsetzung war blind.** Er suchte `[n/255]`; der
+    geschnittene Plan druckt `[n/122]`. Er hätte über zwei Stunden **nichts** gemeldet und wäre
+    stumm weitergelaufen. Aufgefallen ist es erst, als der Lauf fertig war. **Ein Monitor, der
+    nie meldet, ist von einem stillen Lauf nicht unterscheidbar.**
+  * **Ich habe die Assertionssumme falsch gezählt** (193 statt 307): Dateien mit mehreren
+    Prüfblöcken wertete ich nur mit dem letzten Block. Der zweite Zählversuch scheiterte still
+    an fehlendem `bc`. **Zweimal in Folge eine Kennzahl gemeldet, die ich nicht geprüft hatte.**
+  * **Der Plan-SHA `4ed26d0c…` ist nicht nachrechenbar.** 24 Serialisierungen × 4 Hashverfahren,
+    kein Treffer — die Berechnungsart entstand im Scratchpad und wurde nie übernommen. Dieselbe
+    Lücke wie in BA-060, nur an anderer Stelle. Geprüft wurde stattdessen gegen die vollständige
+    archivierte 255er-Reihenfolge, was strenger ist, aber **das Etikett im Protokoll bleibt
+    unbelegt**. Gleiches gilt für die Sammelhashes der Messfallverzeichnisse — dort sind
+    ersatzweise **alle 45 Einzeldateien** geprüft.
+  * **Eine Defender-Ausnahme hätte vermutlich nichts genützt.** Ich hatte sie für
+    `data/archive/ba-h4a/` vorgeschlagen; der Fehler tritt auch im Temp-Verzeichnis auf. Der
+    Vorschlag war am falschen Ort angesetzt.
+- **Offen / nächstes:** **AP-I — die Auswertung** (I1–I5) auf
+  `abc-mess-20260822T141347Z.json`, danach AP-X. Der Instrumentendefekt in
+  `_schreibe_aggregat()` bleibt **unrepariert und dokumentiert**; er ist für AP-I ohne Belang,
+  wäre aber vor jeder Nachmessung zu beheben.
+
+---
+
+### [BA-064] 2026-08-22 — AP-I Integritätsaudit des finalen Datensatzes · die 25 Messinkonsistenzen aufgeklärt
+- **Status:** done — **read-only.** Keine Ergebnisinterpretation, kein A/B/C-Vergleich.
+- **Kapitelbezug:** K6 *(Messinstrument, Cross-Check als Kontrollmechanismus)*, K7 *(Bestand
+  des Datensatzes)*, K8 *(Reichweitengrenze des GraphState als Messquelle)*
+- **Literatur:** — *(Fundstelle fehlt: keine der 16 Kernquellen behandelt die Gegenprobe
+  zweier Messquellen innerhalb eines Agentensystems.)*
+- **Changed files:** `data/archive/ba-i-audit/{MANIFEST.json,snapshot-ids-255.csv}` *(neu,
+  reine Auditartefakte)*, Dokumentation.
+  **Nichts an `kategorie4.py`, `GraphState`, Runner, Bewertungsdefinition oder am
+  Messdatensatz geändert.**
+
+## Der finale Datensatz — festgeschrieben
+
+```
+data/archive/ba-h4a/abc-mess-20260822T141347Z.json
+sha256  db867a26d1157c4af0d8202437bcd0ba503a40cb034cf2673b0a7c4c345cec79
+bytes   1 177 017        Zeilen  255
+```
+
+Durch **zwei unabhängige Werkzeuge** bestätigt (`hashlib`, `certutil`). 255 `snapshot_id`,
+**alle eindeutig**, **alle Verzeichnisse auf Platte vorhanden** — Liste in
+`snapshot-ids-255.csv`. **Ausdrücklich nicht Teil von AP-I** und im Manifest so benannt: die
+beiden Abbruchläufe, die `.tmp` und die Pilotläufe.
+
+## Die 25 Messinkonsistenzen — die Hypothese trifft zu, 25 von 25
+
+**Alle 25 liegen in Bedingung C**, betreffen **genau fünf Fälle** (K04, K05, K08, K09, K10) und
+dort **jede der fünf Wiederholungen** — 5 × 5, kein Streuverhalten. Abweichend ist in **allen 25
+ausschliesslich `errors_resolved`**; `errors_remaining`, `errors_new` und `new_error_types`
+stimmen überall überein.
+
+| | gemeinsam | GraphState |
+|---|---|---|
+| `errors_resolved` | 2 (10 Läufe) bzw. 3 (15 Läufe) | **immer 1** |
+
+**Vier Identitäten, über alle 25 geprüft:** `errors_resolved` (gemeinsam) `== fehler_vorher` ·
+`fehler_nachher == 0` · GraphState-Wert `== 1` · **Differenz `== iterationen − 1`**.
+
+**Ursache, am Code belegt — nicht aus dem Muster geschlossen:**
+
+* **Gemeinsamer Evaluator** — der Runner sichert `vorher_meldungen` **einmal, vor**
+  `execute_pipeline()` (`run_ba_abc_suite.py:269`, mit dem ausdrücklichen Kommentar, sonst
+  liefere das Nachladen den Nach-Zustand). `nachher_meldungen` wird nach der abgeschlossenen
+  Re-Validierung geladen. → **Initial → Final des Gesamtlaufs.**
+* **GraphState** — Knoten 7 lädt `vorher_meldungen` **zu Beginn jeder Ausführung**
+  (`apply_revalidate.py:78`), und die Re-Validierung der vorigen Iteration hat **dieselbe
+  Datei** bereits überschrieben. `state["applied"] = {...}` (`:197`) ist eine schlichte
+  Zuweisung je Iteration. → Der persistierte Wert ist **Vorher → Nachher der letzten
+  Iteration**.
+
+Der Graph behebt **einen** Fehler je Iteration; darum `iterationen == fehler_vorher` und darum
+der GraphState-Wert 1.
+
+**Negativkontrolle — die Regel ist schärfer als „Iterationen > 1":** acht C-Läufe mit
+Iterationen > 1 sind **kein** Mismatch. K06 (5 Läufe, 5 Iterationen): gemeinsam 0, GraphState 0.
+I10 (3 Läufe, 2 Iterationen): gemeinsam 1, GraphState 1. In beiden Gruppen fällt der
+Gesamtwert mit dem Beitrag der letzten Iteration zusammen. Die Regel lautet also:
+
+> **Mismatch ⟺ vor der letzten Iteration wurde mindestens ein Fehler behoben.**
+
+**Keine weiteren Ursachen.** 25 von 25 erklärt, restlose Klassifikation, kein Rest.
+
+## Ein zweiter, kleinerer Befund: vier C-Läufe ohne `graph_state.json`
+
+`graph_state` liegt bei A und B erwartungsgemäss nie vor, bei C in **81 von 85** Läufen — es
+fehlt bei **K07, Wiederholungen 2–5** (Positionen 82, 85, 98, 140). Für sie ist der Cross-Check
+`durchgefuehrt: false`. Der ausgegebene Grund lautet dort **`"kein graph_state.json (A/B)"`** —
+der Text ist ein **fest verdrahtetes Literal** (`kategorie4.py`) und behauptet für C-Läufe
+fälschlich die Bedingung A/B. Kosmetisch für die Messung, **irreführend für den Leser der
+Rohdaten**: wer die Provenienz liest, hält diese vier für A/B-Läufe. **Nicht geändert** —
+Bewertungscode ist eingefroren.
+
+## Aufgabe 3: Marker oder Ausschlusskriterium?
+
+**Es ist ausschliesslich ein QC-/Cross-Check-Marker.** Im eingefrorenen Design (BA-051/052,
+Protokoll ab Zeile 5417) wörtlich festgelegt:
+
+* „**Die gemeinsame Berechnung ist die primäre Messung.** Der `GraphState` ist die Gegenprobe."
+* „Bei Abweichung wird **nichts überschrieben** und **keiner der beiden Werte gewinnt**."
+* Das Präfix bedeutet „ein **technisch abgeschlossener** Lauf, der hinsichtlich **dieser einen
+  Messgrösse** nicht regulär auswertbar ist" — **kein** Pipeline-Abbruch, **kein**
+  `stop_uncertain`.
+* Das eigentliche Ergebnis bleibt hinter dem Trennstrich erhalten, „damit ein technisch
+  erfolgreicher Korrekturlauf nicht fälschlich als Fehlschlag in die Auswertung geht".
+
+Der Runner setzt es genau so um (`:355`): `ergebnis = f"messinkonsistenz_kategorie4|{ergebnis}"`
+— **Präfix, keine Ersetzung**. Alle 25 tragen dahinter `fehlerfrei`.
+
+**Eine Ausschlussregel existiert nicht.** Volltextsuche über `BA_PROJECT_LOG.md` und
+`BA_ARBEITSPAKETE.md` nach Ausschluss-/Verwerfungsformulierungen im Zusammenhang mit
+Kategorie 4 oder dem Cross-Check: **keine Fundstelle**. Ein Ausschluss wäre daher eine **neue,
+nachträgliche Festlegung** und nach harter Regel 5 als **Nachmessung** zu kennzeichnen.
+
+**Verbindliche Primärquelle für Kategorie 4:** die gemeinsame Vorher-/Nachher-Berechnung für
+A, B und C aus `kategorie4.py`, in jeder der 255 Zeilen als
+`provenienz.kategorie4_basis = "validierungsmeldungen_vorher_nachher"` mitgeführt. Im G5-Stand
+(BA-061, Log 6479) so eingefroren: „für A, B und C aus **derselben Funktion**; `GraphState` bei
+C nur Cross-Check". **Die Erwartung des Auftrags bestätigt sich.**
+
+- **Verifikation:** SHA-256 doppelt (`hashlib`, `certutil`); `snapshot_id`-Eindeutigkeit und
+  Existenz aller 255 Verzeichnisse; Tabelle aller 25 Mismatches aus den Rohdaten; vier
+  Identitäten über alle 25; Negativkontrolle über **alle 85** C-Läufe nach Iterationszahl;
+  `kategorie4.py` (`kategorie4`, `cross_check_graphstate`), `run_ba_abc_suite.py:269/326-355`,
+  `apply_revalidate.py:78/197` gelesen; Volltextsuche nach einer Ausschlussregel.
+- **Was NICHT funktioniert hat:**
+  * **„Mismatch ⟺ Iterationen > 1" wäre falsch gewesen.** Genau das legte die erste Tabelle
+    nahe — bis die Negativkontrolle acht Gegenbeispiele lieferte. Hätte ich nur die 25
+    betrachtet und nicht die übrigen 60 C-Läufe, stünde eine überdehnte Regel im Bericht.
+    **Dritter Fall dieser Sitzung, in dem ein Muster ohne Gegenprobe zur Ursache erklärt worden
+    wäre** (nach der Absturzhypothese in BA-063).
+  * **Der Grundtext `"kein graph_state.json (A/B)"` wäre beinahe unbemerkt geblieben.** Er
+    steht in vier C-Zeilen und behauptet dort die falsche Bedingung. Aufgefallen ist er nur,
+    weil ich die `graph_state`-Verteilung je Bedingung ausgezählt habe, statt sie
+    vorauszusetzen.
+- **Offen / nächstes:** **I1** — Halluzinationen kategorisieren. Der Datensatz ist auditiert
+  und unverändert; die 25 Messinkonsistenzen sind vollständig aufgeklärt und betreffen **nur**
+  die Messgrösse `errors_resolved` in C.

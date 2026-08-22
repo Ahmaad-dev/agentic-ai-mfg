@@ -757,7 +757,7 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
   >   Dafür gibt es `app/core/run_metadata.py` → `require_ba_env()`: wirft `RuntimeError`,
   >   **bevor** der erste Fall läuft. Ein halb gelaufener Messsatz unter gemischten
   >   Umgebungen wäre schlimmer als gar keiner.
-- [ ] **H5** **Die eigentliche Messung.** **Katalog seit BA-058 vollständig:** 10 isolierte
+- [x] **H5** **Die eigentliche Messung — ERHOBEN (BA-063).** **Katalog seit BA-058 vollständig:** 10 isolierte
       (`I01`–`I10`) + 7 distinkte kombinierte (`K04`–`K10`) = **n = 17**; `snapshot-error-01…03`
       ausgeschlossen (redundant zu I01–I03). **255 Läufe.** Alle 17 Fälle × **drei Bedingungen** (Masterplan Kap. 7.1):
       **A** Monolith-Pipeline + `RULEBOOK_MODE=monolith` · **B** Monolith-Pipeline + `cards`
@@ -766,8 +766,29 @@ Der ehrliche Entscheidungspunkt — hier wird bestätigt oder korrigiert, was bi
       **B → C** die Orchestrierung von der Kartenform trennt. **255 Läufe**, n bleibt **17**.
       Grenzfälle: als Limitation geschlossen (H3, BA-055).
       **Alle drei nach demselben Einfrieren G5**, randomisierte Reihenfolge
+
+  > **Erhoben am 22.08.2026** (BA-063). Rohdaten:
+  > `data/archive/ba-h4a/abc-mess-20260822T141347Z.json`.
+  > **255 Positionen lückenlos, keine Duplikate, A/B/C je 85, 51 Zellen à 5 Wiederholungen,
+  > Reihenfolge Position für Position identisch mit dem eingefrorenen Plan (Seed `20260821`),
+  > 0 technische Abbrüche im Enddatensatz, 29 Felder und `MEMORY_MODE=off` in jeder Zeile.**
+  > Erhebungszeitraum 11:30:46Z–16:17:31Z.
+  >
+  > **Der Lauf wurde technisch unterbrochen** — ab Position 134 fiel die Verbindung zur
+  > Test-VM aus (22 Läufe als `abgebrochen` erfasst, **nie** als fachliches Ergebnis), danach
+  > starb der Runner an `os.replace` (`WinError 5`). Dank der atomaren Sicherung aus BA-062
+  > ging nichts verloren. Fortgesetzt wurde **ab Position 134 aus demselben eingefrorenen
+  > Plan**, auf Entscheidung des Nutzers; die 22 Abbruchpositionen wurden neu gefahren.
+  > Vorprüfung `app/eval/verify_fortsetzung.py` **27/27** vor dem Start.
+  >
+  > **Zwei Limitationen sind offen benannt** (K8): der unreparierte Instrumentendefekt in
+  > `_schreibe_aggregat()` (reproduzierbar, 2 von 12 Testläufen) und der **geteilte
+  > Runnerstand** — Zeilen 1…133 unter SHA `064c2271…`, Zeilen 134…255 unter `8ef70528…`,
+  > Differenz rein additiv (+53/−0) und ausserhalb der Ausführungsschleife.
 - **DoD:** Rohdaten vollständig nach Kap. 17 — je Lauf Zeitstempel, Variante, Fall-ID, Modell,
   Parameter, alle Modus-Schalter, Prompt (oder Hash), Antwort, Trace, Rohdatenpfad.
+  **Erfüllt** — 29-Feld-Schema je Zeile, Seed und vollständige 255er-Reihenfolge im Kopf des
+  Rohdatensatzes.
 
 ---
 

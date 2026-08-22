@@ -441,6 +441,16 @@ def main(argv=None):
                     help=f"Random-Seed der Reihenfolge (Default {RANDOM_SEED})")
     ap.add_argument("--trockenlauf", action="store_true",
                     help="nur den Messplan erzeugen und ausgeben - fuehrt NICHTS aus")
+    # BA-063: Fortsetzung eines technisch unterbrochenen Laufs. BEIDE Schalter sind
+    # ausdruecklich zu setzen - der Runner entscheidet NICHTS selbst. Es gibt keine
+    # automatische Wiederholung, keine Erkennung eines Abbruchs, keinen Resume-Automatismus:
+    # Mensch nennt die Startposition und die Datei, aus der die bereits erhobenen Zeilen
+    # uebernommen werden. Der Plan wird UNVERAENDERT erzeugt (gleicher Seed, gleiche
+    # Fallliste, keine Neurandomisierung) und lediglich GESCHNITTEN.
+    ap.add_argument("--ab-position", type=int, default=None, metavar="N",
+                    help="nur Planpositionen >= N ausfuehren (Fortsetzung, BA-063)")
+    ap.add_argument("--uebernahme", default=None, metavar="PFAD",
+                    help="Aggregatdatei, aus der die Zeilen 1..N-1 uebernommen werden")
     ap.add_argument("--kind", nargs=4, default=None, help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
 
@@ -472,6 +482,49 @@ def main(argv=None):
     stempel = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     ziel = ARCHIV / f"abc-{args.katalog}-{stempel}.json"
     zeilen = []
+
+    # ---- BA-063: Fortsetzung ------------------------------------------------------------
+    # Der VOLLSTAENDIGE Plan ist oben bereits erzeugt - identisch zum eingefrorenen, weil
+    # Seed, Fallliste, Arme und Wiederholungen unveraendert sind. Hier wird er nur noch
+    # GESCHNITTEN. Es findet keine zweite Mischung statt.
+    if (args.ab_position is None) != (args.uebernahme is None):
+        print("  FEHLER: --ab-position und --uebernahme nur gemeinsam.")
+        return 2
+    if args.ab_position is not None:
+        n = args.ab_position
+        if not 2 <= n <= len(plan):
+            print(f"  FEHLER: --ab-position {n} liegt ausserhalb 2..{len(plan)}.")
+            return 2
+        quelle = Path(args.uebernahme)
+        vorher = json.loads(quelle.read_text(encoding="utf-8"))
+
+        # Der uebernommene Kopf muss derselbe sein - sonst waere es ein anderer Messplan.
+        if vorher.get("randomisierung", {}).get("seed") != kopf["seed"]:
+            print("  FEHLER: Seed der Uebernahmedatei weicht ab.")
+            return 2
+        if vorher.get("randomisierung", {}).get("reihenfolge") != kopf["reihenfolge"]:
+            print("  FEHLER: Reihenfolge der Uebernahmedatei weicht vom Plan ab.")
+            return 2
+
+        # Nur Zeilen VOR der Startposition. Alles ab n wird neu gefahren - insbesondere die
+        # technischen Abbrueche, die keine Messergebnisse sind.
+        zeilen = [z for z in vorher["zeilen"]
+                  if z["lauf_metadaten"]["position"] < n]
+        pos = [z["lauf_metadaten"]["position"] for z in zeilen]
+        if pos != list(range(1, n)):
+            print(f"  FEHLER: Uebernahme ist nicht lueckenlos 1..{n - 1} (gefunden: "
+                  f"{len(pos)} Zeilen).")
+            return 2
+        if any(z.get("abgebrochen") for z in zeilen):
+            print("  FEHLER: Uebernahme enthaelt technische Abbrueche - das waeren keine "
+                  "Messergebnisse.")
+            return 2
+
+        plan = [e for e in plan if e["position"] >= n]
+        print(f"  FORTSETZUNG (BA-063): {len(zeilen)} Zeilen uebernommen aus {quelle.name}, "
+              f"auszufuehren Positionen {plan[0]['position']}..{plan[-1]['position']} "
+              f"({len(plan)} Laeufe)")
+    # -------------------------------------------------------------------------------------
     _schreibe_aggregat(ziel, args.katalog, kopf, zeilen)   # leerer Stand, damit die Datei existiert
     print(f"  Rohdaten (laufend): {ziel}")
 
